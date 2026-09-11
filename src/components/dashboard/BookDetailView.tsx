@@ -53,6 +53,9 @@ import {
 import type { ChapterContent, ChapterPlan, SceneConstraint, SceneMeta } from "@/data/story";
 import { MODEL_STAGE_LABELS, readLanguage, readStageModel } from "@/lib/generationSettings";
 import { manuscriptOf } from "@/lib/bookManuscript";
+import { copyText } from "@/lib/clipboard";
+import { looksTruncated } from "@/lib/prose";
+import { showToast } from "@/lib/toast";
 import { buildDocx } from "@/lib/docx";
 import { buildEpub } from "@/lib/epub";
 import { buildMarkdown } from "@/lib/markdown";
@@ -667,17 +670,6 @@ export function BookDetailView({
     }
   };
 
-  const fullText = useMemo(() => {
-    const header = `${book.title}\n${book.subtitle}\n\n`;
-    const body = manuscript
-      .map(
-        (chapter, index) =>
-          `Kapitel ${index + 1}: ${chapter.title}\n\n${chapter.expanded || chapter.draft}`,
-      )
-      .join("\n\n— — —\n\n");
-    return header + body;
-  }, [book.title, book.subtitle, manuscript]);
-
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -693,6 +685,49 @@ export function BookDetailView({
       .trim()
       .replace(/\s+/g, "_") || "buch";
 
+  /** Manuskript mit den noch nicht persistierten Editor-Puffern (Autosave ist verzögert). */
+  const liveManuscript = (): ChapterContent[] =>
+    manuscript.map((chapter, index) =>
+      index === safeIndex ? { ...chapter, expanded: expandedBuffer, draft: draftBuffer } : chapter,
+    );
+
+  const buildManuscriptText = (): string => {
+    const chapters = liveManuscript().map(
+      (chapter, index) =>
+        `Kapitel ${index + 1}: ${chapter.title}\n\n${chapter.expanded || chapter.draft}`,
+    );
+    return `${book.title}\n${book.subtitle}\n\n${chapters.join("\n\n— — —\n\n")}`;
+  };
+
+  const copyManuscript = async () => {
+    if (isDirty) flushBuffer(safeIndex);
+    const chapters = liveManuscript();
+    const ok = await copyText(buildManuscriptText());
+    if (!ok) {
+      showToast("Kopieren fehlgeschlagen — bitte .txt exportieren", "error");
+      return;
+    }
+
+    // Ehrliche Rückmeldung: unvollständig generierte Kapitel beim Namen nennen.
+    const broken = chapters
+      .map((chapter, index) => ({ index, text: chapter.expanded || chapter.draft }))
+      .filter((chapter) => looksTruncated(chapter.text))
+      .map((chapter) => chapter.index + 1);
+    if (broken.length > 0) {
+      showToast(
+        `Kopiert — aber Kapitel ${broken.join(", ")} endet mitten im Satz (unvollständig generiert).`,
+        "error",
+      );
+      return;
+    }
+
+    const words = chapters.reduce(
+      (sum, chapter) => sum + (chapter.expanded || chapter.draft).split(/\s+/).filter(Boolean).length,
+      0,
+    );
+    showToast(`Manuskript kopiert — ${chapters.length} Kapitel, ~${words} Wörter`);
+  };
+
   const actOf = (index: number, total: number) => {
     const ratio = total > 0 ? index / total : 0;
     if (ratio < 0.25) return 1;
@@ -702,10 +737,11 @@ export function BookDetailView({
 
   /** Auswahl für Teil-Export (Gesamtbuch, Akt oder aktuelles Kapitel). */
   const scopedSelection = (): { book: Book; suffix: string } => {
-    if (exportScope === "all") return { book, suffix: "" };
+    const source = liveManuscript();
+    if (exportScope === "all") return { book: { ...book, manuscript: source }, suffix: "" };
 
     if (exportScope === "chapter") {
-      const chapter = manuscript[safeIndex];
+      const chapter = source[safeIndex];
       if (!chapter) return { book, suffix: "" };
       const plan = plans[safeIndex];
       return {
@@ -719,13 +755,13 @@ export function BookDetailView({
     }
 
     const act = Number.parseInt(exportScope.replace("act:", ""), 10);
-    const indexes = manuscript
+    const indexes = source
       .map((_, index) => index)
-      .filter((index) => actOf(index, manuscript.length) === act);
+      .filter((index) => actOf(index, source.length) === act);
     if (indexes.length === 0) return { book, suffix: "" };
 
     const subsetManuscript = indexes
-      .map((index) => manuscript[index])
+      .map((index) => source[index])
       .filter((chapter): chapter is ChapterContent => Boolean(chapter));
     const subsetPlans = indexes
       .map((index) => plans[index])
@@ -743,10 +779,12 @@ export function BookDetailView({
 
   const exportMarkdown = () => {
     const { book: scoped, suffix } = scopedSelection();
+    if (isDirty) flushBuffer(safeIndex);
     downloadBlob(
       new Blob([buildMarkdown(scoped)], { type: "text/markdown" }),
       `${fileSafe(scoped.title)}${suffix}.md`,
     );
+    showToast("Markdown exportiert");
   };
 
   const exportEpub = async () => {
@@ -760,6 +798,7 @@ export function BookDetailView({
     try {
       const blob = await buildEpub(scoped, { author: authorName, language, cover: epubCover });
       downloadBlob(blob, `${fileSafe(scoped.title)}${suffix}.epub`);
+      showToast("EPUB exportiert");
     } catch (err) {
       setError(err instanceof Error ? err.message : "EPUB-Export fehlgeschlagen.");
     } finally {
@@ -769,12 +808,16 @@ export function BookDetailView({
 
   const exportDocx = () => {
     const { book: scoped, suffix } = scopedSelection();
+    if (isDirty) flushBuffer(safeIndex);
     downloadBlob(buildDocx(scoped, { author: authorName }), `${fileSafe(scoped.title)}${suffix}.docx`);
+    showToast("DOCX exportiert");
   };
 
   const exportPdf = () => {
     const { book: scoped, suffix } = scopedSelection();
+    if (isDirty) flushBuffer(safeIndex);
     downloadBlob(buildPdf(scoped, { author: authorName }), `${fileSafe(scoped.title)}${suffix}.pdf`);
+    showToast("PDF exportiert");
   };
 
   /* ── Kapitel-Versionierung ──────────────────────────────────────────── */
@@ -1088,7 +1131,7 @@ export function BookDetailView({
               <Button
                 variant="outline"
                 className="glass rounded-xl border-white/10"
-                onClick={() => void navigator.clipboard.writeText(fullText)}
+                onClick={() => void copyManuscript()}
               >
                 <Copy className="size-4" />
                 Manuskript kopieren
@@ -1097,13 +1140,12 @@ export function BookDetailView({
                 variant="outline"
                 className="glass rounded-xl border-white/10"
                 onClick={() => {
-                  const blob = new Blob([fullText], { type: "text/plain" });
-                  const url = URL.createObjectURL(blob);
-                  const anchor = document.createElement("a");
-                  anchor.href = url;
-                  anchor.download = `${book.title}_manuskript.txt`;
-                  anchor.click();
-                  URL.revokeObjectURL(url);
+                  if (isDirty) flushBuffer(safeIndex);
+                  downloadBlob(
+                    new Blob([buildManuscriptText()], { type: "text/plain" }),
+                    `${fileSafe(book.title)}_manuskript.txt`,
+                  );
+                  showToast(".txt exportiert");
                 }}
               >
                 <Download className="size-4" />

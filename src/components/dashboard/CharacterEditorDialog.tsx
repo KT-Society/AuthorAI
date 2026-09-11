@@ -15,6 +15,8 @@ import {
 } from "@/data/characters";
 import type { Character } from "@/data/characters";
 import { readLanguage, readModel } from "@/lib/generationSettings";
+import { copyText } from "@/lib/clipboard";
+import { showToast } from "@/lib/toast";
 import { generateSoul } from "@/services/generate";
 
 export function CharacterEditorDialog({
@@ -218,7 +220,11 @@ export function CharacterEditorDialog({
             <Button
               variant="outline"
               className="glass rounded-xl border-white/10"
-              onClick={() => void navigator.clipboard.writeText(prompt)}
+              onClick={() => {
+                void copyText(prompt).then((ok) =>
+                  showToast(ok ? "Prompt kopiert" : "Kopieren fehlgeschlagen", ok ? "ok" : "error"),
+                );
+              }}
             >
               <Copy className="size-4" />
               Prompt kopieren

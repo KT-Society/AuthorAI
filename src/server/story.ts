@@ -32,7 +32,8 @@ import type {
   WorldItem,
 } from "../data/story";
 import { EMPTY_WORLD } from "../data/story";
-import { chatCompletion, cleanJsonBlock } from "./llm";
+import { chatCompletion, chatCompletionDetailed, cleanJsonBlock } from "./llm";
+import { extractProse, looksTruncated } from "../lib/prose";
 
 export interface StoryboardInput {
   idea: string;
@@ -391,7 +392,13 @@ Write the ~500 word rough draft of this chapter now.`;
     temperature: 0.9,
   });
 
-  return content.trim();
+  return completeProse({
+    model: input.model,
+    system: roughDraftSystem(input.language),
+    language: input.language,
+    text: stripLeadingHeadings(extractProse(content)),
+    label: "rough draft",
+  });
 }
 
 function expansionSystem(language: string, target: number): string {
@@ -435,6 +442,51 @@ function stripLeadingHeadings(text: string): string {
     break;
   }
   return lines.slice(index).join("\n").trim();
+}
+
+/**
+ * Modelle brechen trotz Auftrag mitten im Satz ab (Token-Limit oder "lite"-Modell).
+ * Diese Funktion setzt die Prosa fort, bis sie auf einem Satzende steht.
+ */
+async function completeProse(params: {
+  model: string;
+  system: string;
+  language: string;
+  text: string;
+  label: string;
+}): Promise<string> {
+  let text = params.text;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (!looksTruncated(text)) break;
+
+    const tail = text.slice(-2000);
+    const { content, finishReason } = await chatCompletionDetailed({
+      model: params.model,
+      system: params.system,
+      user: `${languageLock(params.language)}
+CONTINUATION REQUEST: the ${params.label} below breaks off mid-sentence.
+Continue the prose seamlessly from where it stops — same voice, same tense, same scene.
+Do NOT repeat anything, do NOT restart, do NOT add headings, titles, notes or markers, do NOT summarise.
+Write at least 150 more words and finish on a complete sentence or a deliberate hook.
+
+END OF THE ${params.label.toUpperCase()} SO FAR (for continuity):
+...${tail}
+
+Continue now, entirely in ${params.language}.`,
+      maxTokens: 2500,
+      temperature: 0.85,
+    });
+
+    const appended = extractProse(stripLeadingHeadings(content.trim()));
+    if (!appended) break;
+    text = `${text}\n\n${appended}`;
+
+    // Auch die Fortsetzung kann ins Limit laufen — dann erneut versuchen.
+    if (finishReason !== "length" && !looksTruncated(text)) break;
+  }
+
+  return text;
 }
 
 export interface ExpandInput extends ChapterInput {
@@ -483,7 +535,7 @@ Write the complete ${target}-word chapter now, entirely in ${input.language}.`;
     attempts += 1;
     const remaining = Math.max(300, target - words);
     const tail = text.slice(-2000);
-    const continuation = await chatCompletion({
+    const { content, finishReason } = await chatCompletionDetailed({
       model: input.model,
       system,
       user: `${languageLock(input.language)}
@@ -499,13 +551,22 @@ Continue now, entirely in ${input.language}.`,
       temperature: 0.85,
     });
 
-    const appended = stripLeadingHeadings(continuation.trim());
+    const appended = extractProse(stripLeadingHeadings(content.trim()));
     if (!appended) break;
     text = `${text}\n\n${appended}`;
     words = countWords(text);
+
+    // Genug Wörter, aber mitten im Satz abgebrochen: unten wird vervollständigt.
+    if (finishReason !== "length" && words >= target * 0.9) break;
   }
 
-  return text;
+  return completeProse({
+    model: input.model,
+    system,
+    language: input.language,
+    text,
+    label: "chapter",
+  });
 }
 
 /* ───────────────────────────── pass steps ───────────────────────────── */
@@ -564,18 +625,9 @@ function parsePassOutput(content: string): PassResult {
   const notesRaw =
     notesOpen !== -1 ? content.slice(notesOpen + 7, notesClose !== -1 ? notesClose : undefined) : "";
 
-  let text = content;
-  const textOpen = lower.indexOf("<text>");
-  if (textOpen !== -1) text = text.slice(textOpen + 6);
-
-  // Cut off an inline notes section (tagged or plain "NOTES:").
-  text = text.replace(/\n\s*<notes>[\s\S]*$/i, "");
-  text = text.replace(/\n\s*NOTES:\s*[\s\S]*$/i, "");
-  // Remove any residual markers (models sometimes forget the closing tag).
-  text = text
-    .replace(/<\/?text>/gi, "")
-    .replace(/<\/?notes>/gi, "")
-    .trim();
+  // <TEXT>-Block hat Vorrang: ein Notes-Marker mitten in der Antwort darf niemals
+  // echten Prosatext löschen (genau das hat Kapitel abgeschnitten).
+  const text = extractProse(content);
 
   const notes = notesRaw
     .split(/\r?\n/)
@@ -661,8 +713,8 @@ ${
   });
 
   const parsed = parsePassOutput(content);
-  const nextText = parsed.text.trim();
   const previousText = input.text.trim();
+  let nextText = parsed.text.trim();
 
   if (nextText.length === 0) {
     throw new ApiError(
@@ -670,6 +722,19 @@ ${
       502,
     );
   }
+
+  // Am Token-Limit abgebrochene Überarbeitung zu Ende schreiben.
+  if (looksTruncated(nextText)) {
+    nextText = await completeProse({
+      model: input.model,
+      system:
+        kind === "consistency" ? consistencySystem(input.language) : styleSystem(input.language),
+      language: input.language,
+      text: nextText,
+      label: "chapter",
+    });
+  }
+
   if (previousText.length > 200 && nextText.length < previousText.length * 0.4) {
     throw new ApiError(
       "Die Antwort war unvollständig (der Text wurde stark gekürzt). Bitte erneut versuchen oder ein anderes Modell wählen.",
@@ -679,11 +744,16 @@ ${
 
   const changed = nextText !== previousText;
   const notes = changed
-    ? parsed.notes
+    ? [...parsed.notes]
     : [
         ...parsed.notes,
         "⚠️ Keine Textänderung erkannt — das Modell hat den Text unverändert zurückgegeben. Ggf. ein stärkeres Modell wählen.",
       ];
+  if (looksTruncated(nextText)) {
+    notes.push(
+      "⚠️ Das Kapitel endet weiterhin mitten im Satz. Bitte erneut prüfen oder ein Modell mit größerem Ausgabelimit wählen.",
+    );
+  }
 
   return { text: nextText, notes, changed };
 }

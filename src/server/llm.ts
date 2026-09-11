@@ -19,7 +19,13 @@ export interface ChatOptions {
   json?: boolean;
 }
 
-export async function chatCompletion(options: ChatOptions): Promise<string> {
+export interface ChatResult {
+  content: string;
+  /** Grund des Modellendes laut Provider — "length" bedeutet Token-Limit (abgeschnitten). */
+  finishReason: string | null;
+}
+
+export async function chatCompletionDetailed(options: ChatOptions): Promise<ChatResult> {
   const apiKey = getOpenRouterKey();
   if (!apiKey) {
     throw new ApiError(
@@ -54,13 +60,19 @@ export async function chatCompletion(options: ChatOptions): Promise<string> {
   }
 
   const data = (await response.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: { content?: string }; finish_reason?: string | null }[];
   };
-  const content = data.choices?.[0]?.message?.content;
+  const choice = data.choices?.[0];
+  const content = choice?.message?.content;
   if (!content || content.trim().length === 0) {
     throw new ApiError("OpenRouter hat keine Antwort geliefert.", 502);
   }
-  return content;
+  return { content, finishReason: choice?.finish_reason ?? null };
+}
+
+/** Bequeme Variante, wenn nur der Text gebraucht wird. */
+export async function chatCompletion(options: ChatOptions): Promise<string> {
+  return (await chatCompletionDetailed(options)).content;
 }
 
 /** Strips markdown code fences and isolates the outermost JSON object. */

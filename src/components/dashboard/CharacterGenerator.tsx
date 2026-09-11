@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { copyText } from "@/lib/clipboard";
+import { showToast } from "@/lib/toast";
 import {
   FALLBACK_LANGUAGES,
   readLanguage,
@@ -390,7 +392,14 @@ export function CharacterGenerator({
                 <Button
                   variant="outline"
                   className="glass rounded-xl border-white/10"
-                  onClick={() => void navigator.clipboard.writeText(prompt)}
+                  onClick={() => {
+                    void copyText(soulToPrompt(soul)).then((ok) =>
+                      showToast(
+                        ok ? "Prompt kopiert" : "Kopieren fehlgeschlagen",
+                        ok ? "ok" : "error",
+                      ),
+                    );
+                  }}
                 >
                   <Copy className="size-4" />
                   Kopieren

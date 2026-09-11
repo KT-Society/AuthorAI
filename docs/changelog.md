@@ -6,6 +6,35 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Toast-System**: globale, dezente Rückmeldungen (unten mittig, nicht im Druck) für
+  Kopier- und Export-Aktionen — `src/lib/toast.ts` + `components/dashboard/ToastHost.tsx`.
+- **Zwischenablage mit Fallback** (`src/lib/clipboard.ts`): versucht
+  `navigator.clipboard`, fällt auf `textarea`/`execCommand` zurück und meldet echtes
+  Erfolg/Fehlschlag statt still zu scheitern.
+- **Prosa-Extraktion** (`src/lib/prose.ts`) für Server und Client: extrahiert `<TEXT>`-Blöcke
+  robust und erkennt mitten im Satz abgebrochene Texte.
+
+### Fixed
+
+- **Abgeschnittene Kapitel**: Antworten, die mitten im Satz enden (Token-Limit oder
+  „lite"-Modelle), werden erkannt und über eine gezielte Fortsetzung zu Ende geschrieben —
+  für Rohentwurf, Ausbau, Kohärenz und Stil. Läuft es weiterhin ins Limit, benennt der
+  Prüfbericht das Problem, statt es zu verschweigen.
+- **Prosa-Verlust durch `<NOTES>`**: Der Parser schnitt bisher am ersten `<NOTES>`-Marker
+  alles ab — auch echten Prosatext. Jetzt hat ein geschlossener `<TEXT>`-Block Vorrang;
+  Notes-Inhalte werden gezielt entfernt, niemals Prosa.
+- **„Manuskript kopieren" war unvollständig**: kopiert wurde nur der gespeicherte Stand,
+  während der Editor den laufenden Text in verzögerten Autosave-Puffern hält. Kopieren und
+  alle Exporte (`.txt`, Markdown, EPUB, DOCX, PDF) führen die Puffer jetzt vorher zusammen.
+- **Kopieren ohne Rückmeldung**: Kopier-/Exportaktionen melden nun Erfolg oder Fehler;
+  unvollständige Kapitel werden beim Kopieren namentlich benannt.
+
+---
+
 ## [0.2.0] — 2026-09-11
 
 ### Schreiben & Struktur
