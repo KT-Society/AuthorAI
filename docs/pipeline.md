@@ -206,7 +206,11 @@ RELATIONS (binding — keep these dynamics consistent):
 ```
 
 - **Wo**: `chapter/draft`, `chapter/expand`, `chapter/consistency`, `chapter/style` und
-  `timeline/check` (Feld `canon`).
+  `timeline/check` (Feld `canon`) — im Buch-Editor **und** im Buch-Wizard (dort der Kanon der
+  **Vorbände**, wenn das Buch als Band einer Reihe entsteht).
+- **Reihe**: `seriesContext` geht zusätzlich an `POST /api/storyboard` (Titel, Handlung, Figuren
+  und Schauplätze der Vorbände + „fortführen, nicht neu erzählen") — siehe
+  `lib/seriesContext.ts`.
 - **Geltungsbereich**: nur Entitäten des Projekts (Figuren mit `bookId` bzw. Namen aus dem
   Storyboard, Welteneinträge mit `bookId`) — kein Kanon aus anderen Büchern. Gehört das Buch zu
   einer **Reihe**, umfasst der Scope **alle Bände** (`canonVolumeIds`): gemeinsame Welt,

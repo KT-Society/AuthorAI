@@ -139,6 +139,7 @@ Typen + Seed-Daten, frei von UI-Logik:
 | `markdown.ts` | Markdown-Export eines Buchs |
 | `backup.ts` | Projekt-Backup (JSON) erzeugen/validieren |
 | `graph.ts` | Deterministisches Kreis-Layout + Kanten-Helfer für den Beziehungsgraphen |
+| `seriesContext.ts` | Vorbände-Kontext + Vorbände-Kanon für einen neuen Band (`buildSeriesContext`) |
 | `worldMatch.ts` | Normalisierter Titelvergleich (Dublettenschutz Weltenbau) |
 | `passNotes.ts` | Filtert No-Op-Notizen aus Prüfberichten („A" wurde zu „A") |
 | `prose.ts` | `<TEXT>`-Extraktion + Truncation-Erkennung (Server **und** Client) |

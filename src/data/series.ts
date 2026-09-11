@@ -65,5 +65,18 @@ export function removeBookFromSeries(series: Series[], bookId: string): Series[]
   );
 }
 
+/** Hängt ein Buch als **letzten** Band an eine Reihe (neuer Band = nächste Nummer). */
+export function addVolumeToSeries(
+  series: Series[],
+  seriesId: string,
+  bookId: string,
+): Series[] {
+  return series.map((entry) =>
+    entry.id === seriesId && !entry.volumeIds.includes(bookId)
+      ? { ...entry, volumeIds: [...entry.volumeIds, bookId] }
+      : entry,
+  );
+}
+
 /** Keine Seed-Reihen: die Beispiel-Bücher sind eigenständige Projekte. */
 export const SERIES: Series[] = [];

@@ -12,7 +12,7 @@ import { PLOT_CARDS } from "@/data/plot";
 import type { PlotCard, PlotStatus } from "@/data/plot";
 import { RESEARCH_NOTES } from "@/data/research";
 import type { ResearchNote } from "@/data/research";
-import { SERIES, removeBookFromSeries } from "@/data/series";
+import { SERIES, addVolumeToSeries, removeBookFromSeries } from "@/data/series";
 import type { Series } from "@/data/series";
 import { WORLD_ENTRIES, entriesFromStoryWorld } from "@/data/world";
 import type { WorldEntry } from "@/data/world";
@@ -359,8 +359,10 @@ export function Dashboard({
     prevCounts.current.notes = notes.length;
   }, [notes]);
 
-  const addBook = (book: Book) => {
+  const addBook = (book: Book, seriesId?: string) => {
     setBooks((prev) => [book, ...prev]);
+    // Neuen Band direkt an die gewählte Reihe hängen (er wird der nächste Band).
+    if (seriesId) setSeries((prev) => addVolumeToSeries(prev, seriesId, book.id));
     setCharacters((prev) => {
       const additions = collectMissingCharacters([book], prev);
       return additions.length > 0 ? [...additions, ...prev] : prev;
@@ -663,6 +665,11 @@ export function Dashboard({
             ) : (
               <DashboardView
                 books={books}
+                series={series}
+                characters={characters}
+                worlds={worlds}
+                facts={facts}
+                relations={relations}
                 onAddBook={addBook}
                 onOpenBook={(id) => openBook(id)}
                 onDeleteBook={deleteBook}

@@ -38,6 +38,12 @@ import {
 import type { ModelStage } from "@/lib/generationSettings";
 
 import type { Book } from "@/data/author";
+import type { Character } from "@/data/characters";
+import type { CanonFact, CharacterRelation } from "@/data/continuity";
+import type { Series } from "@/data/series";
+import { seriesOfBook, volumeLabel } from "@/data/series";
+import type { WorldEntry } from "@/data/world";
+import { buildSeriesContext } from "@/lib/seriesContext";
 import {
   EXPAND_DEFAULT_WORDS,
   EXPAND_MAX_WORDS,
@@ -88,18 +94,32 @@ function slugify(value: string): string {
 export function BookWizard({
   open,
   existingCount,
+  series = [],
+  books = [],
+  characters = [],
+  worlds = [],
+  facts = [],
+  relations = [],
   onClose,
   onCreate,
   onWordsWritten,
 }: {
   open: boolean;
   existingCount: number;
+  /** Reihen zur Auswahl — ein neuer Band berücksichtigt seine Vorbände. */
+  series?: Series[];
+  books?: Book[];
+  characters?: Character[];
+  worlds?: WorldEntry[];
+  facts?: CanonFact[];
+  relations?: CharacterRelation[];
   onClose: () => void;
-  onCreate: (book: Book) => void;
+  onCreate: (book: Book, seriesId?: string) => void;
   onWordsWritten: (count: number) => void;
 }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [idea, setIdea] = useState("");
+  const [seriesId, setSeriesId] = useState("");
   const [chapterCount, setChapterCount] = useState("12");
   const [models, setModels] = useState<Record<ModelStage, string>>({
     storyboard: "",
@@ -127,6 +147,7 @@ export function BookWizard({
     if (!open) return;
     setStepIndex(0);
     setIdea("");
+    setSeriesId("");
     setChapterCount("12");
     setStoryboard(null);
     setDrafts([]);
@@ -171,6 +192,22 @@ export function BookWizard({
   const draftWordCounts = useMemo(() => drafts.map((text) => countWords(text)), [drafts]);
   const expandedWordCounts = useMemo(() => expanded.map((text) => countWords(text)), [expanded]);
   const totalExpandedWords = useMemo(() => expandedWordCounts.reduce((a, b) => a + b, 0), [expandedWordCounts]);
+
+  /**
+   * Vorbände der gewählten Reihe: Prosa-Kontext fürs Storyboard und der **Kanon**
+   * (Fakten aus der Kontinuitäts-DB + Beziehungen aus dem Beziehungsgraph) für alle Stufen.
+   */
+  const seriesData = useMemo(() => {
+    const entry = series.find((item) => item.id === seriesId);
+    if (!entry) return { context: undefined, canon: undefined, bandLabel: "" };
+    const built = buildSeriesContext({ series: entry, books, characters, worlds, facts, relations });
+    return {
+      context: [built.context, built.canon].filter(Boolean).join("\n\n") || undefined,
+      canon: built.canon,
+      // Das neue Buch wird der nächste Band.
+      bandLabel: `Band ${entry.volumeIds.length + 1}`,
+    };
+  }, [series, seriesId, books, characters, worlds, facts, relations]);
 
   if (!open) return null;
 
@@ -229,6 +266,7 @@ export function BookWizard({
         model: id,
         language,
         chapters: count,
+        seriesContext: seriesData.context,
       });
       setStoryboard(result);
       setDrafts(Array(result.chapters.length).fill(""));
@@ -272,7 +310,7 @@ export function BookWizard({
     setError(null);
     setBusy(`Rohentwurf Kapitel ${index + 1}/${chapters.length}…`);
     try {
-      const draft = await draftChapter({ storyboard, chapterIndex: index, model: id, language });
+      const draft = await draftChapter({ storyboard, chapterIndex: index, model: id, language, canon: seriesData.canon });
       setDrafts((prev) => {
         const next = [...prev];
         next[index] = draft;
@@ -299,7 +337,7 @@ export function BookWizard({
       }
       setBusy(`Rohentwurf ${index + 1}/${total}…`);
       try {
-        const draft = await draftChapter({ storyboard, chapterIndex: index, model: id, language });
+        const draft = await draftChapter({ storyboard, chapterIndex: index, model: id, language, canon: seriesData.canon });
         setDrafts((prev) => {
           const next = [...prev];
           next[index] = draft;
@@ -329,6 +367,7 @@ export function BookWizard({
         language,
         draft: drafts[index] ?? "",
         targetWords,
+        canon: seriesData.canon,
       });
       setExpanded((prev) => {
         const next = [...prev];
@@ -392,7 +431,7 @@ export function BookWizard({
     setError(null);
     setBusy(`${MODEL_STAGE_LABELS[kind]}-Prüfung Kapitel ${index + 1}…`);
     try {
-      const request = { storyboard, chapterIndex: index, model: id, language, text: source };
+      const request = { storyboard, chapterIndex: index, model: id, language, text: source, canon: seriesData.canon };
       const result = kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
       setExpanded((prev) => {
         const next = [...prev];
@@ -454,7 +493,7 @@ export function BookWizard({
       const source = (current[index] ?? "").trim();
       setBusy(`${MODEL_STAGE_LABELS[kind]}-Prüfung ${position + 1}/${total} · Kapitel ${index + 1}…`);
       try {
-        const request = { storyboard, chapterIndex: index, model: id, language, text: source };
+        const request = { storyboard, chapterIndex: index, model: id, language, text: source, canon: seriesData.canon };
         const result =
           kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
         current = current.map((text, i) => (i === index ? result.text : text));
@@ -641,7 +680,7 @@ export function BookWizard({
       coverUrl: finalCover,
       storyboard,
       manuscript,
-    });
+    }, seriesId || undefined);
     setSaved(true);
     onClose();
   };
@@ -800,19 +839,59 @@ export function BookWizard({
                 />
               </div>
 
-              <div className="max-w-[220px]">
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                  Kapitel ({MIN_CHAPTERS}–{MAX_CHAPTERS})
-                </label>
-                <Input
-                  type="number"
-                  min={MIN_CHAPTERS}
-                  max={MAX_CHAPTERS}
-                  value={chapterCount}
-                  onChange={(event) => setChapterCount(event.target.value)}
-                  className="glass h-10 rounded-xl border-white/10"
-                />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                    Kapitel ({MIN_CHAPTERS}–{MAX_CHAPTERS})
+                  </label>
+                  <Input
+                    type="number"
+                    min={MIN_CHAPTERS}
+                    max={MAX_CHAPTERS}
+                    value={chapterCount}
+                    onChange={(event) => setChapterCount(event.target.value)}
+                    className="glass h-10 rounded-xl border-white/10"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                    Reihe (optional)
+                  </label>
+                  <Select value={seriesId || "none"} onValueChange={(value) => setSeriesId(value === "none" ? "" : value)}>
+                    <SelectTrigger className="glass h-10 w-full rounded-xl border-white/10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="glass-strong border-white/10">
+                      <SelectItem value="none">Keine Reihe — eigenständiges Buch</SelectItem>
+                      {series.map((entry) => (
+                        <SelectItem key={entry.id} value={entry.id}>
+                          {entry.name} · neuer Band {entry.volumeIds.length + 1}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+
+              {seriesId ? (
+                <div className="rounded-xl border border-brand-indigo/30 bg-brand-indigo/10 px-3 py-2 text-[11px] text-brand-indigo">
+                  {seriesData.context ? (
+                    <>
+                      <strong>{seriesData.bandLabel}</strong> der Reihe „
+                      {series.find((entry) => entry.id === seriesId)?.name}" — Storyboard und alle
+                      weiteren Stufen berücksichtigen die Vorbände: Handlung, Figuren und
+                      Weltenbau werden fortgeführt, der Kanon (Fakten und Beziehungen) gilt
+                      verbindlich.
+                    </>
+                  ) : (
+                    <>
+                      <strong>{seriesData.bandLabel}</strong> dieser Reihe — es gibt noch keine
+                      Vorbände, das Buch eröffnet die Reihe.
+                    </>
+                  )}
+                </div>
+              ) : null}
 
               <p className="text-[11px] text-muted-foreground">
                 Model und Sprache stellst du oben ein (frei, OpenRouter) — Keys liest der Server

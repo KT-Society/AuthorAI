@@ -12,6 +12,8 @@ export interface StoryboardRequest {
   model: string;
   language: string;
   chapters: number;
+  /** Reihen-Kontext (Vorbände + Kanon), damit der neue Band die Reihe fortsetzt. */
+  seriesContext?: string;
 }
 
 export async function generateStoryboard(input: StoryboardRequest): Promise<Storyboard> {

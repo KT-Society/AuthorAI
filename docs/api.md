@@ -126,12 +126,20 @@ Fakten/Beziehungen gehen als `canon`-Block zusätzlich an `chapter/draft`, `chap
 
 ### `POST /api/storyboard`
 
-Zweiphasige Storyboard-Erzeugung (Outline + gechunkte Details).
+Zweiphasige Storyboard-Erzeugung (Outline + gechunkte Details). Mit `seriesContext` entsteht ein
+**Folgeband**: die Vorbände (Titel, Handlung, Figuren, Schauplätze) und ihr Kanon gehen in beide
+Phasen ein, damit die Reihe fortgeführt statt neu erzählt wird.
 
 **Request**
 
 ```json
-{ "idea": "…", "model": "<model-id>", "language": "German", "chapters": 30 }
+{
+  "idea": "…",
+  "model": "<model-id>",
+  "language": "German",
+  "chapters": 30,
+  "seriesContext": "SERIES: this book is the next volume of „…\" … (optional)"
+}
 ```
 
 **Response**

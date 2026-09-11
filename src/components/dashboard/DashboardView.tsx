@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { Book, BookStatus, Idea } from "@/data/author";
+import type { Character } from "@/data/characters";
+import type { CanonFact, CharacterRelation } from "@/data/continuity";
+import type { Series } from "@/data/series";
+import type { WorldEntry } from "@/data/world";
 import type { AppNotification } from "@/lib/notifications";
 
 import { ActivityFeed } from "./ActivityFeed";
@@ -15,6 +19,11 @@ import { TopBar } from "./TopBar";
 
 export function DashboardView({
   books,
+  series = [],
+  characters = [],
+  worlds = [],
+  facts = [],
+  relations = [],
   onAddBook,
   onOpenBook,
   onDeleteBook,
@@ -35,7 +44,12 @@ export function DashboardView({
   profileName,
 }: {
   books: Book[];
-  onAddBook: (book: Book) => void;
+  series?: Series[];
+  characters?: Character[];
+  worlds?: WorldEntry[];
+  facts?: CanonFact[];
+  relations?: CharacterRelation[];
+  onAddBook: (book: Book, seriesId?: string) => void;
   onOpenBook: (id: string) => void;
   onDeleteBook: (id: string) => void;
   createRequest: number;
@@ -119,6 +133,12 @@ export function DashboardView({
       <BookWizard
         open={dialogOpen}
         existingCount={books.length}
+        series={series}
+        books={books}
+        characters={characters}
+        worlds={worlds}
+        facts={facts}
+        relations={relations}
         onClose={() => setDialogOpen(false)}
         onCreate={onAddBook}
         onWordsWritten={onWordsWritten}

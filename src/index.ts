@@ -211,7 +211,13 @@ const server = serve({
           const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
           const language = optionalLanguage(body.language);
           const chapters = optionalInt(body.chapters, 12);
-          const storyboard = await generateStoryboard({ idea, model, language, chapters });
+          const storyboard = await generateStoryboard({
+            idea,
+            model,
+            language,
+            chapters,
+            seriesContext: optionalString(body.seriesContext),
+          });
           return Response.json({ storyboard });
         } catch (err) {
           return errorResponse(err);

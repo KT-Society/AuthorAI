@@ -42,6 +42,8 @@ export interface StoryboardInput {
   model: string;
   language: string;
   chapters: number;
+  /** Reihen-Kontext (Vorbände + Kanon) — der neue Band setzt die Reihe fort. */
+  seriesContext?: string;
 }
 
 const BATCH_SIZE = 8;
@@ -177,7 +179,13 @@ Rules:
 - All text MUST be in ${language}.`;
 }
 
-function detailUser(meta: OutlineMeta, titles: string[], start: number, end: number): string {
+function detailUser(
+  meta: OutlineMeta,
+  titles: string[],
+  start: number,
+  end: number,
+  seriesContext?: string,
+): string {
   const characters = meta.characters
     .map((character) => `- ${character.name} (${character.role}): ${character.description}`)
     .join("\n");
@@ -205,7 +213,9 @@ ${fullList}
 DETAIL EXACTLY THESE CHAPTERS (indices ${start + 1}..${end}):
 ${batchList}
 
-REMINDER: the whole story must be fully resolved by chapter ${titles.length}. If this batch contains the finale, its summary must describe the climax and resolution.
+REMINDER: the whole story must be fully resolved by chapter ${titles.length}. If this batch contains the finale, its summary must describe the climax and resolution.${
+    seriesContext?.trim() ? `\n\n${seriesContext.trim()}` : ""
+  }
 
 Return the JSON with one entry per requested index.`;
 }
@@ -258,7 +268,9 @@ export async function generateStoryboard(input: StoryboardInput): Promise<Storyb
   const outlineRaw = await chatCompletion({
     model: input.model,
     system: storyArchitectSystem(language, chapters),
-    user: `BOOK IDEA:\n${input.idea}\n\nCreate the storyboard outline with EXACTLY ${chapters} chapter titles now as JSON.`,
+    user: `BOOK IDEA:\n${input.idea}${
+      input.seriesContext?.trim() ? `\n\n${input.seriesContext.trim()}` : ""
+    }\n\nCreate the storyboard outline with EXACTLY ${chapters} chapter titles now as JSON.`,
     json: true,
     maxTokens: 3000,
     temperature: 0.85,
@@ -280,7 +292,7 @@ export async function generateStoryboard(input: StoryboardInput): Promise<Storyb
     const batchRaw = await chatCompletion({
       model: input.model,
       system: chapterDetailSystem(language),
-      user: detailUser(meta, titles, start, end),
+      user: detailUser(meta, titles, start, end, input.seriesContext),
       json: true,
       maxTokens: 3500,
       temperature: 0.85,

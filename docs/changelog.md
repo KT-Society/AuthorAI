@@ -55,6 +55,16 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   nicht erneut vorgeschlagen.
 - **Added** **Reihen-Badge in der Bibliothek**: Buchkarten zeigen „Reihe · Band n", die Suche
   findet auch über den Reihennamen.
+- **Added** **Reihe schon im Buch-Wizard wählbar** (Schritt „Idee"): Ein neues Buch startet
+  direkt als nächster Band. Ein Hinweis zeigt „Band n" und ob es Vorbände gibt.
+  - **Storyboard** bekommt einen **Reihen-Kontext**: Titel, Genre, Logline, Handlung,
+    Figuren und Schauplätze der Vorbände plus die Regel, die Reihe **fortzuführen statt
+    neu zu erzählen** (`lib/seriesContext.ts` → `buildSeriesContext`, beide Storyboard-Phasen).
+  - **Alle weiteren Stufen** des Wizards (Rohentwurf, Ausbau, Kohärenz, Stil) bekommen den
+    **Kanon der Vorbände** als verbindlichen Block — Fakten aus der Kontinuitäts-DB
+    (`CanonFact`) und Beziehungen aus dem Beziehungsgraph (`CharacterRelation`).
+  - Beim Anlegen wird das Buch automatisch als letzter Band an die Reihe gehängt;
+    ohne Vorbände eröffnet es die Reihe.
 
 _Nächste Themen siehe [`roadmap.md`](roadmap.md)._
 
