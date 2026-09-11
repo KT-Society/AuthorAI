@@ -104,13 +104,24 @@ Ausbau auf Ziel-Länge (Continuation-Loop bis ≥ 90 % des Ziels).
 {
   "storyboard": { … }, "chapterIndex": 0,
   "model": "<model-id>", "language": "German",
-  "draft": "…", "targetWords": 4000
+  "draft": "…", "targetWords": 4000,
+  "scenes": [
+    {
+      "text": "Der Aufbruch am Hafen",
+      "characters": ["Kiro", "Sylar"],
+      "pov": "Kiro", "setting": "Alt-Distrikt", "time": "Tag 1, Morgen", "words": 800
+    }
+  ]
 }
 ```
 
+`scenes` ist optional und **verbindlich**, wenn gesetzt (Reihenfolge, POV/Schauplatz/Zeit,
+auftretende Figuren, Wortziel). `targetWords` wird auf 3000–5000 geklemmt.
+
 **Response:** `{ "expanded": "…" }`
 
-`targetWords` wird auf 3000–5000 geklemmt.
+> `scenes` gilt für alle Textrouten: `/api/chapter/draft`, `/api/chapter/expand`,
+> `/api/chapter/consistency`, `/api/chapter/style`.
 
 ---
 
@@ -138,6 +149,33 @@ Kohärenz-/Logikprüfung mit Korrektur.
 
 Stil-/Sprachprüfung mit Korrektur — gleicher Payload und gleiche Response wie
 `/api/chapter/consistency`.
+
+---
+
+### `POST /api/timeline/check`
+
+Chronologische Prüfung über alle Kapitel/Szenen (nutzt konzeptionell das Kohärenz-Model).
+
+**Request**
+
+```json
+{
+  "storyboard": { … },
+  "scenesByChapter": [
+    [{ "text": "…", "characters": ["…"], "time": "Tag 1, Morgen", "setting": "Hafen" }]
+  ],
+  "model": "<model-id>",
+  "language": "German"
+}
+```
+
+**Response**
+
+```json
+{ "summary": "…", "findings": ["Kapitel 3, Szene 2 …"] }
+```
+
+`findings` ist leer, wenn die Chronologie konsistent ist.
 
 ---
 

@@ -32,11 +32,14 @@ Alles landet im (gitignorierten) Ordner **`release/`**.
 
 ## 1 · Version bumpen
 
-Drei Stellen konsistent halten:
+Vier Stellen konsistent halten:
 
 1. `package.json` → `version`
 2. `installer/authorai.iss` → `#define MyAppVersion`
-3. `docs/changelog.md` → neuer Eintrag
+3. `installer/authorai.nsi` → `!define APP_VERSION` **und** `VIProductVersion` (`x.y.z.0`)
+4. `docs/changelog.md` → neuer Eintrag
+
+Repository: <https://github.com/KT-Society/AuthorAI>
 
 ---
 
@@ -59,12 +62,12 @@ bun run build:binary
 Ergebnis:
 
 ```
-release/
+Release/
 ├─ authorai.exe                        # Server + UI (eine Datei)
 ├─ LICENSE                             # MIT — bei Weitergabe Pflicht
 ├─ README.md
 ├─ .env.example
-└─ AuthorAI-Setup-0.1.0.exe            # nur mit -Installer
+└─ AuthorAI-Setup-<version>.exe        # nur mit -Installer
 ```
 
 **Verhalten des Binaries**
@@ -149,7 +152,8 @@ Grundsatz: **`release/` enthält alles, was der Kunde braucht** — inklusive Li
 
 ## Checkliste vor der Veröffentlichung
 
-- [ ] Versionsnummer in `package.json`, `installer/authorai.iss`, `docs/changelog.md` gleich
+- [ ] Versionsnummer in `package.json`, `installer/authorai.iss`, `installer/authorai.nsi`
+      (inkl. `VIProductVersion`) und `docs/changelog.md` gleich
 - [ ] `bun run check` grün
 - [ ] `bun run build:binary` ohne Warnungen
 - [ ] Probe-Lauf: Binary in einem **leeren Ordner** starten, `.env` daneben, App öffnet sich

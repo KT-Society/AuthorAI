@@ -137,6 +137,20 @@ cd release
 
 ---
 
+## Kosten & Offline
+
+| Vorgang | Externer Aufruf |
+| --- | --- |
+| Storyboard, Kapitel, Prüfungen, Timeline, Soul-Scan, Weltenbau-Extraktion | LLM (OpenRouter) |
+| Recherche (Notiz-Suche, Charakter-Scan) | Tavily |
+| Cover / Cover-Varianten | Pollinations (Varianten: **3 Bilder pro Durchlauf**) |
+| **EPUB / DOCX / Markdown / PDF / Backup** | **keiner — läuft komplett im Browser** |
+
+Exporte und das Projekt-Backup funktionieren also auch ohne Netz (Cover im EPUB braucht
+allerdings das zuvor geladene Bild).
+
+---
+
 ## Tooling-Konfiguration
 
 | Datei | Zweck |

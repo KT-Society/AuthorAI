@@ -1,19 +1,21 @@
 # Security Policy
 
+**Repository:** <https://github.com/KT-Society/AuthorAI>
+
 ## Unterstützte Versionen
 
 | Version | Unterstützt |
 | --- | --- |
-| 0.1.x | ✅ |
-| < 0.1 | ❌ |
+| 0.2.x | ✅ |
+| < 0.2 | ❌ |
 
 ## Sicherheitslücken melden
 
 **Bitte niemals ein öffentliches Issue für Sicherheitslücken öffnen.**
 
-Nutze GitHubs **Private Vulnerability Reporting**:
-Repository → **Security** → **Report a vulnerability**.
-(Wir empfehlen Maintainern, diese Funktion in den Repo-Einstellungen zu aktivieren.)
+Nutze GitHubs **Private Vulnerability Reporting** für dieses Repository:
+**<https://github.com/KT-Society/AuthorAI/security/advisories/new>**
+(Repository → *Security* → *Report a vulnerability*.)
 
 Alternativ: kontaktiere die Maintainer (**KT-Society & Echo**) direkt und privat.
 

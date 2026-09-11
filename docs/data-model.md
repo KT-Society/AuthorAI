@@ -29,6 +29,10 @@ interface Book {
   tags: string[];
   synopsis: string;
   coverUrl?: string;        // "/covers/<datei>.png" (server-gespeichert)
+  coverBackUrl?: string;    // optionales Back-/Rückseiten-Cover
+  coverLayers?: CoverTextLayer[];      // persistierte Front-Text-Layer
+  coverBackLayers?: CoverTextLayer[];  // persistierte Back-Text-Layer
+  defaultTargetWords?: number;         // Projekt-Vorgabe je Kapitel
   storyboard?: Storyboard;
   manuscript?: ChapterContent[];
 }
@@ -69,15 +73,56 @@ interface ChapterContent {
   title: string;
   draft: string;               // Rohentwurf
   expanded: string;            // Ausbau
-  targetWords?: number;        // Kapitel-Ziel (Default 4000)
+  targetWords?: number;        // Kapitel-Ziel (sonst Buch-Vorgabe)
   characterIds?: string[];     // Figuren im Kapitel
-  beatCharacters?: string[][]; // Figuren je Beat (parallel zu plan.beats)
+  beatCharacters?: string[][]; // Figuren je Szene (parallel zu storyboard.beats)
+  sceneMeta?: SceneMeta[];     // POV/Schauplatz/Zeit/Wortziel je Szene
   consistencyNotes?: string;   // Prüfbericht (zeilenweise)
   consistencyChecked?: boolean;
   styleNotes?: string;
   styleChecked?: boolean;
 }
+
+/** Metadaten je Szene (parallel zur Beat-Liste). */
+interface SceneMeta {
+  pov?: string;
+  setting?: string;
+  time?: string;
+  words?: number;   // Wortziel dieser Szene
+}
+
+/** Verbindliche Szene, wie sie an den Server geht. */
+interface SceneConstraint {
+  text: string;
+  characters: string[];  // Namen
+  pov?: string;
+  setting?: string;
+  time?: string;
+  words?: number;
+}
 ```
+
+### Cover-Text (`src/data/cover.ts`)
+
+```ts
+interface CoverTextLayer {
+  id: string;
+  role: "title" | "author" | "free";
+  text: string;
+  x: number; y: number;        // Prozent (Ankerpunkt)
+  size: number;                // Anteil der Bildbreite
+  fontFamily: string;
+  fontWeight: number;
+  color: string;
+  align: "left" | "center" | "right";
+  letterSpacing: number;
+  uppercase: boolean;
+  italic: boolean;
+  shadow: boolean;
+}
+```
+
+Dazu `COVER_PRESETS` (Schriftpaare), `COVER_LAYOUTS` und `applyCoverPreset`/`applyCoverLayout`.
 
 ### Domänen
 

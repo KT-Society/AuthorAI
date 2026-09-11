@@ -1,5 +1,8 @@
 # AuthorAI — Dein KI-Buchautor
 
+> **Repository:** [github.com/KT-Society/AuthorAI](https://github.com/KT-Society/AuthorAI)
+> · **Version:** 0.2.0 · **Lizenz:** MIT · **Entwickler:** KT-Society & Echo
+
 Eine vollständige, lokal laufende **Autoren-Werkbank**: von der Buchidee über Storyboard,
 Rohentwurf und Ausbau bis zu Kohärenz- und Stilprüfung, mit Charakteren, Weltenbau,
 Plot-Board, Recherche, Statistiken und Cover-Generierung.
@@ -26,7 +29,11 @@ Idee → Storyboard → Rohentwurf (~500 W) → Ausbau (3.000–5.000 W) → Koh
 | **Weltenbau** | Orte, Fraktionen, Magie, Artefakte, Lore — automatisch + per Extraktion |
 | **Plot-Board** | Kapitel als Karten, Akt/Status, Board-Ansicht |
 | **Recherche** | Notizen + echte Tavily-Suche |
-| **Covers** | Pollinations (`flux.1-schnell`) serverseitig erzeugt, gespeichert, text-editierbar |
+| **Szenen** | Beats je Kapitel editierbar mit POV/Schauplatz/Zeit/**Wortziel** — verbindlich für Generierung und Prüfung |
+| **Timeline** | Zeitangaben der Szenen gegen die Kapitelreihenfolge prüfen (Bericht) |
+| **Export** | EPUB (mit Cover), DOCX für Lektorat, Markdown, sauberes PDF über den Reader |
+| **Backup** | Alle Profildaten als JSON exportieren/importieren |
+| **Covers** | Pollinations (`flux.1-schnell`), Varianten, Text-Presets, Front-/Back-Cover, persistierte Text-Layer |
 | **Statistiken** | Wörter, Kapitel, Streak, Wochen-Output, Verteilungen |
 | **Profile** | Mehrere Nutzer lokal, jeder mit eigenem State; Beispiele pro Profil, löschbar |
 
@@ -189,11 +196,13 @@ KT-Society (Produkt & Betrieb) und Echo (Umsetzung & Systemlogik).
 ## Mitmachen
 
 Beiträge sind willkommen — Fehler melden, Ideen einbringen, Code, Doku oder Presets.
+Alles läuft über **[github.com/KT-Society/AuthorAI](https://github.com/KT-Society/AuthorAI)**:
 
 - **[`CONTRIBUTING.md`](CONTRIBUTING.md)** — Workflow, Konventionen, Verifikation
 - **[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)** — unser Umgang miteinander
 - **[`SECURITY.md`](SECURITY.md)** — Sicherheitslücken privat melden
 - **[`docs/roadmap.md`](docs/roadmap.md)** — gute erste Aufgaben
+- **Issues:** <https://github.com/KT-Society/AuthorAI/issues>
 
 ---
 

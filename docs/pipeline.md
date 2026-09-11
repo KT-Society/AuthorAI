@@ -141,6 +141,29 @@ Gleiches Format, gleiche Schutzmechanismen; Ergebnis ersetzt den Text, `styleChe
 
 ---
 
+## Szenen-Vorgaben & Timeline-Prüfung
+
+**Szenen** sind die Untereinheiten eines Kapitels: Text (der Storyboard-Beat) plus Figuren,
+**POV, Schauplatz, Zeit und Wortziel**. Sie sind im Buch-Editor pflegbar und werden bei
+Rohentwurf, Ausbau, Kohärenz und Stil als **verbindlicher Block** mitgeschickt:
+
+```
+SCENES (binding — follow in this order):
+1. Der Aufbruch am Hafen
+   POV: Kiro · Setting: Alt-Distrikt · Time: Tag 1, Morgen · Target: ~800 words
+   Characters present: Kiro, Sylar
+```
+
+Die System-Prompts fordern: Reihenfolge halten, POV/Schauplatz/Zeit je Szene einhalten,
+jede gelistete Figur in ihrer Szene auftreten lassen und das Wortziel berücksichtigen.
+
+**Timeline-Prüfung** (`POST /api/timeline/check`) liest dieselben Angaben für das ganze Buch
+und meldet chronologische Probleme (Rückwärtssprünge, unplausible Reise-/Vorbereitungszeiten,
+Tag/Nacht, Daten/Dauern, fehlende Zeiten). Ergebnis: Kurzfassung + Befundliste im Buch-Header.
+Sie nutzt das **Kohärenz-Model**.
+
+---
+
 ## Prüfberichte & Status
 
 - Berichte liegen am Kapitel: `consistencyNotes`, `styleNotes` (zeilenweise).

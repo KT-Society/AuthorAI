@@ -116,6 +116,7 @@ Typen + Seed-Daten, frei von UI-Logik:
 - `author.ts` — Bücher, Status-Meta, Helpers (`progressOf`, `timeAgo`, `greetingFor`), `DashboardMeta`
 - `story.ts` — `Storyboard`, `ChapterPlan`, `ChapterContent`, `StoryWorld`, Wort-Helfer
 - `characters.ts`, `world.ts`, `plot.ts`, `research.ts` — eigene Domänen + Seeds
+- `cover.ts` — Cover-Text-Layer, Schriftpaare (Presets) und Layouts
 
 ### 4. Bibliothek (`src/lib/*`)
 
@@ -128,6 +129,11 @@ Typen + Seed-Daten, frei von UI-Logik:
 | `notifications.ts` | Notification-Typen, Context/Hook, Meta-Mapping |
 | `coverStore.ts` | Reference-Counted Löschen von Cover-Dateien |
 | `bookManuscript.ts` | Manuskript eines Buchs + Prosa-Bereinigung |
+| `zip.ts` | Minimaler ZIP-Writer („store") — Basis für EPUB und DOCX |
+| `epub.ts` | EPUB-3-Erzeugung (Cover, Kapitel, Navigation) im Browser |
+| `docx.ts` | DOCX-Erzeugung (OOXML) für Lektorats-Workflows |
+| `markdown.ts` | Markdown-Export eines Buchs |
+| `backup.ts` | Projekt-Backup (JSON) erzeugen/validieren |
 | `utils.ts` | `cn()` (Tailwind-Merge) |
 
 ### 5. Views (`src/components/dashboard/*`)
@@ -142,6 +148,31 @@ Typen + Seed-Daten, frei von UI-Logik:
 Die UI-Basis liegt in `src/components/ui/*` (shadcn-Stil, Radix-basiert).
 
 ---
+
+## Szenen, Prüfungen & Ausgabe
+
+**Szenen** sind die Untereinheiten eines Kapitels: Der Storyboard-Beat liefert den Text,
+`ChapterContent.sceneMeta` ergänzt **POV, Schauplatz, Zeit und Wortziel**, `beatCharacters`
+die auftretenden Figuren. Aus diesen Angaben baut `sceneConstraints()` die **verbindlichen
+Vorgaben**, die an Rohentwurf, Ausbau und Prüfungen gehen — die Prompts enthalten den
+Szenen-Block als bindende Struktur (`SCENES (binding …)`).
+
+**Prüfungen** laufen serverseitig: Kohärenz, Stil (je Kapitel) und die **Timeline-Prüfung**
+für das ganze Buch (`POST /api/timeline/check`, chronologische Widersprüche aus den
+Szenen-Zeiten). Ergebnisse landen als Berichte am Kapitel bzw. im Buch-Header.
+
+**Ausgabe und Sicherung** passieren komplett im Browser — kein Server-Roundtrip nötig:
+
+| Funktion | Modul | Technik |
+| --- | --- | --- |
+| EPUB | `lib/epub.ts` | EPUB 3, eigener ZIP-Writer (`lib/zip.ts`), Cover + Navigation |
+| DOCX | `lib/docx.ts` | Office Open XML (Titelblatt, Kapitel mit Seitenumbruch) |
+| Markdown | `lib/markdown.ts` | Reiner Text |
+| PDF | Reader + `src/index.css` | Druck-CSS (`data-print-area`, Seitenumbruch je Kapitel) |
+| Backup | `lib/backup.ts` | JSON (alle Sammlungen + Metriken), Import mit Bestätigung |
+
+Dabei lassen sich **Teil-Exporte** erzeugen: Gesamtbuch, Akt I–III (Positions-Regel wie im
+Plot-Board) oder das aktuell gewählte Kapitel.
 
 ## Datenfluss (Beispiel: Kapitel ausbauen)
 

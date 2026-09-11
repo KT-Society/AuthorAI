@@ -3,6 +3,7 @@
 Danke, dass du zu AuthorAI beitragen willst! Dieses Dokument erklärt, wie du am
 besten beiträgst — und worauf wir Wert legen.
 
+**Repository:** <https://github.com/KT-Society/AuthorAI>
 **Maintainer:** KT-Society & Echo · **Lizenz:** MIT (siehe [`LICENSE`](LICENSE))
 · **Verhaltenskodex:** [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
 

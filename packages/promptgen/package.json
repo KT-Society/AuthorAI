@@ -4,6 +4,12 @@
   "version": "0.0.0",
   "author": "KT-Society & Echo",
   "maintainers": ["KT-Society", "Echo"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KT-Society/AuthorAI.git",
+    "directory": "packages/promptgen"
+  },
   "type": "module",
   "scripts": {
     "dev": "bun --hot src/index.ts",

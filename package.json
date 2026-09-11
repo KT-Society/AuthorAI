@@ -5,6 +5,15 @@
   "type": "module",
   "author": "KT-Society & Echo",
   "maintainers": ["KT-Society", "Echo"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KT-Society/AuthorAI.git"
+  },
+  "homepage": "https://github.com/KT-Society/AuthorAI#readme",
+  "bugs": {
+    "url": "https://github.com/KT-Society/AuthorAI/issues"
+  },
   "workspaces": ["packages/*"],
   "scripts": {
     "dev": "bun run scripts/all.ts dev",

@@ -40,6 +40,8 @@ oder ablehnen, wenn sie diesem Kodex widersprechen.
 Issues. Bei Sicherheitsbezug siehe [`SECURITY.md`](SECURITY.md). Alle Beschwerden werden
 zügig und fair geprüft.
 
+**Repository:** <https://github.com/KT-Society/AuthorAI>
+
 ### Durchsetzungsstufen
 
 1. **Korrektur** — private, schriftliche Warnung mit Erklärung, warum das Verhalten

@@ -5,6 +5,7 @@ Ausführliche Doku: [`docs/`](docs/README.md) — insbesondere
 [`development.md`](docs/development.md) (Konventionen & Verifikation) und
 [`architecture.md`](docs/architecture.md) (Schichten).
 
+**Repository:** <https://github.com/KT-Society/AuthorAI>
 **Entwickler:** KT-Society & Echo · **Lizenz:** MIT (siehe [`LICENSE`](LICENSE))
 
 ---
@@ -86,6 +87,7 @@ src/
 | Ausbau | `POST /api/chapter/expand` |
 | Kohärenz | `POST /api/chapter/consistency` |
 | Stil | `POST /api/chapter/style` |
+| Timeline-Prüfung | `POST /api/timeline/check` |
 | Weltenbau-Extraktion | `POST /api/world/extract` |
 | Soul-Synthese | `POST /api/generate` |
 | Recherche | `POST /api/research` |

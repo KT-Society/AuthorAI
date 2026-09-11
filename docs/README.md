@@ -1,5 +1,8 @@
 # AuthorAI — Dokumentation
 
+> **Repository:** [github.com/KT-Society/AuthorAI](https://github.com/KT-Society/AuthorAI)
+> · **Version:** 0.2.0
+
 Willkommen im Handbuch. Hier steht alles, was du brauchst, um AuthorAI zu verstehen,
 zu betreiben und zu erweitern.
 

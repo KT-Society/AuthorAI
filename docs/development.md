@@ -146,6 +146,21 @@ import { computeStreak, todayIso, addDays } from "./lib/streak";
 console.log(computeStreak([addDays(todayIso(), -1), todayIso()], todayIso()));
 ```
 
+### Export-Formate prüfen
+
+EPUB und DOCX sind ZIP-Container — nach dem Erzeugen einmal mit einem ZIP-Reader öffnen
+und die Struktur kontrollieren (z. B. PowerShell):
+
+```powershell
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::OpenRead("test.epub")
+$zip.Entries | ForEach-Object { "{0} ({1} bytes)" -f $_.FullName, $_.Length }
+```
+
+Zusätzlich gilt: **EPUB** muss `mimetype` als **ersten**, **unkomprimierten** Eintrag
+enthalten (`CompressedLength -eq Length`), und `word/document.xml` beim **DOCX** muss sich
+als XML parsen lassen.
+
 ---
 
 ## Debugging
