@@ -1,5 +1,15 @@
 import { useMemo, useState } from "react";
-import { Globe2, Loader2, Pencil, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
+import {
+  Globe2,
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  Wand2,
+  X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,18 +27,13 @@ import type { Book } from "@/data/author";
 import { WORLD_CATEGORIES, entriesFromStoryWorld } from "@/data/world";
 import type { WorldCategory, WorldEntry } from "@/data/world";
 import { readLanguage, readStageModel } from "@/lib/generationSettings";
+import { showToast } from "@/lib/toast";
+import { dedupeWorldEntries, findMatchingEntry } from "@/lib/worldMatch";
 import { extractWorld } from "@/services/story";
 
 import { Badge, EmptyState, Panel, ViewHeader } from "./primitives";
-import type { Tone } from "./primitives";
-
-const CATEGORY_TONE: Record<WorldCategory, Tone> = {
-  Ort: "cyan",
-  Fraktion: "rose",
-  Magie: "violet",
-  Artefakt: "amber",
-  Lore: "emerald",
-};
+import { WORLD_CATEGORY_TONE, WorldExtractDialog } from "./WorldExtractDialog";
+import type { WorldCandidate } from "./WorldExtractDialog";
 
 export function WorldView({
   entries,
@@ -37,6 +42,7 @@ export function WorldView({
   onCreateMany,
   onUpdate,
   onDelete,
+  onDeleteMany,
 }: {
   entries: WorldEntry[];
   books: Book[];
@@ -44,6 +50,7 @@ export function WorldView({
   onCreateMany: (entries: WorldEntry[]) => void;
   onUpdate: (entry: WorldEntry) => void;
   onDelete: (id: string) => void;
+  onDeleteMany: (ids: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<WorldCategory | "all">("all");
@@ -53,6 +60,7 @@ export function WorldView({
   const [deriveBookId, setDeriveBookId] = useState<string>(
     books.find((book) => book.storyboard)?.id ?? books[0]?.id ?? "",
   );
+  const [candidates, setCandidates] = useState<WorldCandidate[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [formCategory, setFormCategory] = useState<WorldCategory>("Ort");
@@ -80,27 +88,63 @@ export function WorldView({
         storyboard: book.storyboard,
         model,
         language: readLanguage() ?? "German",
+        knownEntries: entries
+          .filter((entry) => (entry.bookId ?? "") === book.id)
+          .map((entry) => ({ title: entry.title, category: entry.category })),
       });
-      const candidates = entriesFromStoryWorld(world, book.id);
-      const seen = new Set(
-        entries.map((entry) => `${entry.bookId ?? ""}|${entry.category}|${entry.title.trim().toLowerCase()}`),
-      );
-      const additions = candidates.filter((entry) => {
-        const key = `${entry.bookId ?? ""}|${entry.category}|${entry.title.trim().toLowerCase()}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      if (additions.length === 0) {
+
+      // Vorschläge gegen Vorhandenes UND gegen sich selbst prüfen (Dublettenschutz).
+      const prepared: WorldCandidate[] = [];
+      for (const candidate of entriesFromStoryWorld(world, book.id)) {
+        const match =
+          findMatchingEntry(candidate, entries) ??
+          findMatchingEntry(
+            candidate,
+            prepared.map((item) => item.entry),
+          );
+        prepared.push(match ? { entry: candidate, similarTo: match.title } : { entry: candidate });
+      }
+
+      if (prepared.length === 0) {
         setError("Keine neuen Welteneinträge gefunden (alles bereits vorhanden).");
         return;
       }
-      onCreateMany(additions);
+      setCandidates(prepared);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
       setBusy(false);
     }
+  };
+
+  const acceptCandidates = (accepted: WorldEntry[]) => {
+    if (accepted.length === 0) {
+      setCandidates(null);
+      return;
+    }
+    onCreateMany(accepted);
+    showToast(
+      accepted.length === 1
+        ? "1 Welteneintrag übernommen"
+        : `${accepted.length} Welteneinträge übernommen`,
+    );
+    setCandidates(null);
+  };
+
+  const removeDuplicates = () => {
+    const { kept, removed } = dedupeWorldEntries(entries);
+    if (removed.length === 0) {
+      setError("Keine Dubletten gefunden.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `${removed.length} Dublette${removed.length === 1 ? "" : "n"} entfernen? Es bleiben ${kept.length} Einträge.`,
+    );
+    if (!confirmed) return;
+    onDeleteMany(removed.map((entry) => entry.id));
+    showToast(
+      removed.length === 1 ? "1 Dublette entfernt" : `${removed.length} Dubletten entfernt`,
+    );
   };
 
   const visible = useMemo(() => {
@@ -211,6 +255,17 @@ export function WorldView({
           )}
           Welt aus Storyboard ableiten
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="glass rounded-lg border-white/10"
+          onClick={removeDuplicates}
+          disabled={entries.length < 2}
+          title="Ähnliche Einträge zusammenfassen — behält je Konzept den ersten Eintrag"
+        >
+          <Wand2 className="size-3.5" />
+          Dubletten entfernen
+        </Button>
       </div>
 
       {error ? (
@@ -286,7 +341,7 @@ export function WorldView({
               </div>
 
               <div className="mt-2">
-                <Badge tone={CATEGORY_TONE[entry.category]}>{entry.category}</Badge>
+                <Badge tone={WORLD_CATEGORY_TONE[entry.category]}>{entry.category}</Badge>
               </div>
 
               <p className="mt-3 line-clamp-4 text-sm leading-relaxed text-foreground/80">
@@ -315,6 +370,14 @@ export function WorldView({
           description="Lege Orte, Fraktionen, Magiesysteme oder Lore an."
         />
       )}
+
+      <WorldExtractDialog
+        open={candidates !== null}
+        candidates={candidates ?? []}
+        bookTitle={books.find((book) => book.id === deriveBookId)?.title ?? ""}
+        onClose={() => setCandidates(null)}
+        onAccept={acceptCandidates}
+      />
 
       {dialogOpen ? (
         <div

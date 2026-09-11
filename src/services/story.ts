@@ -106,6 +106,8 @@ export interface WorldExtractRequest {
   storyboard: Storyboard;
   model: string;
   language: string;
+  /** Bereits getrackte Einträge — verhindert Dubletten bei wiederholten Scans. */
+  knownEntries?: { title: string; category: string }[];
 }
 
 export async function extractWorld(input: WorldExtractRequest): Promise<StoryWorld> {

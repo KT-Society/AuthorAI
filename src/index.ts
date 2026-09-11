@@ -84,6 +84,20 @@ function asStoryboard(value: unknown): Storyboard {
   return value as Storyboard;
 }
 
+/** Bereits getrackte Welteneinträge (Titel + Kategorie) aus dem Request-Body. */
+function asKnownWorldEntries(value: unknown): { title: string; category: string }[] {
+  if (!Array.isArray(value)) return [];
+  const entries: { title: string; category: string }[] = [];
+  for (const entry of value) {
+    const item = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const title = typeof item.title === "string" ? item.title.trim() : "";
+    if (!title) continue;
+    const category = typeof item.category === "string" ? item.category.trim() : "";
+    entries.push({ title, category });
+  }
+  return entries;
+}
+
 /** Manuskript-Kapitel (Titel + Text) aus dem Request-Body — leere Kapitel fallen weg. */
 function asManuscriptChapters(value: unknown): { title: string; text: string }[] {
   if (!Array.isArray(value)) return [];
@@ -306,7 +320,8 @@ const server = serve({
           const storyboard = asStoryboard(body.storyboard);
           const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
           const language = optionalLanguage(body.language);
-          const world = await extractWorld({ storyboard, model, language });
+          const knownEntries = asKnownWorldEntries(body.knownEntries);
+          const world = await extractWorld({ storyboard, model, language, knownEntries });
           return Response.json({ world });
         } catch (err) {
           return errorResponse(err);

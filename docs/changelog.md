@@ -27,6 +27,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ### Fixed
 
+- **Dubletten beim Welten-Scan**: Wiederholte Scans legten denselben Stoff immer wieder an
+  („Kinder der Asche" mehrfach, „Die Zerstörung der Welt" neben „Die Zerstörung der alten
+  Welt"). Drei Ebenen greifen jetzt:
+  - Der Scan schickt die bereits getrackten Einträge mit (`knownEntries`); Prompt und Server
+    liefern bzw. behalten sie nicht erneut (auch nicht in anderer Kategorie).
+  - `lib/worldMatch.ts` vergleicht Titel **normalisiert** (Artikel/Case/Umlaute egal) plus
+    Token-Überlappung; ähnliche Vorschläge sind im Review-Dialog vorab abgewählt und als
+    „ähnlich zu …" markiert — kein stiller Datenverlust, der Nutzer entscheidet.
+  - Neuer Button **„Dubletten entfernen"** in der Weltenbau-Ansicht räumt bestehende Listen auf
+    (Bestätigung, behält je Konzept den ersten Eintrag).
+  - Der Storyboard-Prompt fordert keine Füll-Einträge mehr an („2-4 pro Kategorie ist normal")
+    und verbietet Doppelnennungen ausdrücklich — das war die Hauptquelle des Rauschens.
 - **Abgeschnittene Kapitel**: Antworten, die mitten im Satz enden (Token-Limit oder
   „lite"-Modelle), werden erkannt und über eine gezielte Fortsetzung zu Ende geschrieben —
   für Rohentwurf, Ausbau, Kohärenz und Stil. Läuft es weiterhin ins Limit, benennt der

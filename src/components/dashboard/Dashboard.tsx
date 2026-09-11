@@ -36,6 +36,7 @@ import { releaseCoverImage } from "@/lib/coverStore";
 import { createBackup, parseBackup } from "@/lib/backup";
 import type { ProfileBackup } from "@/lib/backup";
 import { emptyMetaToday, normalizeMeta, recordWords } from "@/lib/streak";
+import { findMatchingEntry } from "@/lib/worldMatch";
 import {
   makeNotification,
   NotificationsContext,
@@ -90,17 +91,10 @@ function collectMissingCharacters(source: Book[], existing: Character[]): Charac
 
 /** World locations that exist in a book's storyboard but are not yet in the world list. */
 function collectMissingWorld(source: Book[], existing: WorldEntry[]): WorldEntry[] {
-  const seen = new Set(
-    existing.map(
-      (entry) => `${entry.bookId ?? ""}|${entry.category}|${entry.title.trim().toLowerCase()}`,
-    ),
-  );
   const additions: WorldEntry[] = [];
 
   const push = (entry: WorldEntry) => {
-    const key = `${entry.bookId ?? ""}|${entry.category}|${entry.title.trim().toLowerCase()}`;
-    if (seen.has(key)) return;
-    seen.add(key);
+    if (findMatchingEntry(entry, existing) || findMatchingEntry(entry, additions)) return;
     additions.push(entry);
   };
 
@@ -565,6 +559,10 @@ export function Dashboard({
                 setWorlds((prev) => prev.map((item) => (item.id === entry.id ? entry : item)))
               }
               onDelete={(id) => setWorlds((prev) => prev.filter((item) => item.id !== id))}
+              onDeleteMany={(ids) => {
+                const drop = new Set(ids);
+                setWorlds((prev) => prev.filter((item) => !drop.has(item.id)));
+              }}
             />
             ) : activeNav === "plot" ? (
               <PlotBoardView

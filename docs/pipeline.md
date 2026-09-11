@@ -192,6 +192,14 @@ Figuren erfasst. Bereits getrackte Namen werden serverseitig herausgefiltert.
 Die Vorschläge landen in einem **Review-Dialog** (einzeln an-/abwählbar) und werden erst nach
 Bestätigung zu Charakteren (Tag „Manuskript", verknüpft mit dem Projekt).
 
+**Dublettenschutz beim Weltenbau:** Jeder Scan bekommt die bereits getrackten Einträge
+(`knownEntries`) mitgeschickt und soll sie nicht erneut liefern; der Server filtert sie
+zusätzlich aus der Antwort. Clientseitig prüft `lib/worldMatch.ts` jeden Vorschlag auf
+Titel-Ähnlichkeit (normalisiert: Artikel/Case/Umlaute egal, plus Token-Überlappung) — Treffer
+sind im Review-Dialog vorab **abgewählt** und als „ähnlich zu …" markiert. Bestehende
+Dubletten räumt **„Dubletten entfernen"** in der Weltenbau-Ansicht auf (behält je Konzept den
+ersten Eintrag; Bestätigung vor dem Löschen).
+
 ---
 
 ## Modellwahl (Empfehlung)

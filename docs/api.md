@@ -211,9 +211,16 @@ Chronologische Prüfung über alle Kapitel/Szenen (nutzt konzeptionell das Kohä
 ### `POST /api/world/extract`
 
 Leitet Orte, Fraktionen, Magie, Artefakte und Lore aus einem vorhandenen Storyboard ab.
+Bereits getrackte Einträge (optional in `knownEntries`) schickt der Server ins Modell und filtert
+sie zusätzlich aus der Antwort — so entstehen bei wiederholten Scans keine Dubletten.
 
 ```json
-{ "storyboard": { … }, "model": "<model-id>", "language": "German" }
+{
+  "storyboard": { … },
+  "model": "<model-id>",
+  "language": "German",
+  "knownEntries": [{ "title": "Kinder der Asche", "category": "Fraktion" }]
+}
 ```
 
 **Response**

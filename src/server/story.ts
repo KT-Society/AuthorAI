@@ -34,6 +34,7 @@ import type {
 import { EMPTY_WORLD } from "../data/story";
 import { chatCompletion, chatCompletionDetailed, cleanJsonBlock } from "./llm";
 import { extractProse, looksTruncated } from "../lib/prose";
+import { normalizeWorldTitle } from "../lib/worldMatch";
 
 export interface StoryboardInput {
   idea: string;
@@ -841,6 +842,8 @@ export interface WorldExtractInput {
   storyboard: Storyboard;
   model: string;
   language: string;
+  /** Bereits getrackte Einträge — werden nicht erneut vorgeschlagen. */
+  knownEntries?: { title: string; category: string }[];
 }
 
 function storyboardOutline(storyboard: Storyboard): string {
@@ -869,7 +872,7 @@ function worldSystem(language: string): string {
   return `You are a worldbuilding editor.
 ${languageLock(language)}
 
-TASK: from the storyboard below, extract and complete the worldbuilding.
+TASK: from the storyboard below, extract the worldbuilding it actually contains.
 Cover locations, factions, magic/technology systems, important artifacts/objects, and lore/history.
 
 Respond ONLY with a single valid JSON object:
@@ -881,24 +884,87 @@ Respond ONLY with a single valid JSON object:
   "lore": [{ "name": string, "description": string }]
 }
 Rules:
-- 3-8 entries per category; use fewer only if the story truly has none.
+- Use the EXACT names the storyboard already uses. Never rename or embellish them.
+- Only include concepts the storyboard actually supports. 2-4 per category is normal —
+  do NOT invent filler to reach a minimum, and skip a category honestly if it is empty.
+- NEVER list the same concept twice — not within a category, not across categories
+  (a faction is not also "lore", a place is not also an "artifact").
+- NEVER return a concept that is already tracked (see ALREADY TRACKED below) —
+  not the same name, and not a rephrasing of it.
 - name: short (2-5 words); description: 1-2 sentences.
 - Everything in ${language}.`;
 }
 
+/** Alle bereits bekannten Einträge (Liste + Storyboard-Welt), dedupliziert. */
+function worldKnownList(input: WorldExtractInput): { title: string; category: string }[] {
+  const list: { title: string; category: string }[] = [...(input.knownEntries ?? [])];
+  const world = input.storyboard.world;
+  if (world) {
+    const pairs: [keyof StoryWorld, string][] = [
+      ["locations", "Ort"],
+      ["factions", "Fraktion"],
+      ["magic", "Magie"],
+      ["artifacts", "Artefakt"],
+      ["lore", "Lore"],
+    ];
+    for (const [key, category] of pairs) {
+      for (const item of world[key] ?? []) list.push({ title: item.name, category });
+    }
+  }
+
+  const seen = new Set<string>();
+  return list.filter((entry) => {
+    const key = normalizeWorldTitle(entry.title);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Wirft Dubletten aus der Modellantwort (auch kategorieübergreifend). */
+function dedupeWorldResponse(
+  world: StoryWorld,
+  known: { title: string; category: string }[],
+): StoryWorld {
+  const seen = new Set(known.map((entry) => normalizeWorldTitle(entry.title)).filter(Boolean));
+  const keep = (items: WorldItem[]): WorldItem[] =>
+    items.filter((item) => {
+      const key = normalizeWorldTitle(item.name);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  return {
+    locations: keep(world.locations),
+    factions: keep(world.factions),
+    magic: keep(world.magic),
+    artifacts: keep(world.artifacts),
+    lore: keep(world.lore),
+  };
+}
+
 export async function extractWorld(input: WorldExtractInput): Promise<StoryWorld> {
+  const known = worldKnownList(input);
+  const knownBlock = known
+    .map((entry) => `- [${entry.category}] ${entry.title}`)
+    .join("\n");
+
   const content = await chatCompletion({
     model: input.model,
     system: worldSystem(input.language),
     user: `${storyboardOutline(input.storyboard)}
 
-Extract the worldbuilding now as JSON, entirely in ${input.language}.`,
+ALREADY TRACKED (do not return these — not as duplicates, not rephrased):
+${knownBlock || "- (none)"}
+
+Extract only the worldbuilding that is missing so far, as JSON, entirely in ${input.language}.`,
     json: true,
     maxTokens: 3500,
-    temperature: 0.7,
+    temperature: 0.5,
   });
 
-  return normalizeWorld(parseJson(content, "Weltenbau"));
+  return dedupeWorldResponse(normalizeWorld(parseJson(content, "Weltenbau")), known);
 }
 
 export interface CharacterExtractInput {
