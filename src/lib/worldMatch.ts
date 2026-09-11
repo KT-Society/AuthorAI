@@ -37,9 +37,15 @@ const ARTICLES = new Set([
   "las",
 ]);
 
+/** Cache: dieselben Titel werden bei Dublettenprüfungen hundertfach normalisiert. */
+const normalizeCache = new Map<string, string>();
+
 /** Kleinbuchstaben, Akzente/Umlaute entfernt, Artikel und Sonderzeichen raus. */
 export function normalizeWorldTitle(title: string): string {
-  return title
+  const cached = normalizeCache.get(title);
+  if (cached !== undefined) return cached;
+
+  const normalized = title
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -49,6 +55,10 @@ export function normalizeWorldTitle(title: string): string {
     .filter((token) => token.length > 0 && !ARTICLES.has(token))
     .join(" ")
     .trim();
+
+  if (normalizeCache.size > 4000) normalizeCache.clear();
+  normalizeCache.set(title, normalized);
+  return normalized;
 }
 
 function tokenSet(normalized: string): Set<string> {

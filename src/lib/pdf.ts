@@ -24,48 +24,91 @@ const WIN_ANSI: Record<string, number> = {
   "…": 0x85, "·": 0xb7, "«": 0xab, "»": 0xbb, "°": 0xb0, "’": 0x92, "†": 0x86,
 };
 
+/**
+ * Breitenklassen als Lookup-Tabelle: 0 = normal (0.52), 1 = breit (0.85), 2 = schmal (0.28).
+ * Vorher lief pro Zeichen eine `String.includes`-Suche — bei ~1 MB Prosa der Flaschenhals.
+ */
+const WIDTH_CLASS = new Uint8Array(128);
+for (const char of "mwMW") WIDTH_CLASS[char.charCodeAt(0)] = 1;
+for (const char of "iltfj.,:;'!|") WIDTH_CLASS[char.charCodeAt(0)] = 2;
+WIDTH_CLASS[0x20] = 2; // Leerzeichen
+
+const WIDE_FACTOR = 0.85;
+const NARROW_FACTOR = 0.28;
+const NORMAL_FACTOR = 0.52;
+
 function charWidth(char: string, size: number): number {
-  if ("mwMW".includes(char)) return size * 0.85;
-  if ("iltfj.,:;'!|".includes(char)) return size * 0.28;
-  if (char === " ") return size * 0.28;
-  return size * 0.52;
+  const code = char.charCodeAt(0);
+  const cls = code < 128 ? (WIDTH_CLASS[code] ?? 0) : 0;
+  if (cls === 1) return size * WIDE_FACTOR;
+  if (cls === 2) return size * NARROW_FACTOR;
+  return size * NORMAL_FACTOR;
 }
 
 function textWidth(text: string, size: number): number {
+  const wide = size * WIDE_FACTOR;
+  const narrow = size * NARROW_FACTOR;
+  const normal = size * NORMAL_FACTOR;
   let width = 0;
-  for (const char of text) width += charWidth(char, size);
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    const cls = code < 128 ? (WIDTH_CLASS[code] ?? 0) : 0;
+    width += cls === 1 ? wide : cls === 2 ? narrow : normal;
+  }
   return width;
 }
 
 function wrap(text: string, size: number, maxWidth: number): string[] {
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
+  const spaceWidth = charWidth(" ", size);
   let current = "";
+  let currentWidth = 0;
+
   for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (textWidth(candidate, size) <= maxWidth || current === "") {
-      current = candidate;
+    const wordWidth = textWidth(word, size);
+    if (current === "") {
+      current = word;
+      currentWidth = wordWidth;
+      continue;
+    }
+    // Breite inkrementell statt den ganzen Kandidaten neu zu messen (vorher O(n²)).
+    if (currentWidth + spaceWidth + wordWidth <= maxWidth) {
+      current += ` ${word}`;
+      currentWidth += spaceWidth + wordWidth;
     } else {
       lines.push(current);
       current = word;
+      currentWidth = wordWidth;
     }
   }
+
   if (current) lines.push(current);
   return lines;
 }
 
 function escapePdfText(text: string): string {
-  let out = "";
-  for (const char of Array.from(text)) {
-    const code = char.charCodeAt(0);
-    const byte = code >= 32 && code <= 126 ? code : (WIN_ANSI[char] ?? 0x3f);
-    if (byte === 0x28) out += "\\(";
-    else if (byte === 0x29) out += "\\)";
-    else if (byte === 0x5c) out += "\\\\";
-    else if (byte < 32 || byte > 126) out += `\\${byte.toString(8).padStart(3, "0")}`;
-    else out += String.fromCharCode(byte);
+  // Index-Schleife statt Array.from(text): keine 1-Char-Array-Allokation pro Zeile.
+  const parts: string[] = [];
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code >= 32 && code <= 126) {
+      const char = text[index];
+      if (char === "(") parts.push("\\(");
+      else if (char === ")") parts.push("\\)");
+      else if (char === "\\") parts.push("\\\\");
+      else parts.push(char ?? "");
+      continue;
+    }
+    const byte = WIN_ANSI[text[index] ?? ""] ?? 0x3f;
+    // Surrogatpaare (Emoji & Co.) als EIN unbekanntes Zeichen ausgeben.
+    if (byte === 0x3f && code >= 0xd800 && code <= 0xdbff) {
+      const next = text.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) index += 1;
+    }
+    parts.push(`\\${byte.toString(8).padStart(3, "0")}`);
   }
-  return out;
+  return parts.join("");
 }
 
 interface Block {

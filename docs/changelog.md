@@ -33,6 +33,16 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ### Fixed
 
+- **Performance: PDF-Export und Dublettenprüfung** (DevTools `'click' handler took N ms`):
+  - `lib/pdf.ts`: Der Zeilenumbruch maß für **jedes** Wort den kompletten Kandidaten neu
+    (O(n²)) und `charWidth` suchte pro Zeichen in zwei Strings. Jetzt läuft die Breite
+    inkrementell über eine `Uint8Array`-Lookup-Tabelle. Gemessen an einem Buch mit
+    55 Kapiteln × 3.257 Wörtern (~1 MB Prosa): **484 ms → 91 ms**; bei 12 Kapiteln
+    (~240 KB): **113 ms → 22 ms**. Ergebnis identisch (Round-Trip-Test: Text, Umlaute,
+    Anführungszeichen, Seitenstruktur).
+  - `lib/worldMatch.ts`: Titel wurden in der O(n²)-Dublettenprüfung hundertfach neu
+    normalisiert (Regex + `NFD`). Jetzt mit gebundenem Normalisierungs-Cache:
+    **43 ms → 15 ms** bei 200 Einträgen. Verhalten unverändert.
 - **Stil-/Kohärenz-Berichte mit No-Op-Notizen**: Kleine Modelle notierten „Änderungen", bei
   denen beide Seiten identisch waren (z. B. `"ein Schlund … schien" wurde zu "ein Schlund …
   schien" zur Verbesserung des Satzflusses`). Solche Zeilen dokumentieren nichts und
