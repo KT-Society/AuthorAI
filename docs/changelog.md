@@ -94,6 +94,14 @@ Charakteren, Welt, Plot, Recherche, Covern, Profilen und Statistiken.
 - **Added** **Statistiken**: Wörter, Kapitel, aktive Tage, Wörter pro Buch, Wochen-Balken,
   Status-/Plot-Verteilungen.
 
+### Standalone-Build
+
+- **Added** `bun run build:binary` — Server **und** UI in einer ausführbaren Datei
+  (`dist/authorai[.exe]`), inklusive Tailwind-Plugin und Produktions-Defines.
+- **Added** laufzeit-sichere Pfade: `runtimeRoot()` (Entwicklung: cwd · Binary: Binary-Verzeichnis)
+  und `runtimePort()` (Standard 3000, `PORT` überschreibbar).
+- **Changed** Cover-Ablage und `.env`-Suche funktionieren auch neben einem Standalone-Binary.
+
 ### Fixed
 
 - Storyboard liefert jetzt **exakt** die gewünschte Kapitelzahl (vorher Abbruch durch Output-Limit).

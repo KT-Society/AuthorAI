@@ -10,6 +10,7 @@
     "dev": "bun run scripts/all.ts dev",
     "start": "bun run scripts/all.ts start",
     "build": "bun run scripts/all.ts build",
+    "build:binary": "bun run scripts/build-binary.ts",
     "check": "bun run scripts/check.ts",
 
     "dev:root": "bun --hot src/index.ts",

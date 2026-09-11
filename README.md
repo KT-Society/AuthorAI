@@ -65,9 +65,14 @@ Danach im Browser **http://localhost:3000** öffnen, ein Profil anlegen und losl
 Produktion:
 
 ```bash
-bun run build      # bündelt Root-App und Workspaces nach dist/
-bun run start      # serviert die Produktions-Builds
+bun run build         # bündelt Root-App und Workspaces nach dist/
+bun run start         # serviert die Produktions-Builds
+bun run build:binary  # EINE ausführbare Datei: dist/authorai[.exe]
 ```
+
+Das **Single-Binary** enthält Server **und** UI. Keys liest es aus einer `.env`
+**neben dem Binary** (oder aus Umgebungsvariablen); generierte Cover landen in
+`covers/` beim Binary.
 
 Nur ein Paket:
 

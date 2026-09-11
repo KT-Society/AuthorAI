@@ -9,8 +9,11 @@ import path from "node:path";
 
 import { ApiError } from "@promptgen/server/api";
 
+import { runtimeRoot } from "./paths";
+
 const API_BASE = process.env.POLLINATIONS_API_BASE ?? "https://gen.pollinations.ai";
-const COVERS_DIR = path.resolve(import.meta.dir, "../../covers");
+// In dev: <repo>/covers · im Standalone-Binary: <binary-dir>/covers
+const COVERS_DIR = path.resolve(runtimeRoot(), "covers");
 
 export const DEFAULT_COVER_MODEL = "black-forest-labs/flux.1-schnell";
 

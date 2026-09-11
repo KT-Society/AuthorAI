@@ -100,6 +100,30 @@ kein Default**. Leer = erbt das Standard-Model.
 
 ---
 
+## Single-Binary (Standalone)
+
+`bun run build:binary` erzeugt **eine ausführbare Datei** (`dist/authorai` bzw.
+`dist/authorai.exe`) mit Server **und** UI.
+
+| Aspekt | Verhalten |
+| --- | --- |
+| **Keys** | `.env` **neben dem Binary** (oder Umgebungsvariablen) — Lookup: cwd → Binary-Verzeichnis → Elternverzeichnisse |
+| **Cover** | werden in `covers/` **beim Binary** abgelegt (nicht im Repo) |
+| **Port** | `PORT` (Standard **3000**) |
+| **Aufruf** | Binary starten, dann `http://localhost:3000` öffnen |
+| **Daten** | weiterhin im Browser, pro Profil |
+
+```bash
+bun run build:binary
+cd dist
+./authorai          # Windows: .\authorai.exe
+```
+
+> Damit ist AuthorAI ohne Bun/Node auslieferbar — die Grundlage für eine
+> Desktop-Ausgabe an Endnutzer.
+
+---
+
 ## Tooling-Konfiguration
 
 | Datei | Zweck |

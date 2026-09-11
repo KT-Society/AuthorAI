@@ -11,10 +11,20 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 /**
- * Walks up from this module to the nearest ancestor that contains a `.env`.
- * Works regardless of how deeply a package is nested (e.g. packages/promptgen).
+ * Findet die `.env`:
+ *  1. im aktuellen Arbeitsverzeichnis,
+ *  2. neben dem laufenden Binary (Standalone-Build),
+ *  3. in den Elternverzeichnissen dieses Moduls (Entwicklung).
  */
 function findRootEnv(): string | null {
+  const explicit = [
+    path.join(process.cwd(), ".env"),
+    path.join(path.dirname(process.execPath), ".env"),
+  ];
+  for (const candidate of explicit) {
+    if (existsSync(candidate)) return candidate;
+  }
+
   let dir = import.meta.dir;
   for (let depth = 0; depth < 12; depth += 1) {
     const candidate = path.join(dir, ".env");

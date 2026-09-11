@@ -9,6 +9,7 @@ import path from "node:path";
 
 import type { Storyboard } from "./data/story";
 import { coversDir, generateCover, saveCoverImage } from "./server/cover";
+import { runtimePort } from "./server/paths";
 import { runResearch } from "./server/research";
 import {
   checkConsistency,
@@ -69,6 +70,7 @@ function errorResponse(err: unknown): Response {
 }
 
 const server = serve({
+  port: runtimePort(3000),
   routes: {
     // Non-secret capability probe + configurable language options.
     "/api/config": {

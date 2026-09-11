@@ -34,6 +34,7 @@ Keys siehe [`configuration.md`](configuration.md).
 | --- | --- |
 | `bun run dev` | Root **und** Workspaces im Dev-Modus (HMR) |
 | `bun run build` | Root **und** Workspaces bündeln (`dist/`) |
+| `bun run build:binary` | Standalone-Binary (Server + UI) — `dist/authorai[.exe]` |
 | `bun run start` | Produktions-Builds servieren |
 | `bun run dev:root` / `build:root` / `start:root` | nur die Root-App |
 | `bun run --cwd packages/promptgen dev` | nur promptgen |

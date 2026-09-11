@@ -27,6 +27,23 @@ bun install
 
 > Immer im **Root** installieren — nicht in `packages/promptgen`.
 
+### `error: Missing entrypoints` bei `bun build --compile`
+
+`--compile` braucht einen Entrypoint. Nutze das fertige Skript:
+
+```bash
+bun run build:binary        # → dist/authorai[.exe]
+```
+
+Manuell wäre es `bun build --compile src/index.ts --outfile dist/authorai` —
+das Skript setzt zusätzlich das Tailwind-Plugin und die Produktions-Defines.
+
+### Standalone-Binary findet die Keys nicht
+
+Das Binary sucht `.env` in dieser Reihenfolge: aktuelles Arbeitsverzeichnis,
+Verzeichnis des Binaries, Elternverzeichnisse. Lege die `.env` also **neben das
+Binary** (oder setze die Keys als Umgebungsvariablen).
+
 ### Port belegt (`EADDRINUSE`)
 
 Root nutzt **3000**, promptgen **3001**. Anderen Port setzen:
