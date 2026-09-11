@@ -16,6 +16,7 @@ import {
   checkTimeline,
   draftChapter,
   expandChapter,
+  extractCharacters,
   extractWorld,
   generateStoryboard,
   refineStyle,
@@ -81,6 +82,23 @@ function asStoryboard(value: unknown): Storyboard {
     throw new ApiError("Ungültiges Storyboard.", 400);
   }
   return value as Storyboard;
+}
+
+/** Manuskript-Kapitel (Titel + Text) aus dem Request-Body — leere Kapitel fallen weg. */
+function asManuscriptChapters(value: unknown): { title: string; text: string }[] {
+  if (!Array.isArray(value)) return [];
+  const chapters: { title: string; text: string }[] = [];
+  for (const entry of value) {
+    const item = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const text = typeof item.text === "string" ? item.text.trim() : "";
+    if (!text) continue;
+    const title =
+      typeof item.title === "string" && item.title.trim()
+        ? item.title.trim()
+        : `Kapitel ${chapters.length + 1}`;
+    chapters.push({ title, text });
+  }
+  return chapters;
 }
 
 function asChapterIndex(value: unknown, count: number): number {
@@ -290,6 +308,35 @@ const server = serve({
           const language = optionalLanguage(body.language);
           const world = await extractWorld({ storyboard, model, language });
           return Response.json({ world });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Character extraction from the finished manuscript (finds figures the storyboard never knew).
+    "/api/characters/extract": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const bookTitle = typeof body.bookTitle === "string" ? body.bookTitle.trim() : "";
+          const genre =
+            typeof body.genre === "string" && body.genre.trim() ? body.genre.trim() : undefined;
+          const chapters = asManuscriptChapters(body.chapters);
+          const knownCharacters = Array.isArray(body.knownCharacters)
+            ? body.knownCharacters.filter((name): name is string => typeof name === "string")
+            : [];
+          const characters = await extractCharacters({
+            bookTitle,
+            genre,
+            chapters,
+            knownCharacters,
+            model,
+            language,
+          });
+          return Response.json({ characters });
         } catch (err) {
           return errorResponse(err);
         }

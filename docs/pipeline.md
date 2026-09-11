@@ -173,6 +173,27 @@ Sie nutzt das **Kohärenz-Model**.
 
 ---
 
+## Ableitungen (Figuren & Weltenbau)
+
+Beide Ableitungen sind **nachgelagerte Werkzeuge** — sie laufen nicht im Wizard, sondern
+werden in der jeweiligen Ansicht angestoßen und nutzen das **Storyboard-Modell**.
+
+| Ableitung | Quelle | Route | Ergebnis |
+| --- | --- | --- | --- |
+| **Weltenbau** | Storyboard | `POST /api/world/extract` | Orte, Fraktionen, Magie, Artefakte, Lore |
+| **Figuren** | **Manuskript** | `POST /api/characters/extract` | benannte Figuren (Name, Rolle, Beschreibung) |
+
+**Warum Figuren aus dem Manuskript?** Die Storyboard-Figuren entstehen aus der *Idee* — Figuren,
+die erst beim Schreiben auftauchen (Nebenfiguren, Auftraggeber, Gegenspieler), kennt es nicht.
+Die Extraktion liest deshalb die Kapiteltexte: pro Kapitel der **Anfang** (dort werden Figuren
+eingeführt), Gesamtbudget ~60k Zeichen gleichmäßig verteilt — so werden auch spät auftauchende
+Figuren erfasst. Bereits getrackte Namen werden serverseitig herausgefiltert.
+
+Die Vorschläge landen in einem **Review-Dialog** (einzeln an-/abwählbar) und werden erst nach
+Bestätigung zu Charakteren (Tag „Manuskript", verknüpft mit dem Projekt).
+
+---
+
 ## Modellwahl (Empfehlung)
 
 | Stufe | Anspruch | Hinweis |

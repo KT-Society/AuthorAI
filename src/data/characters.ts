@@ -42,6 +42,39 @@ export const CHARACTER_GRADIENTS: [string, string][] = [
 
 export const FALLBACK_GRADIENT: [string, string] = ["hsl(258 90% 62%)", "hsl(342 90% 58%)"];
 
+/** Eingangsfelder für einen neuen Charakter (Storyboard-Ableitung, Extraktion, manuell). */
+export interface CharacterDraft {
+  name: string;
+  role?: string;
+  description?: string;
+  bookId?: string;
+  tags?: string[];
+}
+
+/** Baut einen vollständigen Charakter aus einem Entwurf (eine Quelle der Wahrheit). */
+export function makeCharacter(draft: CharacterDraft, gradientIndex = 0): Character {
+  const name = draft.name.trim();
+  const role = (draft.role ?? "").trim() || "Figur";
+  const description = (draft.description ?? "").trim();
+  const gradient =
+    CHARACTER_GRADIENTS[Math.abs(gradientIndex) % CHARACTER_GRADIENTS.length] ?? FALLBACK_GRADIENT;
+
+  return {
+    id: `char-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    role,
+    bookId: draft.bookId,
+    gradient,
+    tags: draft.tags ?? [],
+    core: description,
+    soul: {
+      ...(description ? { core: description } : {}),
+      ...(role ? { occupation: role } : {}),
+    },
+    createdAt: new Date().toISOString(),
+  };
+}
+
 const NOW = Date.now();
 const daysAgo = (days: number) => new Date(NOW - days * 86_400_000).toISOString();
 

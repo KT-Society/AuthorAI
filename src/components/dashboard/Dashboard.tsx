@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { BOOKS, IDEAS } from "@/data/author";
 import type { Book, DashboardMeta, Idea } from "@/data/author";
-import { CHARACTERS, CHARACTER_GRADIENTS, FALLBACK_GRADIENT } from "@/data/characters";
+import { CHARACTERS, makeCharacter } from "@/data/characters";
 import type { Character } from "@/data/characters";
 import type { CoverTextLayer, SavedCoverPreset } from "@/data/cover";
 import { presetFromLayers } from "@/data/cover";
@@ -70,21 +70,18 @@ function collectMissingCharacters(source: Book[], existing: Character[]): Charac
 
       const description = entry.description.trim();
       const role = entry.role.trim();
-      additions.push({
-        id: `char-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-        name,
-        role: role || "Figur",
-        bookId: book.id,
-        gradient:
-          CHARACTER_GRADIENTS[additions.length % CHARACTER_GRADIENTS.length] ?? FALLBACK_GRADIENT,
-        tags: ["Storyboard"],
-        core: description,
-        soul: {
-          ...(description ? { core: description } : {}),
-          ...(role ? { occupation: role } : {}),
-        },
-        createdAt: new Date().toISOString(),
-      });
+      additions.push(
+        makeCharacter(
+          {
+            name,
+            role,
+            description,
+            bookId: book.id,
+            tags: ["Storyboard"],
+          },
+          additions.length,
+        ),
+      );
     }
   }
 
@@ -550,6 +547,7 @@ export function Dashboard({
                 books={books}
                 characters={characters}
                 onAddCharacter={addCharacter}
+                onAddCharacters={(list) => setCharacters((prev) => [...list, ...prev])}
                 onUpdateCharacter={(character) =>
                   setCharacters((prev) =>
                     prev.map((item) => (item.id === character.id ? character : item)),

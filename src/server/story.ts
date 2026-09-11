@@ -900,3 +900,152 @@ Extract the worldbuilding now as JSON, entirely in ${input.language}.`,
 
   return normalizeWorld(parseJson(content, "Weltenbau"));
 }
+
+export interface CharacterExtractInput {
+  bookTitle: string;
+  genre?: string;
+  chapters: { title: string; text: string }[];
+  /** Bereits getrackte Figuren — werden aus dem Ergebnis herausgefiltert. */
+  knownCharacters: string[];
+  model: string;
+  language: string;
+}
+
+const EXTRACT_MAX_CHAPTER_CHARS = 6000;
+const EXTRACT_MIN_CHAPTER_CHARS = 1000;
+const EXTRACT_TOTAL_CHARS = 60000;
+
+/**
+ * Baut einen Manuskript-Auszug mit begrenztem Budget.
+ *
+ * Pro Kapitel wird der **Anfang** gelesen (dort werden Figuren eingeführt und
+ * beschrieben); das Gesamtbudget wird gleichmäßig auf alle Kapitel verteilt, damit
+ * auch spät auftauchende Figuren erfasst werden.
+ */
+export function manuscriptDigest(
+  chapters: { title: string; text: string }[],
+): string {
+  const nonEmpty = chapters.filter((chapter) => chapter.text.trim().length > 0);
+  if (nonEmpty.length === 0) return "";
+
+  const perChapter = Math.max(
+    EXTRACT_MIN_CHAPTER_CHARS,
+    Math.min(EXTRACT_MAX_CHAPTER_CHARS, Math.floor(EXTRACT_TOTAL_CHARS / nonEmpty.length)),
+  );
+
+  return nonEmpty
+    .map((chapter, index) => {
+      const text = chapter.text.trim();
+      const slice = text.slice(0, perChapter);
+      const clipped = slice.length < text.length;
+      const title = chapter.title.trim() || `Kapitel ${index + 1}`;
+      return `### ${title}\n${slice}${clipped ? "\n[…]" : ""}`;
+    })
+    .join("\n\n");
+}
+
+/** Normalisiert die Modellantwort: trimmt, dedupliziert und filtert bekannte Figuren. */
+export function normalizeExtractedCharacters(
+  value: unknown,
+  knownCharacters: string[] = [],
+): StoryCharacter[] {
+  const seen = new Set(
+    knownCharacters.map((name) => name.trim().toLowerCase()).filter(Boolean),
+  );
+  const raw = asRecord(value).characters;
+
+  const result: StoryCharacter[] = [];
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    const item = asRecord(entry);
+    const name = str(item.name);
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      name,
+      role: str(item.role, "Figur"),
+      description: str(item.description),
+    });
+  }
+  return result;
+}
+
+function characterExtractSystem(language: string): string {
+  return `You are a continuity editor building a story bible from a finished manuscript.
+${languageLock(language)}
+
+TASK: find every NAMED figure that actually appears in the manuscript excerpts below.
+A "figure" is any named character, creature, deity, AI or personified being — major or minor —
+that the text refers to by name (speaking, acting, being described, or being remembered).
+
+Respond ONLY with a single valid JSON object:
+{ "characters": [{ "name": string, "role": string, "description": string }] }
+
+Rules:
+- ONLY figures supported by the text. Never invent names, roles or facts.
+- name: exactly as written in the manuscript.
+- role: short and concrete — the figure's function in THIS story
+  (e.g. "Protagonist", "Antagonist", "Verbündeter", "Auftraggeber", "Nebenfigur").
+- description: 1-2 sentences strictly grounded in the excerpts (function, relation to others, traits).
+- Skip the narrator, unnamed groups ("die Wachen" without a name) and mere mentions of places.
+- Skip every name listed under ALREADY TRACKED.
+- Order by importance, most important first.
+- Every string value MUST be in ${language}.`;
+}
+
+function characterExtractUser(
+  input: CharacterExtractInput,
+  digest: string,
+): string {
+  const known = input.knownCharacters
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .map((name) => `- ${name}`)
+    .join("\n");
+
+  return `BOOK TITLE: ${input.bookTitle || "(untitled)"}
+GENRE: ${input.genre || "(unknown)"}
+
+ALREADY TRACKED (do not list these):
+${known || "- (none)"}
+
+MANUSCRIPT EXCERPTS:
+${digest}
+
+Extract the named figures now as JSON, with roles and descriptions in ${input.language}.`;
+}
+
+/** Leitet benannte Figuren aus dem Manuskript ab (findet auch Storyboard-unbekannte Figuren). */
+export async function extractCharacters(
+  input: CharacterExtractInput,
+): Promise<StoryCharacter[]> {
+  const digest = manuscriptDigest(input.chapters);
+  if (!digest.trim()) {
+    throw new ApiError(
+      "Kein Manuskript-Text vorhanden, aus dem Figuren abgeleitet werden könnten.",
+      400,
+    );
+  }
+
+  const { content, finishReason } = await chatCompletionDetailed({
+    model: input.model,
+    system: characterExtractSystem(input.language),
+    user: characterExtractUser(input, digest),
+    json: true,
+    maxTokens: 4000,
+    temperature: 0.4,
+  });
+
+  if (finishReason === "length") {
+    throw new ApiError(
+      "Die Figuren-Extraktion wurde vom Token-Limit abgeschnitten. Bitte ein Modell mit größerem Kontext wählen oder erneut versuchen.",
+      502,
+    );
+  }
+
+  return normalizeExtractedCharacters(
+    parseJson(content, "Figuren-Extraktion"),
+    input.knownCharacters,
+  );
+}

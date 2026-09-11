@@ -89,6 +89,7 @@ src/
 | Stil | `POST /api/chapter/style` |
 | Timeline-Prüfung | `POST /api/timeline/check` |
 | Weltenbau-Extraktion | `POST /api/world/extract` |
+| Figuren-Extraktion (Manuskript) | `POST /api/characters/extract` |
 | Soul-Synthese | `POST /api/generate` |
 | Recherche | `POST /api/research` |
 | Cover | `POST /api/cover`, `POST /api/cover/save`, `DELETE /api/cover/:file` |

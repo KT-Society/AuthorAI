@@ -19,6 +19,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   robust und erkennt mitten im Satz abgebrochene Texte.
 - **Pollinations-Status**: Die Einstellungen zeigen jetzt auch den Cover-Key an
   (`Pollinations: verbunden/fehlt`) — `GET /api/config` liefert dafür `pollinations`.
+- **Figuren aus dem Manuskript** (`POST /api/characters/extract`): Die Charaktere-Ansicht
+  leitet benannte Figuren direkt aus den Kapiteltexten ab — so landen auch Figuren im
+  Register, die erst beim Schreiben auftauchen (z. B. „Kael") und im Storyboard nie standen.
+  Vorschläge werden vor der Übernahme in einem Review-Dialog einzeln an-/abgewählt; bereits
+  getrackte Namen filtert der Server heraus (Tag „Manuskript", verknüpft mit dem Projekt).
 
 ### Fixed
 

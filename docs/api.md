@@ -48,6 +48,33 @@ Soul-Prompt.
 { "soul": { "head": "…", "core": "…", "bio": "…" } }
 ```
 
+### `POST /api/characters/extract`
+
+Leitet benannte Figuren aus dem **Manuskript** ab — inklusive Figuren, die erst beim Schreiben
+auftauchen und im Storyboard nie standen. Bereits getrackte Namen werden serverseitig gefiltert.
+
+**Request**
+
+```json
+{
+  "bookTitle": "Die Aschekrone",
+  "genre": "Dark Fantasy",
+  "chapters": [{ "title": "Kapitel 1", "text": "…" }],
+  "knownCharacters": ["Elias"],
+  "model": "<model-id>",
+  "language": "German"
+}
+```
+
+**Response**
+
+```json
+{ "characters": [{ "name": "Kael", "role": "Verbündeter", "description": "…" }] }
+```
+
+Fehlt Manuskript-Text, antwortet die Route mit **HTTP 400**; schneidet das Token-Limit die
+Antwort ab, mit **HTTP 502** und klarer Meldung.
+
 ---
 
 ## Buch-Pipeline

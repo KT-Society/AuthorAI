@@ -3,7 +3,7 @@
  * Talks only to the local Bun server; keys never reach the browser.
  */
 
-import type { SceneConstraint, Storyboard, StoryWorld } from "@/data/story";
+import type { SceneConstraint, Storyboard, StoryCharacter, StoryWorld } from "@/data/story";
 
 import { postJson } from "./http";
 
@@ -112,4 +112,24 @@ export async function extractWorld(input: WorldExtractRequest): Promise<StoryWor
   const data = await postJson<{ world?: StoryWorld }>("/api/world/extract", input);
   if (!data.world) throw new Error("Leere Weltenbau-Antwort vom Server.");
   return data.world;
+}
+
+export interface CharacterExtractRequest {
+  bookTitle: string;
+  genre?: string;
+  chapters: { title: string; text: string }[];
+  knownCharacters: string[];
+  model: string;
+  language: string;
+}
+
+/** Leitet benannte Figuren aus dem Manuskript ab (inkl. Storyboard-unbekannter Figuren). */
+export async function extractCharacters(
+  input: CharacterExtractRequest,
+): Promise<StoryCharacter[]> {
+  const data = await postJson<{ characters?: StoryCharacter[] }>(
+    "/api/characters/extract",
+    input,
+  );
+  return Array.isArray(data.characters) ? data.characters : [];
 }

@@ -1,15 +1,29 @@
 import { useMemo, useState } from "react";
-import { Plus, Search, Users } from "lucide-react";
+import { Loader2, Plus, Search, Sparkles, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 import type { Book } from "@/data/author";
 import type { Character } from "@/data/characters";
+import { makeCharacter } from "@/data/characters";
+import type { StoryCharacter } from "@/data/story";
+import { manuscriptOf } from "@/lib/bookManuscript";
+import { readLanguage, readStageModel } from "@/lib/generationSettings";
+import { showToast } from "@/lib/toast";
+import { extractCharacters } from "@/services/story";
 
 import { CharacterCard } from "./CharacterCard";
 import { CharacterEditorDialog } from "./CharacterEditorDialog";
+import { CharacterExtractDialog } from "./CharacterExtractDialog";
 import { CharacterGenerator } from "./CharacterGenerator";
 import { EmptyState } from "./primitives";
 
@@ -17,12 +31,14 @@ export function CharactersView({
   books,
   characters,
   onAddCharacter,
+  onAddCharacters,
   onUpdateCharacter,
   onDeleteCharacter,
 }: {
   books: Book[];
   characters: Character[];
   onAddCharacter: (character: Character) => void;
+  onAddCharacters: (characters: Character[]) => void;
   onUpdateCharacter: (character: Character) => void;
   onDeleteCharacter: (id: string) => void;
 }) {
@@ -30,6 +46,81 @@ export function CharactersView({
   const [bookFilter, setBookFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Character | null>(null);
+  const [extractBookId, setExtractBookId] = useState<string>(
+    () => books.find((book) => (book.manuscript?.length ?? 0) > 0)?.id ?? books[0]?.id ?? "",
+  );
+  const [extractBusy, setExtractBusy] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<StoryCharacter[] | null>(null);
+
+  const runExtract = async () => {
+    const book = books.find((item) => item.id === extractBookId);
+    if (!book) {
+      setExtractError("Bitte ein Projekt auswählen.");
+      return;
+    }
+    const chapters = manuscriptOf(book)
+      .map((chapter, index) => ({
+        title: chapter.title?.trim() || book.storyboard?.chapters[index]?.title || `Kapitel ${index + 1}`,
+        text: (chapter.expanded || chapter.draft || "").trim(),
+      }))
+      .filter((chapter) => chapter.text.length > 0);
+    if (chapters.length === 0) {
+      setExtractError("Dieses Projekt hat noch kein Manuskript — bitte zuerst Kapitel schreiben.");
+      return;
+    }
+    const model = readStageModel("storyboard");
+    if (!model.trim()) {
+      setExtractError("Bitte eine Model-ID für „Storyboard“ in den Einstellungen eintragen.");
+      return;
+    }
+    setExtractError(null);
+    setExtractBusy(true);
+    try {
+      const known = [
+        ...characters.map((character) => character.name),
+        ...(book.storyboard?.characters ?? []).map((entry) => entry.name),
+      ];
+      const found = await extractCharacters({
+        bookTitle: book.title,
+        genre: book.storyboard?.genre,
+        chapters,
+        knownCharacters: known,
+        model,
+        language: readLanguage() ?? "German",
+      });
+      if (found.length === 0) {
+        setExtractError("Keine neuen Figuren gefunden (alles bereits vorhanden).");
+        return;
+      }
+      setCandidates(found);
+    } catch (err) {
+      setExtractError(err instanceof Error ? err.message : "Unbekannter Fehler.");
+    } finally {
+      setExtractBusy(false);
+    }
+  };
+
+  const acceptCandidates = (accepted: StoryCharacter[]) => {
+    const book = books.find((item) => item.id === extractBookId);
+    const created = accepted.map((entry, index) =>
+      makeCharacter(
+        {
+          name: entry.name,
+          role: entry.role,
+          description: entry.description,
+          bookId: book?.id,
+          tags: ["Manuskript"],
+        },
+        characters.length + index,
+      ),
+    );
+    onAddCharacters(created);
+    showToast(
+      created.length === 1 ? "1 Figur übernommen" : `${created.length} Figuren übernommen`,
+    );
+    setCandidates(null);
+  };
 
   const booksWithCharacters = useMemo(() => {
     const ids = new Set(
@@ -60,7 +151,7 @@ export function CharactersView({
           </p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Charaktere</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {characters.length} Figuren in deiner Welt — neue per promptgen einführen.
+            {characters.length} Figuren in deiner Welt — per promptgen oder aus dem Manuskript.
           </p>
         </div>
 
@@ -83,6 +174,42 @@ export function CharactersView({
           </Button>
         </div>
       </header>
+
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <Select value={extractBookId} onValueChange={setExtractBookId}>
+          <SelectTrigger size="sm" className="glass w-56 border-white/10">
+            <SelectValue placeholder="Projekt wählen" />
+          </SelectTrigger>
+          <SelectContent className="glass-strong border-white/10">
+            {books.map((book) => (
+              <SelectItem key={book.id} value={book.id}>
+                {book.title}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          size="sm"
+          variant="outline"
+          className="glass rounded-lg border-white/10"
+          onClick={() => void runExtract()}
+          disabled={extractBusy || books.length === 0}
+          title="Benannte Figuren aus dem Manuskript ableiten — findet auch Figuren, die erst im Text auftauchen"
+        >
+          {extractBusy ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="size-3.5" />
+          )}
+          Figuren aus Manuskript ableiten
+        </Button>
+      </div>
+
+      {extractError ? (
+        <div className="mb-4 rounded-xl border border-brand-rose/30 bg-brand-rose/10 px-3 py-2 text-sm text-brand-rose">
+          {extractError}
+        </div>
+      ) : null}
 
       <div className="mb-5 flex flex-wrap gap-2">
         <button
@@ -146,6 +273,14 @@ export function CharactersView({
         books={books}
         onClose={() => setDialogOpen(false)}
         onCreate={onAddCharacter}
+      />
+
+      <CharacterExtractDialog
+        open={candidates !== null}
+        candidates={candidates ?? []}
+        bookTitle={books.find((book) => book.id === extractBookId)?.title ?? ""}
+        onClose={() => setCandidates(null)}
+        onAccept={acceptCandidates}
       />
 
       <CharacterEditorDialog
