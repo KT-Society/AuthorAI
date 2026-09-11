@@ -27,6 +27,8 @@ export interface ChapterRequest {
   language: string;
   /** Verbindliche Szenen-Vorgaben (Beats + Figuren + POV/Schauplatz/Zeit). */
   scenes?: SceneConstraint[];
+  /** Verbindlicher Kanon-Block (Fakten + Beziehungen) aus dem Projekt. */
+  canon?: string;
 }
 
 export async function draftChapter(input: ChapterRequest): Promise<string> {
@@ -59,6 +61,8 @@ export interface PassRequest {
   language: string;
   text: string;
   scenes?: SceneConstraint[];
+  /** Verbindlicher Kanon-Block (Fakten + Beziehungen) aus dem Projekt. */
+  canon?: string;
 }
 
 export async function checkConsistency(input: PassRequest): Promise<PassResult> {
@@ -84,6 +88,8 @@ export interface TimelineRequest {
   scenesByChapter: SceneConstraint[][];
   model: string;
   language: string;
+  /** Verbindlicher Kanon-Block (Fakten + Beziehungen) aus dem Projekt. */
+  canon?: string;
 }
 
 export interface TimelineResult {

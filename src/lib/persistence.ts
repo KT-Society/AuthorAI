@@ -8,6 +8,7 @@
 
 import { BOOKS, DEFAULT_META } from "@/data/author";
 import type { Book, DashboardMeta, Idea } from "@/data/author";
+import type { CanonFact, CharacterRelation } from "@/data/continuity";
 import type { SavedCoverPreset } from "@/data/cover";
 import type { Character } from "@/data/characters";
 import type { PlotCard } from "@/data/plot";
@@ -23,7 +24,9 @@ export type DataName =
   | "research"
   | "ideas"
   | "coverPresets"
-  | "notifications";
+  | "notifications"
+  | "facts"
+  | "relations";
 
 const ALL_NAMES: DataName[] = [
   "books",
@@ -34,6 +37,8 @@ const ALL_NAMES: DataName[] = [
   "ideas",
   "coverPresets",
   "notifications",
+  "facts",
+  "relations",
 ];
 
 function scopedKey(profileId: string, name: DataName): string {
@@ -87,6 +92,14 @@ export const saveCharacters = (profileId: string, value: Character[]) =>
 export const loadWorld = (profileId: string) => load<WorldEntry>(profileId, "world");
 export const saveWorld = (profileId: string, value: WorldEntry[]) =>
   save(profileId, "world", value);
+
+export const loadFacts = (profileId: string) => load<CanonFact>(profileId, "facts");
+export const saveFacts = (profileId: string, value: CanonFact[]) =>
+  save(profileId, "facts", value);
+
+export const loadRelations = (profileId: string) => load<CharacterRelation>(profileId, "relations");
+export const saveRelations = (profileId: string, value: CharacterRelation[]) =>
+  save(profileId, "relations", value);
 
 export const loadPlot = (profileId: string) => load<PlotCard>(profileId, "plot");
 export const savePlot = (profileId: string, value: PlotCard[]) => save(profileId, "plot", value);

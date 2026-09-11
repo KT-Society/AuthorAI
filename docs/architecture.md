@@ -94,8 +94,9 @@ Ports: Root **3000**, promptgen **3001** (eigener `Bun.serve`, überschreibbar p
 | Modul | Aufgabe |
 | --- | --- |
 | `index.ts` | `Bun.serve` mit allen Routen, Fehler-Handling, HMR in Dev |
-| `server/llm.ts` | OpenRouter-Chat-Helper (`chatCompletion`, `cleanJsonBlock`) |
-| `server/story.ts` | Storyboard, Rohentwurf, Ausbau, Kohärenz, Stil, Weltenbau-Extraktion |
+| `server/llm.ts` | OpenRouter-Chat-Helper (`chatCompletion`, `chatCompletionDetailed`, `cleanJsonBlock`) |
+| `server/story.ts` | Storyboard, Rohentwurf, Ausbau, Kohärenz, Stil, Weltenbau-Extraktion, Figuren-Extraktion, Chunking |
+| `server/continuity.ts` | Fakten-/Beziehungs-Extraktion + Normalisierung |
 | `server/cover.ts` | Pollinations-Bilderzeugung, Dateiablage, Löschen |
 | `server/research.ts` | Tavily-Suche |
 
@@ -107,7 +108,7 @@ Der Server lädt beim Start die Root-`.env` über die promptgen-`env`-Funktionen
 Dünne Wrapper auf die lokalen Routen:
 
 - `http.ts` — gemeinsamer `postJson`-Helper inkl. Fehler-Normalisierung
-- `story.ts`, `generate.ts`, `cover.ts`, `research.ts`
+- `story.ts`, `generate.ts`, `cover.ts`, `research.ts`, `continuity.ts`
 
 ### 3. Daten (`src/data/*`)
 
@@ -117,6 +118,8 @@ Typen + Seed-Daten, frei von UI-Logik:
 - `story.ts` — `Storyboard`, `ChapterPlan`, `ChapterContent`, `StoryWorld`, Wort-Helfer
 - `characters.ts`, `world.ts`, `plot.ts`, `research.ts` — eigene Domänen + Seeds
 - `cover.ts` — Cover-Text-Layer, Schriftpaare (Presets) und Layouts
+- `continuity.ts` — Kanon: `CanonFact`, `CharacterRelation`, Filter (`factsForBook`,
+  `relationsForBook`) und `canonBlock()` (verbindlicher Prompt-Block)
 
 ### 4. Bibliothek (`src/lib/*`)
 
@@ -134,15 +137,24 @@ Typen + Seed-Daten, frei von UI-Logik:
 | `docx.ts` | DOCX-Erzeugung (OOXML) für Lektorats-Workflows |
 | `markdown.ts` | Markdown-Export eines Buchs |
 | `backup.ts` | Projekt-Backup (JSON) erzeugen/validieren |
+| `graph.ts` | Deterministisches Kreis-Layout + Kanten-Helfer für den Beziehungsgraphen |
+| `worldMatch.ts` | Normalisierter Titelvergleich (Dublettenschutz Weltenbau) |
+| `passNotes.ts` | Filtert No-Op-Notizen aus Prüfberichten („A" wurde zu „A") |
+| `prose.ts` | `<TEXT>`-Extraktion + Truncation-Erkennung (Server **und** Client) |
+| `toast.ts` / `clipboard.ts` | Globale Rückmeldungen + Kopieren mit Fallback |
 | `utils.ts` | `cn()` (Tailwind-Merge) |
 
 ### 5. Views (`src/components/dashboard/*`)
 
 - **Shell:** `Dashboard.tsx` (Profil-State, Routing, Persistenz, Auto-Import, Notifications)
 - **Views:** `DashboardView`, `LibraryView`, `ChaptersView`, `CharactersView`, `WorldView`,
-  `PlotBoardView`, `ResearchView`, `StatsView`, `BookDetailView` (Editor + Reader)
+  `ContinuityView` (Fakten + Beziehungsgraph), `PlotBoardView`, `ResearchView`, `StatsView`,
+  `BookDetailView` (Editor + Reader)
 - **Dialoge:** `BookWizard`, `CharacterGenerator`, `CharacterEditorDialog`,
+  `CharacterExtractDialog`, `ContinuityExtractDialog`, `WorldExtractDialog`,
   `CoverEditorDialog`, `SettingsDialog`, `ProfileGate`
+- **Bausteine:** `primitives.tsx` (Panel, Badge, ProgressBar, Sparkline, ViewHeader, …),
+  `CharacterContinuityPanel.tsx` (Fakten-/Beziehungs-Panels im Charakter-Editor)
 - **Bausteine:** `primitives.tsx` (Panel, Badge, ProgressBar, Sparkline, ViewHeader, …)
 
 Die UI-Basis liegt in `src/components/ui/*` (shadcn-Stil, Radix-basiert).

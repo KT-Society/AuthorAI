@@ -132,6 +132,44 @@ Dazu `COVER_PRESETS` (Schriftpaare), `COVER_LAYOUTS` und `applyCoverPreset`/`app
 | `WorldEntry` | `world.ts` | Kategorie: `Ort \| Fraktion \| Magie \| Artefakt \| Lore` |
 | `PlotCard` | `plot.ts` | Story-Beat: `act`, `status: idea \| planned \| written`, `order` |
 | `ResearchNote` | `research.ts` | Notiz mit Quelle/URL, Tags |
+| `CanonFact` | `continuity.ts` | Prüfbarer Fakt zu Figur/Welt (`kind`, `statement`, `establishedIn`, `hard`) |
+| `CharacterRelation` | `continuity.ts` | Gerichtete Beziehung (`kind`, `intensity` −1…1, `note`, `secret`) |
+
+### Kontinuität (`src/data/continuity.ts`)
+
+```ts
+type FactKind = "attribute" | "history" | "skill" | "possession" | "world" | "rule";
+type FactEntityType = "character" | "world";
+
+interface CanonFact {
+  id: string;
+  kind: FactKind;
+  entityId: string;              // Charakter-ID oder Welteintrag-ID
+  entityType: FactEntityType;
+  statement: string;             // kurze, prüfbare Aussage
+  establishedIn?: string;        // z. B. "Kapitel 4"
+  hard?: boolean;                // nur world: nie brechbare Regel
+}
+
+type RelationKind = "loyalty" | "love" | "friendship" | "distrust" | "debt"
+                  | "rivalry" | "mentorship" | "family" | "enmity";
+
+interface CharacterRelation {
+  id: string;
+  fromId: string;                // Charakter-ID
+  toId: string;                  // Charakter-ID
+  kind: RelationKind;
+  intensity: number;             // −1 (feindselig) … 1 (zugewandt)
+  note?: string;
+  secret?: boolean;
+  establishedIn?: string;
+}
+```
+
+`canonBlock({ facts, relations, nameOf })` rendert daraus den **verbindlichen Prompt-Block**
+für alle Generierungs- und Prüf-Pässe; sind beide Listen leer, liefert er `""` (kein leerer
+Header im Prompt). Beim Löschen einer Figur bzw. eines Welteneintrags räumt die Shell
+zugehörige Fakten und Beziehungen mit auf.
 
 ### Dashboard-Metriken (`DashboardMeta`)
 
@@ -176,6 +214,8 @@ interface AppNotification {
 | `research` | `ResearchNote[]` |
 | `ideas` | `Idea[]` (Plot-Funken) |
 | `notifications` | `AppNotification[]` |
+| `facts` | `CanonFact[]` (Kontinuität) |
+| `relations` | `CharacterRelation[]` (Beziehungen) |
 | `meta` | `DashboardMeta` (Objekt, kein Array) |
 
 ### Profile & Einstellungen (geräteweit)

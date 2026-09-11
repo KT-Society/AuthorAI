@@ -10,10 +10,12 @@ import {
   saveBooks,
   saveCharacters,
   saveCoverPresets,
+  saveFacts,
   saveIdeas,
   saveMeta,
   saveNotifications,
   savePlot,
+  saveRelations,
   saveResearch,
   saveWorld,
 } from "@/lib/persistence";
@@ -75,6 +77,8 @@ export function App() {
     saveResearch(profile.id, backup.research);
     saveIdeas(profile.id, backup.ideas);
     saveNotifications(profile.id, backup.notifications);
+    saveFacts(profile.id, backup.facts);
+    saveRelations(profile.id, backup.relations);
     saveMeta(profile.id, normalizeMeta(backup.meta ?? null));
     saveCoverPresets(profile.id, []);
 

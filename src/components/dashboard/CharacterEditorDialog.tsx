@@ -14,19 +14,33 @@ import {
   soulToPrompt,
 } from "@/data/characters";
 import type { Character } from "@/data/characters";
+import type { CanonFact, CharacterRelation } from "@/data/continuity";
 import { readLanguage, readModel } from "@/lib/generationSettings";
 import { copyText } from "@/lib/clipboard";
 import { showToast } from "@/lib/toast";
 import { generateSoul } from "@/services/generate";
 
+import { FactsPanel, RelationsPanel } from "./CharacterContinuityPanel";
+
 export function CharacterEditorDialog({
   open,
   character,
+  characters = [],
+  facts = [],
+  relations = [],
+  onFactsChange,
+  onRelationsChange,
   onClose,
   onSave,
 }: {
   open: boolean;
   character: Character | null;
+  /** Alle Figuren (für die Ziel-Auswahl der Beziehungen). */
+  characters?: Character[];
+  facts?: CanonFact[];
+  relations?: CharacterRelation[];
+  onFactsChange?: (facts: CanonFact[]) => void;
+  onRelationsChange?: (relations: CharacterRelation[]) => void;
   onClose: () => void;
   onSave: (character: Character) => void;
 }) {
@@ -213,6 +227,23 @@ export function CharacterEditorDialog({
               );
             })}
           </div>
+
+          {onFactsChange ? (
+            <div className="mt-5">
+              <FactsPanel character={character} facts={facts} onChange={onFactsChange} />
+            </div>
+          ) : null}
+
+          {onRelationsChange ? (
+            <div className="mt-3">
+              <RelationsPanel
+                character={character}
+                characters={characters}
+                relations={relations}
+                onChange={onRelationsChange}
+              />
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 p-5">

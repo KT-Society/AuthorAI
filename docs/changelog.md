@@ -8,32 +8,61 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
-### Added
+### Kontinuitäts-Datenbank & Beziehungsgraph (Ziel: 0.3.0)
 
-- **Toast-System**: globale, dezente Rückmeldungen (unten mittig, nicht im Druck) für
+- **Added** **Kanon: Fakten & Beziehungen** (`src/data/continuity.ts`): `CanonFact`
+  (Kategorie, prüfbare Aussage, Quelle, `hard`-Flag für Weltregeln) und `CharacterRelation`
+  (Typ, Richtung, Intensität −1 … 1, Notiz, geheim). Pro Profil gespeichert
+  (`authorai.<profilId>.facts|relations`), im Backup ab Version 2 enthalten; beim Löschen einer
+  Figur oder eines Welteneintrags räumt die Shell zugehörige Einträge mit auf.
+- **Added** **`canonBlock()`**: Fakten und Beziehungen gehen als **verbindlicher Block** an
+  `chapter/draft`, `chapter/expand`, `chapter/consistency`, `chapter/style` und
+  `timeline/check` — nur Entitäten des jeweiligen Projekts. Ohne Kanon bleibt der Prompt
+  unverändert (kein leerer Header).
+- **Added** **Extraktion** (`POST /api/continuity/extract`): leitet Fakten und Beziehungen aus
+  Storyboard und Figuren-Register ab (ein Aufruf, Temperature 0.3, Token-Limit wird als 502
+  gemeldet). Der Server verwirft erfundene Entitäten, validiert Kategorien, klemmt Intensitäten
+  und filtert bereits erfasste Einträge; die Zuordnung Name → ID macht der Client.
+- **Added** **View „Kontinuität"** (neue Sidebar-Sektion): Tabs **Fakten** (Suche, Filter nach
+  Projekt/Kategorie/Figur-Welt, Inline-Bearbeitung, Löschen) und **Beziehungen**
+  (SVG-Graph + Liste). Graph: deterministisches Kreis-Layout nach Vernetzungsgrad, Farbe = Typ,
+  Stärke/Deckkraft = Intensität, gestrichelt = geheim, Hover-Titel; getestet bis 40 Figuren.
+- **Added** **Charakter-Editor: Panels „Fakten" und „Beziehungen"** — Fakt mit Kategorie und
+  Quelle anlegen, Beziehung mit Ziel-Figur, Typ, Intensitäts-Slider, Notiz und „geheim".
+  Änderungen wirken sofort (kein Speichern nötig).
+- **Added** **Review-Dialog „Kontinuität vorschlagen"**: Vorschläge sind vorausgewählt und
+  einzeln abwählbar; nicht zuordenbare Vorschläge werden gezählt und im Toast gemeldet.
+- **Added** **Kanon-Fakten zu den Seed-Daten** (Alter/Verlust/Besitz/Regeln der Beispiel-Figuren),
+  damit die Ansicht beim ersten Start nicht leer ist.
+
+_Nächste Themen siehe [`roadmap.md`](roadmap.md)._
+
+---
+
+## [0.2.0] — 2026-09-12
+
+### Nachträglich: Korrekturen & Politur
+
+- **Added** **Toast-System**: globale, dezente Rückmeldungen (unten mittig, nicht im Druck) für
   Kopier- und Export-Aktionen — `src/lib/toast.ts` + `components/dashboard/ToastHost.tsx`.
-- **Zwischenablage mit Fallback** (`src/lib/clipboard.ts`): versucht
+- **Added** **Zwischenablage mit Fallback** (`src/lib/clipboard.ts`): versucht
   `navigator.clipboard`, fällt auf `textarea`/`execCommand` zurück und meldet echtes
   Erfolg/Fehlschlag statt still zu scheitern.
-- **Prosa-Extraktion** (`src/lib/prose.ts`) für Server und Client: extrahiert `<TEXT>`-Blöcke
+- **Added** **Prosa-Extraktion** (`src/lib/prose.ts`) für Server und Client: extrahiert `<TEXT>`-Blöcke
   robust und erkennt mitten im Satz abgebrochene Texte.
-- **Pollinations-Status**: Die Einstellungen zeigen jetzt auch den Cover-Key an
+- **Added** **Pollinations-Status**: Die Einstellungen zeigen jetzt auch den Cover-Key an
   (`Pollinations: verbunden/fehlt`) — `GET /api/config` liefert dafür `pollinations`.
-- **Figuren aus dem Manuskript** (`POST /api/characters/extract`): Die Charaktere-Ansicht
+- **Added** **Figuren aus dem Manuskript** (`POST /api/characters/extract`): Die Charaktere-Ansicht
   leitet benannte Figuren direkt aus den Kapiteltexten ab — so landen auch Figuren im
   Register, die erst beim Schreiben auftauchen (z. B. „Kael") und im Storyboard nie standen.
   Vorschläge werden vor der Übernahme in einem Review-Dialog einzeln an-/abgewählt; bereits
   getrackte Namen filtert der Server heraus (Tag „Manuskript", verknüpft mit dem Projekt).
 
-### Changed
-
-- **Kapiteltext-Editor ist jetzt zuklappbar**: Der ausführliche Kapiteltext steckt in einem
+- **Changed** **Kapiteltext-Editor ist jetzt zuklappbar**: Der ausführliche Kapiteltext steckt in einem
   `<details>`-Bereich wie Rohentwurf/Versionen — Wortzahl und Speicherstatus bleiben in der
   Kopfzeile sichtbar, auch wenn er zugeklappt ist. Standard: aufgeklappt.
 
-### Fixed
-
-- **Performance: PDF-Export und Dublettenprüfung** (DevTools `'click' handler took N ms`):
+- **Fixed** **Performance: PDF-Export und Dublettenprüfung** (DevTools `'click' handler took N ms`):
   - `lib/pdf.ts`: Der Zeilenumbruch maß für **jedes** Wort den kompletten Kandidaten neu
     (O(n²)) und `charWidth` suchte pro Zeichen in zwei Strings. Jetzt läuft die Breite
     inkrementell über eine `Uint8Array`-Lookup-Tabelle. Gemessen an einem Buch mit
@@ -43,14 +72,14 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   - `lib/worldMatch.ts`: Titel wurden in der O(n²)-Dublettenprüfung hundertfach neu
     normalisiert (Regex + `NFD`). Jetzt mit gebundenem Normalisierungs-Cache:
     **43 ms → 15 ms** bei 200 Einträgen. Verhalten unverändert.
-- **Stil-/Kohärenz-Berichte mit No-Op-Notizen**: Kleine Modelle notierten „Änderungen", bei
+- **Fixed** **Stil-/Kohärenz-Berichte mit No-Op-Notizen**: Kleine Modelle notierten „Änderungen", bei
   denen beide Seiten identisch waren (z. B. `"ein Schlund … schien" wurde zu "ein Schlund …
   schien" zur Verbesserung des Satzflusses`). Solche Zeilen dokumentieren nichts und
   verstopfen den Prüfbericht. `lib/passNotes.ts` erkennt sie (Vorher/Nachher-Zitat plus
   Änderungs-Marker, Vergleich ohne Satzzeichen/Leerraum) und entfernt sie; echte Notizen
   bleiben. Die Prompts fordern zusätzlich ausdrücklich: nur Zitate, deren Wortlaut sich
   wirklich geändert hat, sonst exakt „Keine Auffälligkeiten.".
-- **Kohärenz/Stil bei langen Kapiteln (502 „Antwort unvollständig")**: Beide Pässe verlangten
+- **Fixed** **Kohärenz/Stil bei langen Kapiteln (502 „Antwort unvollständig")**: Beide Pässe verlangten
   die **komplette** überarbeitete Prosa in *einer* Antwort. Bei 3.000–5.000 Wörtern lief das
   ins Ausgabelimit (9000 Tokens angefragt, Modell stoppt früher) → Abbruch mitten im Kapitel.
   Jetzt zerlegt `splitIntoChunks()` das Kapitel an Absatzgrenzen in Teile von ~1.000 Wörtern
@@ -60,9 +89,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   mit klarer Meldung abgebrochen (statt Text zu duplizieren). `<NOTES>` aller Teile werden
   gesammelt und dedupliziert. Betrifft `POST /api/chapter/consistency` **und**
   `POST /api/chapter/style`.
-- **Server-Idle-Timeout** auf 180 s erhöht — mehrteilige Pässe, Ausbau und Cover-Varianten
+- **Fixed** **Server-Idle-Timeout** auf 180 s erhöht — mehrteilige Pässe, Ausbau und Cover-Varianten
   laufen nicht mehr Gefahr, mitten im Lauf getrennt zu werden.
-- **Dubletten beim Welten-Scan**: Wiederholte Scans legten denselben Stoff immer wieder an
+- **Fixed** **Dubletten beim Welten-Scan**: Wiederholte Scans legten denselben Stoff immer wieder an
   („Kinder der Asche" mehrfach, „Die Zerstörung der Welt" neben „Die Zerstörung der alten
   Welt"). Drei Ebenen greifen jetzt:
   - Der Scan schickt die bereits getrackten Einträge mit (`knownEntries`); Prompt und Server
@@ -74,22 +103,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
     (Bestätigung, behält je Konzept den ersten Eintrag).
   - Der Storyboard-Prompt fordert keine Füll-Einträge mehr an („2-4 pro Kategorie ist normal")
     und verbietet Doppelnennungen ausdrücklich — das war die Hauptquelle des Rauschens.
-- **Abgeschnittene Kapitel**: Antworten, die mitten im Satz enden (Token-Limit oder
+- **Fixed** **Abgeschnittene Kapitel**: Antworten, die mitten im Satz enden (Token-Limit oder
   „lite"-Modelle), werden erkannt und über eine gezielte Fortsetzung zu Ende geschrieben —
   für Rohentwurf, Ausbau, Kohärenz und Stil. Läuft es weiterhin ins Limit, benennt der
   Prüfbericht das Problem, statt es zu verschweigen.
-- **Prosa-Verlust durch `<NOTES>`**: Der Parser schnitt bisher am ersten `<NOTES>`-Marker
+- **Fixed** **Prosa-Verlust durch `<NOTES>`**: Der Parser schnitt bisher am ersten `<NOTES>`-Marker
   alles ab — auch echten Prosatext. Jetzt hat ein geschlossener `<TEXT>`-Block Vorrang;
   Notes-Inhalte werden gezielt entfernt, niemals Prosa.
-- **„Manuskript kopieren" war unvollständig**: kopiert wurde nur der gespeicherte Stand,
+- **Fixed** **„Manuskript kopieren" war unvollständig**: kopiert wurde nur der gespeicherte Stand,
   während der Editor den laufenden Text in verzögerten Autosave-Puffern hält. Kopieren und
   alle Exporte (`.txt`, Markdown, EPUB, DOCX, PDF) führen die Puffer jetzt vorher zusammen.
-- **Kopieren ohne Rückmeldung**: Kopier-/Exportaktionen melden nun Erfolg oder Fehler;
+- **Fixed** **Kopieren ohne Rückmeldung**: Kopier-/Exportaktionen melden nun Erfolg oder Fehler;
   unvollständige Kapitel werden beim Kopieren namentlich benannt.
-
----
-
-## [0.2.0] — 2026-09-11
 
 ### Schreiben & Struktur
 
@@ -127,12 +152,6 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 - **Added** **ISBN/EAN-13-Barcode** als Cover-Layer (echte Prüfziffer, gültig/t ungültig wird erkannt).
 - **Added** **Cover-Text-Layer werden persistiert** („Nur Text speichern") und beim erneuten
   Öffnen wieder geladen — Text bleibt editierbar statt nur eingebrannt.
-
----
-
-## [Unreleased]
-
-_Nichts offen — nächste Themen siehe [`roadmap.md`](roadmap.md)._
 
 ---
 

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import type { Book } from "@/data/author";
 import type { Character } from "@/data/characters";
 import { makeCharacter } from "@/data/characters";
+import type { CanonFact, CharacterRelation } from "@/data/continuity";
 import type { StoryCharacter } from "@/data/story";
 import { manuscriptOf } from "@/lib/bookManuscript";
 import { readLanguage, readStageModel } from "@/lib/generationSettings";
@@ -30,6 +31,10 @@ import { EmptyState } from "./primitives";
 export function CharactersView({
   books,
   characters,
+  facts = [],
+  relations = [],
+  onFactsChange,
+  onRelationsChange,
   onAddCharacter,
   onAddCharacters,
   onUpdateCharacter,
@@ -37,6 +42,10 @@ export function CharactersView({
 }: {
   books: Book[];
   characters: Character[];
+  facts?: CanonFact[];
+  relations?: CharacterRelation[];
+  onFactsChange?: (facts: CanonFact[]) => void;
+  onRelationsChange?: (relations: CharacterRelation[]) => void;
   onAddCharacter: (character: Character) => void;
   onAddCharacters: (characters: Character[]) => void;
   onUpdateCharacter: (character: Character) => void;
@@ -286,6 +295,11 @@ export function CharactersView({
       <CharacterEditorDialog
         open={editing !== null}
         character={editing}
+        characters={characters}
+        facts={facts}
+        relations={relations}
+        onFactsChange={onFactsChange}
+        onRelationsChange={onRelationsChange}
         onClose={() => setEditing(null)}
         onSave={onUpdateCharacter}
       />

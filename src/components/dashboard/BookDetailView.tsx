@@ -41,6 +41,13 @@ import type { Book } from "@/data/author";
 import { STATUS_META, progressOf, timeAgo } from "@/data/author";
 import type { Character } from "@/data/characters";
 import {
+  canonBlock,
+  factsForBook,
+  relationsForBook,
+} from "@/data/continuity";
+import type { CanonFact, CharacterRelation } from "@/data/continuity";
+import type { WorldEntry } from "@/data/world";
+import {
   EXPAND_DEFAULT_WORDS,
   EXPAND_MAX_WORDS,
   EXPAND_MIN_WORDS,
@@ -101,6 +108,9 @@ export function BookDetailView({
   authorName,
   coverPresets = [],
   onSaveCoverPreset,
+  facts = [],
+  relations = [],
+  worlds = [],
   initialChapterIndex = 0,
   onBack,
   onUpdate,
@@ -112,6 +122,10 @@ export function BookDetailView({
   authorName: string;
   coverPresets?: SavedCoverPreset[];
   onSaveCoverPreset?: (label: string, layers: CoverTextLayer[]) => void;
+  /** Kanon: Fakten und Beziehungen des Projekts (werden allen Prüf-Pässen mitgegeben). */
+  facts?: CanonFact[];
+  relations?: CharacterRelation[];
+  worlds?: WorldEntry[];
   initialChapterIndex?: number;
   onBack: () => void;
   onUpdate: (book: Book) => void;
@@ -144,6 +158,39 @@ export function BookDetailView({
   }, [mode]);
 
   const manuscript = useMemo(() => manuscriptOf(book), [book.manuscript, book.storyboard]);
+
+  /**
+   * Kanon-Block für alle Generierungs-/Prüf-Pässe: nur Entitäten dieses Projekts
+   * (Figuren des Buchs bzw. aus seinem Storyboard, Welteneinträge mit dieser bookId).
+   */
+  const canon = useMemo(() => {
+    const allFacts = facts ?? [];
+    const allRelations = relations ?? [];
+    if (allFacts.length === 0 && allRelations.length === 0) return undefined;
+
+    const storyboardNames = new Set(
+      (book.storyboard?.characters ?? []).map((entry) => entry.name.trim().toLowerCase()),
+    );
+    const scopedCharacters = characters.filter(
+      (character) =>
+        character.bookId === book.id || storyboardNames.has(character.name.trim().toLowerCase()),
+    );
+    const characterIds = new Set(scopedCharacters.map((character) => character.id));
+    const bookWorlds = (worlds ?? []).filter((entry) => entry.bookId === book.id);
+    const worldIds = new Set(bookWorlds.map((entry) => entry.id));
+
+    const nameOf = (id: string) =>
+      scopedCharacters.find((character) => character.id === id)?.name ??
+      bookWorlds.find((entry) => entry.id === id)?.title ??
+      "";
+
+    const block = canonBlock({
+      facts: factsForBook(allFacts, characterIds, worldIds),
+      relations: relationsForBook(allRelations, characterIds),
+      nameOf,
+    });
+    return block.trim().length > 0 ? block : undefined;
+  }, [facts, relations, characters, worlds, book.id, book.storyboard]);
   const plans = useMemo<ChapterPlan[]>(() => book.storyboard?.chapters ?? [], [book.storyboard]);
   const status = STATUS_META[book.status];
   const progress = progressOf(book);
@@ -461,6 +508,7 @@ export function BookDetailView({
           language,
           text: current[chapterIndex]?.expanded ?? "",
           scenes: scenesFor(chapterIndex),
+          canon,
         };
         const result =
           kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
@@ -509,6 +557,7 @@ export function BookDetailView({
         model,
         language,
         scenes: scenesFor(index),
+        canon,
       });
       updateChapter(index, { draft });
       onWordsWritten(countWords(draft));
@@ -550,6 +599,7 @@ export function BookDetailView({
         language,
         text: source,
         scenes: scenesFor(index),
+        canon,
       };
       const result = kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
       updateChapter(index, {
@@ -587,6 +637,7 @@ export function BookDetailView({
         draft: manuscript[index]?.draft ?? "",
         targetWords: targetFor(manuscript[index]),
         scenes: scenesFor(index),
+        canon,
       });
       updateChapter(index, { expanded });
       onWordsWritten(countWords(expanded));
@@ -633,6 +684,7 @@ export function BookDetailView({
           draft: current[chapterIndex]?.draft ?? "",
           targetWords: targetFor(current[chapterIndex]),
           scenes: scenesFor(chapterIndex),
+          canon,
         });
         current = current.map((chapter, i) =>
           i === chapterIndex ? { ...chapter, expanded } : chapter,
@@ -887,6 +939,7 @@ export function BookDetailView({
       scenesByChapter: manuscript.map((_, index) => scenesFor(index)),
       model,
       language,
+      canon,
     });
   };
 

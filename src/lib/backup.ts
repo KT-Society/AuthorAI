@@ -4,13 +4,14 @@
 
 import type { Book, DashboardMeta, Idea } from "@/data/author";
 import type { Character } from "@/data/characters";
+import type { CanonFact, CharacterRelation } from "@/data/continuity";
 import type { PlotCard } from "@/data/plot";
 import type { ResearchNote } from "@/data/research";
 import type { AppNotification } from "@/lib/notifications";
 import type { WorldEntry } from "@/data/world";
 
 export const BACKUP_FORMAT = "authorai-backup";
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 
 export interface BackupData {
   books: Book[];
@@ -20,6 +21,8 @@ export interface BackupData {
   research: ResearchNote[];
   ideas: Idea[];
   notifications: AppNotification[];
+  facts: CanonFact[];
+  relations: CharacterRelation[];
   meta: DashboardMeta;
 }
 
@@ -70,6 +73,9 @@ export function parseBackup(text: string): ProfileBackup {
     research: asList(obj.research) as unknown as ResearchNote[],
     ideas: asList(obj.ideas) as unknown as Idea[],
     notifications: asList(obj.notifications) as unknown as AppNotification[],
+    // Ab Version 2 dabei; ältere Backups (v1) liefern hier leere Listen.
+    facts: asList(obj.facts) as unknown as CanonFact[],
+    relations: asList(obj.relations) as unknown as CharacterRelation[],
     meta:
       obj.meta && typeof obj.meta === "object"
         ? (obj.meta as DashboardMeta)

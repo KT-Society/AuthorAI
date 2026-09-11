@@ -9,6 +9,7 @@ import path from "node:path";
 
 import type { SceneConstraint, Storyboard } from "./data/story";
 import { coversDir, generateCover, saveCoverImage } from "./server/cover";
+import { extractContinuity } from "./server/continuity";
 import { isStandaloneBinary, runtimePort } from "./server/paths";
 import { runResearch } from "./server/research";
 import {
@@ -41,6 +42,11 @@ function requiredString(value: unknown, message: string): string {
 
 function optionalLanguage(value: unknown): string {
   return typeof value === "string" && value.trim() ? value.trim() : getDefaultLanguage();
+}
+
+/** Optionaler, nicht-leerer String (z. B. der Kanon-Block). */
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function optionalInt(value: unknown, fallback: number): number {
@@ -84,8 +90,30 @@ function asStoryboard(value: unknown): Storyboard {
   return value as Storyboard;
 }
 
-/** Bereits getrackte Welteneinträge (Titel + Kategorie) aus dem Request-Body. */
-function asKnownWorldEntries(value: unknown): { title: string; category: string }[] {
+/** Liste nicht-leerer Strings aus dem Request-Body. */
+function asStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+/** Figuren-Referenzen (Name + Rolle) für die Kontinuitäts-Extraktion. */
+function asCharacterRefs(value: unknown): { name: string; role?: string }[] {
+  if (!Array.isArray(value)) return [];
+  const list: { name: string; role?: string }[] = [];
+  for (const entry of value) {
+    const item = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    if (!name) continue;
+    const role = typeof item.role === "string" && item.role.trim() ? item.role.trim() : undefined;
+    list.push({ name, role });
+  }
+  return list;
+}
+
+/** Bereits getrackte Welteneinträge (Titel + Kategorie) aus dem Request-Body. */function asKnownWorldEntries(value: unknown): { title: string; category: string }[] {
   if (!Array.isArray(value)) return [];
   const entries: { title: string; category: string }[] = [];
   for (const entry of value) {
@@ -206,6 +234,7 @@ const server = serve({
             model,
             language,
             scenes: asScenes(body.scenes),
+            canon: optionalString(body.canon),
           });
           return Response.json({ draft });
         } catch (err) {
@@ -233,6 +262,7 @@ const server = serve({
             draft,
             targetWords,
             scenes: asScenes(body.scenes),
+            canon: optionalString(body.canon),
           });
           return Response.json({ expanded });
         } catch (err) {
@@ -259,6 +289,7 @@ const server = serve({
             language,
             text,
             scenes: asScenes(body.scenes),
+            canon: optionalString(body.canon),
           });
           return Response.json(result);
         } catch (err) {
@@ -285,6 +316,7 @@ const server = serve({
             language,
             text,
             scenes: asScenes(body.scenes),
+            canon: optionalString(body.canon),
           });
           return Response.json(result);
         } catch (err) {
@@ -304,6 +336,7 @@ const server = serve({
           const result = await checkTimeline({
             storyboard,
             scenesByChapter: asSceneMatrix(body.scenesByChapter),
+            canon: optionalString(body.canon),
             model,
             language,
           });
@@ -354,6 +387,31 @@ const server = serve({
             language,
           });
           return Response.json({ characters });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Continuity extraction: facts + relations from storyboard and register.
+    "/api/continuity/extract": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const characters = asCharacterRefs(body.characters);
+          const result = await extractContinuity({
+            storyboard,
+            characters,
+            worldNames: asStringList(body.worldNames),
+            knownStatements: asStringList(body.knownStatements),
+            knownRelations: asStringList(body.knownRelations),
+            model,
+            language,
+          });
+          return Response.json(result);
         } catch (err) {
           return errorResponse(err);
         }

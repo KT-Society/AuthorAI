@@ -190,6 +190,31 @@ Sie nutzt das **Kohärenz-Model**.
 
 ---
 
+## Kanon: Fakten & Beziehungen (verbindlich für alle Pässe)
+
+Prüf-Pässe lesen sonst Text gegen Text — das Modell muss Widersprüche selbst *erkennen*. Mit dem
+**Kanon** werden Fakten und Beziehungen einmal explizit erfasst und jedem Aufruf als harter Block
+mitgegeben (`lib/continuity.ts` → `canonBlock()`, erzeugt in `BookDetailView`):
+
+```
+CANON FACTS (binding — never contradict these; if the text does, name the fact and chapter in <NOTES>):
+- [Seraphine] (vergangenheit) Verlor ihre Schwester unter ungeklärten Umständen. (Kapitel 2)
+- [WORLD: Aschekrone] (regel, hard) Magie kostet Lebenszeit. (Kapitel 4)
+
+RELATIONS (binding — keep these dynamics consistent):
+- Seraphine → Kael: distrust (−0,6) — seit dem Verrat im Hafen (Kapitel 5)
+```
+
+- **Wo**: `chapter/draft`, `chapter/expand`, `chapter/consistency`, `chapter/style` und
+  `timeline/check` (Feld `canon`).
+- **Geltungsbereich**: nur Entitäten des Projekts (Figuren mit `bookId` bzw. Namen aus dem
+  Storyboard, Welteneinträge mit `bookId`) — kein Kanon aus anderen Büchern.
+- **Leer = kein Block**: ohne Fakten/Beziehungen taucht der Block nicht auf (kein toter Header).
+- **Quelle**: manuell (Charakter-Editor → Panels „Fakten“/„Beziehungen“) oder
+  `POST /api/continuity/extract` mit Review-Dialog.
+
+---
+
 ## Ableitungen (Figuren & Weltenbau)
 
 Beide Ableitungen sind **nachgelagerte Werkzeuge** — sie laufen nicht im Wizard, sondern

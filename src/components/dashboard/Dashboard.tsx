@@ -4,6 +4,8 @@ import { BOOKS, IDEAS } from "@/data/author";
 import type { Book, DashboardMeta, Idea } from "@/data/author";
 import { CHARACTERS, makeCharacter } from "@/data/characters";
 import type { Character } from "@/data/characters";
+import { CONTINUITY_FACTS, CONTINUITY_RELATIONS } from "@/data/continuity";
+import type { CanonFact, CharacterRelation } from "@/data/continuity";
 import type { CoverTextLayer, SavedCoverPreset } from "@/data/cover";
 import { presetFromLayers } from "@/data/cover";
 import { PLOT_CARDS } from "@/data/plot";
@@ -16,19 +18,23 @@ import {
   loadBooks,
   loadCharacters,
   loadCoverPresets,
+  loadFacts,
   loadIdeas,
   loadMeta,
   loadNotifications,
   loadPlot,
+  loadRelations,
   loadResearch,
   loadWorld,
   saveBooks,
   saveCharacters,
   saveCoverPresets,
+  saveFacts,
   saveIdeas,
   saveMeta,
   saveNotifications,
   savePlot,
+  saveRelations,
   saveResearch,
   saveWorld,
 } from "@/lib/persistence";
@@ -47,6 +53,7 @@ import type { AppNotification, NotificationInput } from "@/lib/notifications";
 import { BookDetailView } from "./BookDetailView";
 import { ChaptersView } from "./ChaptersView";
 import { CharactersView } from "./CharactersView";
+import { ContinuityView } from "./ContinuityView";
 import { DashboardView } from "./DashboardView";
 import { LibraryView } from "./LibraryView";
 import { PlotBoardView } from "./PlotBoardView";
@@ -194,6 +201,12 @@ export function Dashboard({
   const [coverPresets, setCoverPresets] = useState<SavedCoverPreset[]>(
     () => loadCoverPresets(profileId) ?? [],
   );
+  const [facts, setFacts] = useState<CanonFact[]>(
+    () => loadFacts(profileId) ?? CONTINUITY_FACTS,
+  );
+  const [relations, setRelations] = useState<CharacterRelation[]>(
+    () => loadRelations(profileId) ?? CONTINUITY_RELATIONS,
+  );
   const [meta, setMeta] = useState<DashboardMeta>(() => normalizeMeta(loadMeta(profileId)));
   const [activeNav, setActiveNav] = useState("dashboard");
   const [openBookId, setOpenBookId] = useState<string | null>(null);
@@ -225,6 +238,12 @@ export function Dashboard({
   useEffect(() => {
     saveCoverPresets(profileId, coverPresets);
   }, [profileId, coverPresets]);
+  useEffect(() => {
+    saveFacts(profileId, facts);
+  }, [profileId, facts]);
+  useEffect(() => {
+    saveRelations(profileId, relations);
+  }, [profileId, relations]);
   useEffect(() => {
     saveMeta(profileId, meta);
   }, [profileId, meta]);
@@ -363,8 +382,14 @@ export function Dashboard({
     }
   };
 
-  const deleteCharacter = (id: string) =>
+  const deleteCharacter = (id: string) => {
     setCharacters((prev) => prev.filter((character) => character.id !== id));
+    // Kanon mit aufräumen: Fakten der Figur und Beziehungen mit ihr entfernen.
+    setFacts((prev) => prev.filter((fact) => fact.entityId !== id));
+    setRelations((prev) =>
+      prev.filter((relation) => relation.fromId !== id && relation.toId !== id),
+    );
+  };
 
   const deleteIdea = (id: string) => setIdeas((prev) => prev.filter((idea) => idea.id !== id));
   const clearIdeas = () => setIdeas([]);
@@ -400,6 +425,8 @@ export function Dashboard({
       research: notes,
       ideas,
       notifications,
+      facts,
+      relations,
       meta,
     });
 
@@ -421,7 +448,8 @@ export function Dashboard({
           `Achtung: ersetzt die Daten dieses Profils.\n\n` +
           `${parsed.books.length} Bücher · ${parsed.characters.length} Charaktere · ` +
           `${parsed.world.length} Welteneinträge · ${parsed.plot.length} Plot-Karten · ` +
-          `${parsed.research.length} Recherchenotizen`,
+          `${parsed.research.length} Recherchenotizen · ${parsed.facts.length} Fakten · ` +
+          `${parsed.relations.length} Beziehungen`,
       );
       if (!confirmed) return;
 
@@ -439,6 +467,8 @@ export function Dashboard({
       setNotes(parsed.research);
       setIdeas(parsed.ideas);
       setNotifications(parsed.notifications);
+      setFacts(parsed.facts);
+      setRelations(parsed.relations);
       setMeta(normalizeMeta(parsed.meta ?? null));
       setOpenBookId(null);
       setActiveNav("dashboard");
@@ -513,6 +543,9 @@ export function Dashboard({
               key={`${openedBook.id}-${openChapterIndex}`}
               book={openedBook}
               characters={characters}
+              facts={facts}
+              relations={relations}
+              worlds={worlds}
               authorName={profileName}
               coverPresets={coverPresets}
               onSaveCoverPreset={(label, layers) =>
@@ -540,6 +573,10 @@ export function Dashboard({
               <CharactersView
                 books={books}
                 characters={characters}
+                facts={facts}
+                relations={relations}
+                onFactsChange={setFacts}
+                onRelationsChange={setRelations}
                 onAddCharacter={addCharacter}
                 onAddCharacters={(list) => setCharacters((prev) => [...list, ...prev])}
                 onUpdateCharacter={(character) =>
@@ -548,6 +585,16 @@ export function Dashboard({
                   )
                 }
                 onDeleteCharacter={deleteCharacter}
+              />
+            ) : activeNav === "continuity" ? (
+              <ContinuityView
+                books={books}
+                characters={characters}
+                worlds={worlds}
+                facts={facts}
+                relations={relations}
+                onFactsChange={setFacts}
+                onRelationsChange={setRelations}
               />
             ) : activeNav === "world" ? (
             <WorldView
@@ -558,10 +605,15 @@ export function Dashboard({
               onUpdate={(entry) =>
                 setWorlds((prev) => prev.map((item) => (item.id === entry.id ? entry : item)))
               }
-              onDelete={(id) => setWorlds((prev) => prev.filter((item) => item.id !== id))}
+              onDelete={(id) => {
+                setWorlds((prev) => prev.filter((item) => item.id !== id));
+                // Fakten zu diesem Welteneintrag mit entfernen.
+                setFacts((prev) => prev.filter((fact) => fact.entityId !== id));
+              }}
               onDeleteMany={(ids) => {
                 const drop = new Set(ids);
                 setWorlds((prev) => prev.filter((item) => !drop.has(item.id)));
+                setFacts((prev) => prev.filter((fact) => !drop.has(fact.entityId)));
               }}
             />
             ) : activeNav === "plot" ? (

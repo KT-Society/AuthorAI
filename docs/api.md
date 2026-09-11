@@ -77,6 +77,51 @@ Antwort ab, mit **HTTP 502** und klarer Meldung.
 
 ---
 
+## Kontinuität
+
+### `POST /api/continuity/extract`
+
+Leitet **Fakten** (zu Figuren und Welteinträgen) und **Beziehungen** (zwischen Figuren) aus
+Storyboard und Figuren-Register ab. Die Antwort enthält **Namen**, keine IDs — die Zuordnung
+auf Charakter-/Welt-IDs macht der Client (Review-Dialog vor der Übernahme).
+Bereits erfasste Aussagen und Beziehungen werden über `knownStatements`/`knownRelations`
+ausgeschlossen; erfundene Entitäten filtert der Server heraus.
+
+**Request**
+
+```json
+{
+  "storyboard": { … },
+  "characters": [{ "name": "Elias Thorne", "role": "Protagonist" }],
+  "worldNames": ["Kinder der Asche"],
+  "knownStatements": ["Elias ist Schmied."],
+  "knownRelations": ["Elias→Sylar:distrust"],
+  "model": "<model-id>",
+  "language": "German"
+}
+```
+
+**Response**
+
+```json
+{
+  "facts": [
+    { "kind": "history", "entityName": "Elias Thorne", "entityType": "character",
+      "statement": "Verlor seine Familie beim Brand der Schmiede.", "establishedIn": "Kapitel 1" }
+  ],
+  "relations": [
+    { "fromName": "Elias Thorne", "toName": "Sylar", "kind": "distrust",
+      "intensity": -0.6, "note": "seit dem Verrat im Hafen" }
+  ]
+}
+```
+
+Schneidet das Token-Limit die Antwort ab, antwortet die Route mit **HTTP 502** und klarer Meldung.
+Fakten/Beziehungen gehen als `canon`-Block zusätzlich an `chapter/draft`, `chapter/expand`,
+`chapter/consistency`, `chapter/style` und `timeline/check`.
+
+---
+
 ## Buch-Pipeline
 
 ### `POST /api/storyboard`

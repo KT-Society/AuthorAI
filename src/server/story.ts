@@ -81,7 +81,7 @@ function parseJson(content: string, label: string): Record<string, unknown> {
 }
 
 /** Strong, repeated language instruction used in every prompt. */
-function languageLock(language: string): string {
+export function languageLock(language: string): string {
   return `OUTPUT LANGUAGE: ${language}.
 Every string value — titles, summaries, beats, foreshadowing, descriptions, roles — MUST be written in ${language}.
 Do NOT switch to English at any point, especially not for later chapters.`;
@@ -308,6 +308,8 @@ export interface ChapterInput {
   model: string;
   language: string;
   scenes?: SceneConstraint[];
+  /** Verbindlicher Kanon-Block (Fakten + Beziehungen) aus dem Projekt. */
+  canon?: string;
 }
 
 /** Rendert die verbindlichen Szenen (oder fällt auf die Plan-Beats zurück). */
@@ -339,10 +341,13 @@ function storyboardContext(
   storyboard: Storyboard,
   chapter: ChapterPlan,
   scenes?: SceneConstraint[],
+  canon?: string,
 ): string {
   const characters = storyboard.characters
     .map((character) => `- ${character.name} (${character.role}): ${character.description}`)
     .join("\n");
+
+  const canonPart = canon?.trim() ? `\n\n${canon.trim()}` : "";
 
   return `TITLE: ${storyboard.title}
 GENRE: ${storyboard.genre}
@@ -362,7 +367,7 @@ SUMMARY: ${chapter.summary}
 SCENES (binding — follow in this order):
 ${sceneBlock(scenes, chapter.beats)}
 FORESHADOWING:
-${chapter.foreshadowing.map((item) => `- ${item}`).join("\n") || "- (none)"}`;
+${chapter.foreshadowing.map((item) => `- ${item}`).join("\n") || "- (none)"}${canonPart}`;
 }
 
 function roughDraftSystem(language: string): string {
@@ -381,7 +386,7 @@ export async function draftChapter(input: ChapterInput): Promise<string> {
     throw new ApiError("Kapitel nicht gefunden.", 400);
   }
 
-  const user = `${storyboardContext(input.storyboard, chapter, input.scenes)}
+  const user = `${storyboardContext(input.storyboard, chapter, input.scenes, input.canon)}
 
 OUTPUT LANGUAGE: ${input.language}
 Write the ~500 word rough draft of this chapter now.`;
@@ -508,7 +513,7 @@ export async function expandChapter(input: ExpandInput): Promise<string> {
   );
 
   const system = expansionSystem(input.language, target);
-  const user = `${storyboardContext(input.storyboard, chapter, input.scenes)}
+  const user = `${storyboardContext(input.storyboard, chapter, input.scenes, input.canon)}
 
 OUTPUT LANGUAGE: ${input.language}
 TARGET LENGTH: at least ${target} words.
@@ -669,12 +674,15 @@ export interface PassInput {
   language: string;
   text: string;
   scenes?: SceneConstraint[];
+  /** Verbindlicher Kanon-Block (Fakten + Beziehungen) aus dem Projekt. */
+  canon?: string;
 }
 
 function passContext(
   storyboard: Storyboard,
   chapterIndex: number,
   scenes?: SceneConstraint[],
+  canon?: string,
 ): string {
   const chapter = storyboard.chapters[chapterIndex];
   const previous = storyboard.chapters[chapterIndex - 1];
@@ -699,7 +707,7 @@ PLAN: ${chapter?.summary ?? ""}
 SCENES (binding — follow in this order):
 ${sceneBlock(scenes, chapter?.beats ?? [])}
 FORESHADOWING: ${(chapter?.foreshadowing ?? []).join(" · ") || "- (none)"}
-NEXT CHAPTER: ${next ? `${next.title} — ${next.summary}` : "(final chapter — the story must be resolved here)"}`;
+NEXT CHAPTER: ${next ? `${next.title} — ${next.summary}` : "(final chapter — the story must be resolved here)"}${canon?.trim() ? `\n\n${canon.trim()}` : ""}`;
 }
 
 function parsePassOutput(content: string): PassResult {
@@ -787,7 +795,7 @@ async function runPass(kind: "consistency" | "style", input: PassInput): Promise
 
   const system =
     kind === "consistency" ? consistencySystem(input.language) : styleSystem(input.language);
-  const context = passContext(input.storyboard, input.chapterIndex, input.scenes);
+  const context = passContext(input.storyboard, input.chapterIndex, input.scenes, input.canon);
   const instruction =
     kind === "consistency"
       ? "Apply the continuity and logic fixes now, then list them in <NOTES>."
@@ -927,6 +935,8 @@ export interface TimelineInput {
   scenesByChapter: SceneConstraint[][];
   model: string;
   language: string;
+  /** Verbindlicher Kanon-Block (Fakten + Beziehungen) aus dem Projekt. */
+  canon?: string;
 }
 
 export interface TimelineResult {
@@ -976,7 +986,7 @@ export async function checkTimeline(input: TimelineInput): Promise<TimelineResul
   const content = await chatCompletion({
     model: input.model,
     system: timelineSystem(input.language),
-    user: `TIMELINE:\n${listing}\n\nCheck the chronology now and return the JSON, entirely in ${input.language}.`,
+    user: `TIMELINE:\n${listing}${input.canon?.trim() ? `\n\n${input.canon.trim()}` : ""}\n\nCheck the chronology now and return the JSON, entirely in ${input.language}.`,
     json: true,
     maxTokens: 2500,
     temperature: 0.3,
