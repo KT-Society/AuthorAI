@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlignCenter, AlignLeft, AlignRight, Loader2, Plus, Trash2, Type, X } from "lucide-react";
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  LayoutTemplate,
+  Loader2,
+  Plus,
+  Save,
+  Trash2,
+  Type,
+  Wand2,
+  X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,59 +24,22 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
+import {
+  COVER_FONTS,
+  COVER_LAYOUTS,
+  COVER_PRESETS,
+  COVER_WEIGHTS,
+  applyCoverLayout,
+  applyCoverPreset,
+  defaultCoverLayers,
+  makeCoverLayer,
+} from "@/data/cover";
+import type { CoverLayoutId, CoverTextLayer } from "@/data/cover";
 import { saveCoverImage } from "@/services/cover";
-
-export interface CoverTextLayer {
-  id: string;
-  text: string;
-  x: number;
-  y: number;
-  size: number;
-  fontFamily: string;
-  fontWeight: number;
-  color: string;
-  align: "left" | "center" | "right";
-  letterSpacing: number;
-  uppercase: boolean;
-  italic: boolean;
-  shadow: boolean;
-}
 
 type CtxWithSpacing = CanvasRenderingContext2D & { letterSpacing?: string };
 
-const FONTS = ["Outfit", "Inter", "Georgia", "Courier New"];
-const WEIGHTS = [300, 400, 500, 600, 700, 800];
-
-let layerCounter = 0;
-function nextId(): string {
-  layerCounter += 1;
-  return `layer-${Date.now().toString(36)}-${layerCounter}`;
-}
-
-function makeLayer(kind: "title" | "author" | "plain", text: string): CoverTextLayer {
-  const base: CoverTextLayer = {
-    id: nextId(),
-    text,
-    x: 50,
-    y: 50,
-    size: 0.07,
-    fontFamily: "Outfit",
-    fontWeight: 700,
-    color: "#ffffff",
-    align: "center",
-    letterSpacing: 0.02,
-    uppercase: false,
-    italic: false,
-    shadow: true,
-  };
-  if (kind === "title") {
-    return { ...base, y: 20, size: 0.085, fontWeight: 800 };
-  }
-  if (kind === "author") {
-    return { ...base, y: 88, size: 0.045, fontWeight: 600, uppercase: true, letterSpacing: 0.14 };
-  }
-  return base;
-}
+export type CoverTarget = "front" | "back";
 
 function drawLayer(
   ctx: CanvasRenderingContext2D,
@@ -108,17 +83,25 @@ function drawLayer(
 export function CoverEditorDialog({
   open,
   imageUrl,
+  target,
+  initialLayers,
   defaultTitle,
   defaultAuthor,
+  onTargetChange,
   onClose,
   onSaved,
+  onSaveLayers,
 }: {
   open: boolean;
   imageUrl: string | undefined;
+  target: CoverTarget;
+  initialLayers?: CoverTextLayer[];
   defaultTitle?: string;
   defaultAuthor?: string;
+  onTargetChange: (target: CoverTarget) => void;
   onClose: () => void;
   onSaved: (url: string) => void;
+  onSaveLayers: (layers: CoverTextLayer[]) => void;
 }) {
   const [layers, setLayers] = useState<CoverTextLayer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -132,15 +115,15 @@ export function CoverEditorDialog({
 
   useEffect(() => {
     if (!open) return;
-    const seeded: CoverTextLayer[] = [];
-    if (defaultTitle && defaultTitle.trim()) seeded.push(makeLayer("title", defaultTitle.trim()));
-    if (defaultAuthor && defaultAuthor.trim()) seeded.push(makeLayer("author", defaultAuthor.trim()));
-    if (seeded.length === 0) seeded.push(makeLayer("title", "Titel"));
+    const seeded =
+      initialLayers && initialLayers.length > 0
+        ? initialLayers.map((layer) => ({ ...layer }))
+        : defaultCoverLayers(defaultTitle ?? "Titel", defaultAuthor);
     setLayers(seeded);
     setSelectedId(seeded[0]?.id ?? null);
     setError(null);
     setBusy(false);
-  }, [open, defaultTitle, defaultAuthor]);
+  }, [open, imageUrl, initialLayers, defaultTitle, defaultAuthor]);
 
   useEffect(() => {
     if (!open) return;
@@ -171,7 +154,7 @@ export function CoverEditorDialog({
   const selected = layers.find((layer) => layer.id === selectedId) ?? null;
 
   const addLayer = (kind: "title" | "author" | "plain") => {
-    const layer = makeLayer(kind, kind === "plain" ? "Text" : kind === "author" ? "Autor" : "Titel");
+    const layer = makeCoverLayer(kind, kind === "plain" ? "Text" : kind === "author" ? "Autor" : "Titel");
     setLayers((prev) => [...prev, layer]);
     setSelectedId(layer.id);
   };
@@ -181,37 +164,37 @@ export function CoverEditorDialog({
     setSelectedId((prev) => (prev === id ? null : prev));
   };
 
-  const apply = async () => {
+  const bake = async (): Promise<Blob> => {
     const image = imgRef.current;
-    if (!image) {
-      setError("Bild ist noch nicht geladen.");
-      return;
+    if (!image) throw new Error("Bild ist noch nicht geladen.");
+    const width = image.naturalWidth;
+    const height = image.naturalHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas nicht verfügbar.");
+    ctx.drawImage(image, 0, 0, width, height);
+    try {
+      await document.fonts.ready;
+    } catch {
+      // Schriften sind optional
     }
+    for (const layer of layers) drawLayer(ctx, layer, width, height);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => (result ? resolve(result) : reject(new Error("Export fehlgeschlagen."))),
+        "image/png",
+      );
+    });
+  };
+
+  const applyToImage = async () => {
     setError(null);
     setBusy(true);
     try {
-      const width = image.naturalWidth;
-      const height = image.naturalHeight;
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Canvas nicht verfügbar.");
-      ctx.drawImage(image, 0, 0, width, height);
-      try {
-        await document.fonts.ready;
-      } catch {
-        // ignore
-      }
-      for (const layer of layers) drawLayer(ctx, layer, width, height);
-
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob(
-          (result) => (result ? resolve(result) : reject(new Error("Export fehlgeschlagen."))),
-          "image/png",
-        );
-      });
-      const url = await saveCoverImage(blob);
+      const url = await saveCoverImage(await bake());
+      onSaveLayers(layers);
       onSaved(url);
       onClose();
     } catch (err) {
@@ -219,6 +202,11 @@ export function CoverEditorDialog({
     } finally {
       setBusy(false);
     }
+  };
+
+  const saveLayersOnly = () => {
+    onSaveLayers(layers);
+    onClose();
   };
 
   return (
@@ -230,24 +218,46 @@ export function CoverEditorDialog({
               <Type className="size-5" />
             </span>
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">Cover-Text gestalten</h2>
+              <h2 className="text-lg font-semibold tracking-tight">
+                {target === "front" ? "Front-Cover-Text" : "Back-Cover-Text"}
+              </h2>
               <p className="text-xs text-muted-foreground">
-                Text hinzufügen, formatieren und frei positionieren — ziehen zum Verschieben.
+                Text hinzufügen, Presets anwenden, frei positionieren — Layer bleiben editierbar.
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="rounded-lg text-muted-foreground hover:text-foreground"
-            onClick={onClose}
-            disabled={busy}
-          >
-            <X className="size-4" />
-          </Button>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
+              {(["front", "back"] as CoverTarget[]).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => onTargetChange(option)}
+                  className={cn(
+                    "rounded-lg px-3 py-1 text-[11px] font-semibold transition-colors",
+                    target === option
+                      ? "bg-white/10 text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {option === "front" ? "Front" : "Back"}
+                </button>
+              ))}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="rounded-lg text-muted-foreground hover:text-foreground"
+              onClick={onClose}
+              disabled={busy}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-y-auto p-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-y-auto p-5 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0">
             <div
               ref={containerRef}
@@ -258,11 +268,15 @@ export function CoverEditorDialog({
                 <img
                   ref={imgRef}
                   src={imageUrl}
-                  alt="Cover"
+                  alt={target === "front" ? "Front-Cover" : "Back-Cover"}
                   draggable={false}
                   className="block h-auto w-full"
                 />
-              ) : null}
+              ) : (
+                <div className="flex aspect-[3/4] items-center justify-center text-xs text-muted-foreground">
+                  Kein Bild — zuerst generieren.
+                </div>
+              )}
 
               {layers.map((layer) => (
                 <div
@@ -307,8 +321,7 @@ export function CoverEditorDialog({
                     whiteSpace: "pre",
                     cursor: "grab",
                     userSelect: "none",
-                    outline:
-                      layer.id === selectedId ? "1px dashed rgba(0,242,255,0.8)" : "none",
+                    outline: layer.id === selectedId ? "1px dashed rgba(0,242,255,0.8)" : "none",
                     outlineOffset: "3px",
                   }}
                 >
@@ -317,11 +330,52 @@ export function CoverEditorDialog({
               ))}
             </div>
             <p className="mt-2 text-center text-[11px] text-muted-foreground">
-              {Math.round(previewWidth)} px Vorschau · Text ziehen, um zu positionieren
+              {Math.round(previewWidth)} px Vorschau · Text ziehen zum Positionieren
             </p>
           </div>
 
           <div className="space-y-4">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <Wand2 className="size-3.5" />
+                Presets
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {COVER_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setLayers((prev) => applyCoverPreset(prev, preset))}
+                    className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] transition-colors hover:border-white/20 hover:text-foreground"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              <p className="mt-3 mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <LayoutTemplate className="size-3.5" />
+                Layout
+              </p>
+              <Select
+                value=""
+                onValueChange={(value) =>
+                  setLayers((prev) => applyCoverLayout(prev, value as CoverLayoutId))
+                }
+              >
+                <SelectTrigger size="sm" className="glass w-full rounded-lg border-white/10">
+                  <SelectValue placeholder="Layout wählen…" />
+                </SelectTrigger>
+                <SelectContent className="glass-strong border-white/10">
+                  {COVER_LAYOUTS.map((layout) => (
+                    <SelectItem key={layout.id} value={layout.id}>
+                      {layout.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" className="glass rounded-lg border-white/10" onClick={() => addLayer("title")}>
                 <Plus className="size-3.5" /> Titel
@@ -366,9 +420,7 @@ export function CoverEditorDialog({
             {selected ? (
               <div className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-3">
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">
-                    Text
-                  </label>
+                  <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">Text</label>
                   <Textarea
                     rows={2}
                     value={selected.text}
@@ -379,9 +431,7 @@ export function CoverEditorDialog({
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">
-                      Schrift
-                    </label>
+                    <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">Schrift</label>
                     <Select
                       value={selected.fontFamily}
                       onValueChange={(value) => updateLayer(selected.id, { fontFamily: value })}
@@ -390,7 +440,7 @@ export function CoverEditorDialog({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="glass-strong border-white/10">
-                        {FONTS.map((font) => (
+                        {COVER_FONTS.map((font) => (
                           <SelectItem key={font} value={font}>
                             {font}
                           </SelectItem>
@@ -399,20 +449,16 @@ export function CoverEditorDialog({
                     </Select>
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">
-                      Stärke
-                    </label>
+                    <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">Stärke</label>
                     <Select
                       value={String(selected.fontWeight)}
-                      onValueChange={(value) =>
-                        updateLayer(selected.id, { fontWeight: Number(value) })
-                      }
+                      onValueChange={(value) => updateLayer(selected.id, { fontWeight: Number(value) })}
                     >
                       <SelectTrigger size="sm" className="glass w-full rounded-lg border-white/10">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="glass-strong border-white/10">
-                        {WEIGHTS.map((weight) => (
+                        {COVER_WEIGHTS.map((weight) => (
                           <SelectItem key={weight} value={String(weight)}>
                             {weight}
                           </SelectItem>
@@ -423,27 +469,21 @@ export function CoverEditorDialog({
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">
-                    Größe
-                  </label>
+                  <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">Größe</label>
                   <input
                     type="range"
                     min={0.02}
                     max={0.18}
                     step={0.002}
                     value={selected.size}
-                    onChange={(event) =>
-                      updateLayer(selected.id, { size: Number(event.target.value) })
-                    }
+                    onChange={(event) => updateLayer(selected.id, { size: Number(event.target.value) })}
                     className="w-full accent-[hsl(186_100%_55%)]"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">
-                      Farbe
-                    </label>
+                    <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">Farbe</label>
                     <input
                       type="color"
                       value={selected.color}
@@ -452,9 +492,7 @@ export function CoverEditorDialog({
                     />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">
-                      Laufweite
-                    </label>
+                    <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">Laufweite</label>
                     <input
                       type="range"
                       min={0}
@@ -470,9 +508,7 @@ export function CoverEditorDialog({
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">
-                    Ausrichtung
-                  </label>
+                  <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">Ausrichtung</label>
                   <div className="flex gap-1">
                     {(
                       [
@@ -506,9 +542,7 @@ export function CoverEditorDialog({
                     <input
                       type="checkbox"
                       checked={selected.uppercase}
-                      onChange={(event) =>
-                        updateLayer(selected.id, { uppercase: event.target.checked })
-                      }
+                      onChange={(event) => updateLayer(selected.id, { uppercase: event.target.checked })}
                       className="accent-[hsl(186_100%_55%)]"
                     />
                     GROSSBUCHSTABEN
@@ -517,9 +551,7 @@ export function CoverEditorDialog({
                     <input
                       type="checkbox"
                       checked={selected.italic}
-                      onChange={(event) =>
-                        updateLayer(selected.id, { italic: event.target.checked })
-                      }
+                      onChange={(event) => updateLayer(selected.id, { italic: event.target.checked })}
                       className="accent-[hsl(186_100%_55%)]"
                     />
                     Kursiv
@@ -528,9 +560,7 @@ export function CoverEditorDialog({
                     <input
                       type="checkbox"
                       checked={selected.shadow}
-                      onChange={(event) =>
-                        updateLayer(selected.id, { shadow: event.target.checked })
-                      }
+                      onChange={(event) => updateLayer(selected.id, { shadow: event.target.checked })}
                       className="accent-[hsl(186_100%_55%)]"
                     />
                     Schatten
@@ -547,7 +577,7 @@ export function CoverEditorDialog({
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 p-5">
           {error ? <p className="text-sm text-brand-rose">{error}</p> : <span />}
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Button
               variant="ghost"
               className="rounded-xl text-muted-foreground hover:text-foreground"
@@ -557,7 +587,17 @@ export function CoverEditorDialog({
               Abbrechen
             </Button>
             <Button
-              onClick={() => void apply()}
+              variant="outline"
+              className="glass rounded-xl border-white/10"
+              onClick={saveLayersOnly}
+              disabled={busy}
+              title="Nur die Text-Layer speichern (Bild bleibt unverändert) — später weiterbearbeitbar"
+            >
+              <Save className="size-4" />
+              Nur Text speichern
+            </Button>
+            <Button
+              onClick={() => void applyToImage()}
               disabled={busy || !imageUrl}
               className="rounded-xl bg-gradient-to-r from-brand-cyan to-brand-indigo px-5 font-semibold text-white shadow-[0_0_30px_-10px_hsl(186_100%_55%/0.95)] disabled:opacity-60"
             >

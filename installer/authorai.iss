@@ -10,7 +10,7 @@
 ; Beim Deinstallieren wird gefragt, ob Cover + .env mit entfernt werden sollen.
 
 #define MyAppName "AuthorAI"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "KT-Society & Echo"
 #define MyAppExeName "authorai.exe"
 

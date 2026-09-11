@@ -79,6 +79,29 @@ export async function refineStyle(input: PassRequest): Promise<PassResult> {
   return { text: data.text, notes: Array.isArray(data.notes) ? data.notes : [], changed: data.changed };
 }
 
+export interface TimelineRequest {
+  storyboard: Storyboard;
+  scenesByChapter: SceneConstraint[][];
+  model: string;
+  language: string;
+}
+
+export interface TimelineResult {
+  summary: string;
+  findings: string[];
+}
+
+export async function checkTimeline(input: TimelineRequest): Promise<TimelineResult> {
+  const data = await postJson<{ summary?: string; findings?: string[] }>(
+    "/api/timeline/check",
+    input,
+  );
+  return {
+    summary: typeof data.summary === "string" ? data.summary : "",
+    findings: Array.isArray(data.findings) ? data.findings : [],
+  };
+}
+
 export interface WorldExtractRequest {
   storyboard: Storyboard;
   model: string;

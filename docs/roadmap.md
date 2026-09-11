@@ -8,21 +8,19 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 ## Nah dran (hoher Nutzen, überschaubar)
 
 ### Schreiben & Struktur
-- **Szenen-Ziele**: Wortziel pro Szene (nicht nur pro Kapitel)
-- **Timeline-Validierung**: Zeitangaben der Szenen gegen die Kapitelreihenfolge prüfen
 - **Kapitel-Versionierung**: Historie mit Wiederherstellung
 - **Szenen-Vorlagen**: wiederverwendbare Szenen-Muster (z. B. „Verfolgungsjagd")
+- **Timeline-Ansicht**: chronologische Übersicht aller Szenen mit Konfliktmarkierung
 
 ### Export & Ausgabe
-- **DOCX-Export** für klassische Lektorats-Workflows
-- **Teil-Export**: einzelne Kapitel/Akte als Markdown oder EPUB
 - **Backup-Merge**: Import als **neues Profil** statt Ersetzen des aktuellen
-- **Cover-Varianten im EPUB** (mehrere Cover zur Auswahl)
+- **Cover-Auswahl im EPUB**: Front-/Back-Cover gezielt einbinden
+- **Direkter PDF-Export** (statt über den Druckdialog)
 
 ### Covers
-- **Varianten**: mehrere Cover generieren und auswählen
-- **Text-Presets** (Schriftpaare, Layouts) und Front-/Back-Cover
-- Cover-Text-Layer **persistieren** (erneut editierbar statt nur gebacken)
+- **Eigene Presets speichern** (Cover-Vorlagen je Projekt/Genre)
+- **ISBN/Barcode-Feld** auf dem Back-Cover
+- **A/B-Auswahl**: mehrere Varianten in der Bibliothek vergleichen
 
 ---
 

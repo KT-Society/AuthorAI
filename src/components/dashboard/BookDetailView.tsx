@@ -9,6 +9,7 @@ import {
   Download,
   FileText,
   GripVertical,
+  Hourglass,
   Image as ImageIcon,
   Layers,
   Loader2,
@@ -26,6 +27,13 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -45,12 +53,16 @@ import {
 import type { ChapterContent, ChapterPlan, SceneConstraint, SceneMeta } from "@/data/story";
 import { MODEL_STAGE_LABELS, readLanguage, readStageModel } from "@/lib/generationSettings";
 import { manuscriptOf } from "@/lib/bookManuscript";
+import { buildDocx } from "@/lib/docx";
 import { buildEpub } from "@/lib/epub";
 import { buildMarkdown } from "@/lib/markdown";
 import { buildCoverPrompt, generateCover } from "@/services/cover";
-import { checkConsistency, draftChapter, expandChapter, refineStyle } from "@/services/story";
+import { checkConsistency, checkTimeline, draftChapter, expandChapter, refineStyle } from "@/services/story";
+import type { TimelineResult } from "@/services/story";
 
 import { CoverEditorDialog } from "./CoverEditorDialog";
+import type { CoverTarget } from "./CoverEditorDialog";
+import { CoverVariantsDialog } from "./CoverVariantsDialog";
 import { Panel, ProgressBar } from "./primitives";
 
 type Mode = "edit" | "read";
@@ -98,6 +110,10 @@ export function BookDetailView({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [coverEditorOpen, setCoverEditorOpen] = useState(false);
+  const [coverTarget, setCoverTarget] = useState<CoverTarget>("front");
+  const [coverVariantsOpen, setCoverVariantsOpen] = useState(false);
+  const [timeline, setTimeline] = useState<TimelineResult | null>(null);
+  const [exportScope, setExportScope] = useState("all");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
 
@@ -664,22 +680,128 @@ export function BookDetailView({
       .trim()
       .replace(/\s+/g, "_") || "buch";
 
+  const actOf = (index: number, total: number) => {
+    const ratio = total > 0 ? index / total : 0;
+    if (ratio < 0.25) return 1;
+    if (ratio < 0.75) return 2;
+    return 3;
+  };
+
+  /** Auswahl für Teil-Export (Gesamtbuch, Akt oder aktuelles Kapitel). */
+  const scopedSelection = (): { book: Book; suffix: string } => {
+    if (exportScope === "all") return { book, suffix: "" };
+
+    if (exportScope === "chapter") {
+      const chapter = manuscript[safeIndex];
+      if (!chapter) return { book, suffix: "" };
+      const plan = plans[safeIndex];
+      return {
+        book: {
+          ...book,
+          manuscript: [chapter],
+          storyboard: book.storyboard && plan ? { ...book.storyboard, chapters: [plan] } : undefined,
+        },
+        suffix: `-kapitel-${safeIndex + 1}`,
+      };
+    }
+
+    const act = Number.parseInt(exportScope.replace("act:", ""), 10);
+    const indexes = manuscript
+      .map((_, index) => index)
+      .filter((index) => actOf(index, manuscript.length) === act);
+    if (indexes.length === 0) return { book, suffix: "" };
+
+    const subsetManuscript = indexes
+      .map((index) => manuscript[index])
+      .filter((chapter): chapter is ChapterContent => Boolean(chapter));
+    const subsetPlans = indexes
+      .map((index) => plans[index])
+      .filter((plan): plan is ChapterPlan => Boolean(plan));
+
+    return {
+      book: {
+        ...book,
+        manuscript: subsetManuscript,
+        storyboard: book.storyboard ? { ...book.storyboard, chapters: subsetPlans } : undefined,
+      },
+      suffix: `-akt-${act}`,
+    };
+  };
+
   const exportMarkdown = () => {
-    downloadBlob(new Blob([buildMarkdown(book)], { type: "text/markdown" }), `${fileSafe(book.title)}.md`);
+    const { book: scoped, suffix } = scopedSelection();
+    downloadBlob(
+      new Blob([buildMarkdown(scoped)], { type: "text/markdown" }),
+      `${fileSafe(scoped.title)}${suffix}.md`,
+    );
   };
 
   const exportEpub = async () => {
-    if (!book.storyboard && manuscript.length === 0) {
+    const { book: scoped, suffix } = scopedSelection();
+    if (!scoped.storyboard && scoped.manuscript?.length === 0) {
       setError("Dieses Buch hat noch keine Kapitel.");
       return;
     }
     setError(null);
     setBusy("EPUB wird erstellt…");
     try {
-      const blob = await buildEpub(book, { author: authorName, language });
-      downloadBlob(blob, `${fileSafe(book.title)}.epub`);
+      const blob = await buildEpub(scoped, { author: authorName, language });
+      downloadBlob(blob, `${fileSafe(scoped.title)}${suffix}.epub`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "EPUB-Export fehlgeschlagen.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const exportDocx = () => {
+    const { book: scoped, suffix } = scopedSelection();
+    downloadBlob(buildDocx(scoped, { author: authorName }), `${fileSafe(scoped.title)}${suffix}.docx`);
+  };
+
+  const runTimeline = async () => {
+    if (!book.storyboard) {
+      setError("Kein Storyboard vorhanden — Timeline-Prüfung nicht möglich.");
+      return;
+    }
+    const model = readStageModel("consistency");
+    if (!model.trim()) {
+      setError("Bitte eine Model-ID für „Kohärenz“ in den Einstellungen eintragen (die Timeline nutzt sie).");
+      return;
+    }
+    setError(null);
+    setBusy("Timeline wird geprüft…");
+    try {
+      const result = await checkTimeline({
+        storyboard: book.storyboard,
+        scenesByChapter: manuscript.map((_, index) => scenesFor(index)),
+        model,
+        language,
+      });
+      setTimeline(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Timeline-Prüfung fehlgeschlagen.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const openBackCover = async () => {
+    setCoverTarget("back");
+    if (book.coverBackUrl || !book.storyboard) {
+      setCoverEditorOpen(true);
+      return;
+    }
+    setError(null);
+    setBusy("Back-Cover wird generiert…");
+    try {
+      const url = await generateCover({
+        prompt: `${buildCoverPrompt(book.storyboard)}, minimalist back cover composition, single focal element, no text`,
+      });
+      onUpdate({ ...book, coverBackUrl: url });
+      setCoverEditorOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Back-Cover fehlgeschlagen.");
     } finally {
       setBusy(null);
     }
@@ -840,13 +962,57 @@ export function BookDetailView({
                 <Button
                   variant="outline"
                   className="glass rounded-xl border-white/10"
-                  onClick={() => setCoverEditorOpen(true)}
+                  onClick={() => {
+                    setCoverTarget("front");
+                    setCoverEditorOpen(true);
+                  }}
                   disabled={Boolean(busy)}
                 >
                   <Type className="size-4" />
                   Cover-Text
                 </Button>
               ) : null}
+              {book.storyboard ? (
+                <Button
+                  variant="outline"
+                  className="glass rounded-xl border-white/10"
+                  onClick={() => setCoverVariantsOpen(true)}
+                  disabled={Boolean(busy)}
+                  title="Mehrere Cover-Entwürfe generieren und auswählen"
+                >
+                  <Layers className="size-4" />
+                  Varianten
+                </Button>
+              ) : null}
+              {book.storyboard ? (
+                <Button
+                  variant="outline"
+                  className="glass rounded-xl border-white/10"
+                  onClick={() => void openBackCover()}
+                  disabled={Boolean(busy)}
+                  title="Back-Cover generieren und beschriften"
+                >
+                  <ImageIcon className="size-4" />
+                  Back-Cover
+                  {book.coverBackUrl ? (
+                    <img
+                      src={book.coverBackUrl}
+                      alt="Back-Cover"
+                      className="ml-1 h-6 w-4 rounded object-cover"
+                    />
+                  ) : null}
+                </Button>
+              ) : null}
+              <Button
+                variant="outline"
+                className="glass rounded-xl border-white/10"
+                onClick={() => void runTimeline()}
+                disabled={Boolean(busy) || !book.storyboard}
+                title="Zeitangaben der Szenen gegen die Kapitelreihenfolge prüfen"
+              >
+                <Hourglass className="size-4" />
+                Timeline prüfen
+              </Button>
               <Button
                 variant="outline"
                 className="glass rounded-xl border-white/10"
@@ -871,6 +1037,18 @@ export function BookDetailView({
                 <Download className="size-4" />
                 .txt exportieren
               </Button>
+              <Select value={exportScope} onValueChange={setExportScope}>
+                <SelectTrigger size="sm" className="glass w-44 border-white/10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="glass-strong border-white/10">
+                  <SelectItem value="all">Export: Gesamtbuch</SelectItem>
+                  <SelectItem value="act:1">Export: Akt I</SelectItem>
+                  <SelectItem value="act:2">Export: Akt II</SelectItem>
+                  <SelectItem value="act:3">Export: Akt III</SelectItem>
+                  <SelectItem value="chapter">Export: Dieses Kapitel</SelectItem>
+                </SelectContent>
+              </Select>
               <Button
                 variant="outline"
                 className="glass rounded-xl border-white/10"
@@ -887,6 +1065,14 @@ export function BookDetailView({
               >
                 <BookText className="size-4" />
                 EPUB
+              </Button>
+              <Button
+                variant="outline"
+                className="glass rounded-xl border-white/10"
+                onClick={exportDocx}
+              >
+                <FileText className="size-4" />
+                DOCX
               </Button>
               <Button
                 variant="outline"
@@ -914,6 +1100,39 @@ export function BookDetailView({
           <Loader2 className="size-4 animate-spin" />
           {busy}
         </div>
+      ) : null}
+
+      {timeline ? (
+        <Panel className="mb-6 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Hourglass className="size-3.5" />
+              Timeline-Prüfung
+            </p>
+            <button
+              type="button"
+              onClick={() => setTimeline(null)}
+              className="rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground"
+              title="Ausblenden"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          {timeline.summary ? (
+            <p className="mt-3 text-sm text-foreground/80">{timeline.summary}</p>
+          ) : null}
+          {timeline.findings.length > 0 ? (
+            <ul className="mt-3 space-y-1 text-sm">
+              {timeline.findings.map((finding, index) => (
+                <li key={index} className="text-brand-amber">
+                  • {finding}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-brand-emerald">Keine Widersprüche gefunden.</p>
+          )}
+        </Panel>
       ) : null}
 
       {manuscript.length === 0 && mode === "edit" ? (
@@ -1412,7 +1631,7 @@ export function BookDetailView({
                             </div>
                           </div>
 
-                          <div className="mt-1.5 grid grid-cols-1 gap-1.5 pl-7 sm:grid-cols-3">
+                          <div className="mt-1.5 grid grid-cols-2 gap-1.5 pl-7 sm:grid-cols-4">
                             <Input
                               value={sceneMetas[sceneIndex]?.pov ?? ""}
                               onChange={(event) =>
@@ -1435,6 +1654,21 @@ export function BookDetailView({
                                 setSceneMeta(sceneIndex, { time: event.target.value })
                               }
                               placeholder="Zeit"
+                              className="glass h-7 rounded-md border-white/10 text-[11px]"
+                            />
+                            <Input
+                              type="number"
+                              min={100}
+                              step={100}
+                              value={sceneMetas[sceneIndex]?.words ?? ""}
+                              onChange={(event) =>
+                                setSceneMeta(sceneIndex, {
+                                  words: event.target.value
+                                    ? Math.max(0, Number.parseInt(event.target.value, 10) || 0)
+                                    : undefined,
+                                })
+                              }
+                              placeholder="Wörter"
                               className="glass h-7 rounded-md border-white/10 text-[11px]"
                             />
                           </div>
@@ -1563,10 +1797,35 @@ export function BookDetailView({
 
       <CoverEditorDialog
         open={coverEditorOpen}
-        imageUrl={book.coverUrl}
+        imageUrl={coverTarget === "front" ? book.coverUrl : book.coverBackUrl}
+        target={coverTarget}
+        initialLayers={coverTarget === "front" ? book.coverLayers : book.coverBackLayers}
         defaultTitle={book.title}
+        defaultAuthor={authorName}
+        onTargetChange={setCoverTarget}
         onClose={() => setCoverEditorOpen(false)}
-        onSaved={(url) => onUpdate({ ...book, coverUrl: url })}
+        onSaved={(url) =>
+          onUpdate({
+            ...book,
+            ...(coverTarget === "front" ? { coverUrl: url } : { coverBackUrl: url }),
+          })
+        }
+        onSaveLayers={(layers) =>
+          onUpdate({
+            ...book,
+            ...(coverTarget === "front" ? { coverLayers: layers } : { coverBackLayers: layers }),
+          })
+        }
+      />
+
+      <CoverVariantsDialog
+        open={coverVariantsOpen}
+        storyboard={book.storyboard}
+        onClose={() => setCoverVariantsOpen(false)}
+        onPick={(url) => {
+          onUpdate({ ...book, coverUrl: url });
+          setCoverVariantsOpen(false);
+        }}
       />
     </div>
   );

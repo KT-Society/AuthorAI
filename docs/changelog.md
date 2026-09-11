@@ -6,6 +6,36 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ---
 
+## [0.2.0] — 2026-09-11
+
+### Schreiben & Struktur
+
+- **Added** **Szenen-Ziele**: Wortziel pro Szene — im Szenen-Editor pflegbar und als
+  verbindliche Vorgabe im Prompt (`Target: ~N words`).
+- **Added** **Timeline-Validierung**: `POST /api/timeline/check` prüft die Zeitangaben der
+  Szenen gegen die Kapitelreihenfolge (Rückwärtssprünge, unplausible Reise-/Vorbereitungszeiten,
+  Tag/Nacht, Daten) und liefert einen Bericht. Erreichbar über „Timeline prüfen" im Buch.
+- **Changed** Der Kohärenz-Pass berücksichtigt den Szenen-Block inklusive Zeitangaben.
+
+### Export & Ausgabe
+
+- **Added** **DOCX-Export** (Office Open XML, clientseitig) mit Titelblatt, Kapitel-
+  überschriften inkl. Seitenumbruch und Absätzen — für klassische Lektorats-Workflows.
+- **Added** **Teil-Export**: Gesamtbuch, Akt I–III oder das aktuelle Kapitel — wahlweise als
+  Markdown, EPUB oder DOCX (Auswahl direkt in der Buch-Ansicht).
+
+### Covers
+
+- **Added** **Cover-Varianten**: mehrere Entwürfe generieren und auswählen; nicht gewählte
+  Varianten werden automatisch gelöscht (keine verwaisten Bilder).
+- **Added** **Text-Presets** (Schriftpaare: Klassisch/Modern/Thriller/Roman) und
+  **Layout-Presets** (Titel oben · Autor unten / zentriert / unten).
+- **Added** **Front- und Back-Cover** inkl. Umschalter im Cover-Editor und Vorschau-Thumbnail.
+- **Added** **Cover-Text-Layer werden persistiert** („Nur Text speichern") und beim erneuten
+  Öffnen wieder geladen — Text bleibt editierbar statt nur eingebrannt.
+
+---
+
 ## [Unreleased]
 
 _Nichts offen — nächste Themen siehe [`roadmap.md`](roadmap.md)._

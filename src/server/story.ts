@@ -321,6 +321,7 @@ function sceneBlock(scenes: SceneConstraint[] | undefined, fallbackBeats: string
         scene.pov ? `POV: ${scene.pov}` : "",
         scene.setting ? `Setting: ${scene.setting}` : "",
         scene.time ? `Time: ${scene.time}` : "",
+        scene.words ? `Target: ~${scene.words} words` : "",
       ]
         .filter(Boolean)
         .join(" · ");
@@ -693,6 +694,75 @@ export function checkConsistency(input: PassInput): Promise<PassResult> {
 
 export function refineStyle(input: PassInput): Promise<PassResult> {
   return runPass("style", input);
+}
+
+/* ───────────────────────── timeline validation ───────────────────────── */
+
+export interface TimelineInput {
+  storyboard: Storyboard;
+  scenesByChapter: SceneConstraint[][];
+  model: string;
+  language: string;
+}
+
+export interface TimelineResult {
+  summary: string;
+  findings: string[];
+}
+
+function timelineSystem(language: string): string {
+  return `You are a continuity editor specialised in chronology.
+${languageLock(language)}
+
+TASK: check the chapter/scene timeline for contradictions and impossibilities:
+- times that jump backwards within a chapter's scene order
+- travel, preparation or recovery times that cannot fit the stated span
+- day/night, season or weather contradicting the order
+- ages, dates or durations that do not add up
+- scenes whose stated time is missing or clashes with the chapter summary
+
+Respond ONLY with a single valid JSON object:
+{ "summary": string, "findings": string[] }
+Rules:
+- findings: one short, concrete bullet per problem, referencing chapter and scene numbers.
+- If the chronology is consistent, findings MUST be an empty array and the summary should say so.
+- All text in ${language}.`;
+}
+
+export async function checkTimeline(input: TimelineInput): Promise<TimelineResult> {
+  const listing = input.storyboard.chapters
+    .map((chapter, index) => {
+      const scenes = input.scenesByChapter[index] ?? [];
+      const sceneLines = scenes
+        .map((scene, sceneIndex) => {
+          const parts = [
+            scene.time ? `[${scene.time}]` : "[no time]",
+            scene.setting ? `(${scene.setting})` : "",
+            scene.text,
+          ]
+            .filter(Boolean)
+            .join(" ");
+          return `   ${sceneIndex + 1}. ${parts}`;
+        })
+        .join("\n");
+      return `${index + 1}. ${chapter.title}\n   Setting: ${chapter.setting}\n   Summary: ${chapter.summary}\n${sceneLines || "   (no scenes)"}`;
+    })
+    .join("\n\n");
+
+  const content = await chatCompletion({
+    model: input.model,
+    system: timelineSystem(input.language),
+    user: `TIMELINE:\n${listing}\n\nCheck the chronology now and return the JSON, entirely in ${input.language}.`,
+    json: true,
+    maxTokens: 2500,
+    temperature: 0.3,
+  });
+
+  const parsed = parseJson(content, "Timeline");
+  return {
+    summary: str(parsed.summary),
+    findings: strArray(parsed.findings),
+  };
 }
 
 /* ───────────────────────────── world extraction ───────────────────────────── */

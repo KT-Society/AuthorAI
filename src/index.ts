@@ -13,6 +13,7 @@ import { isStandaloneBinary, runtimePort } from "./server/paths";
 import { runResearch } from "./server/research";
 import {
   checkConsistency,
+  checkTimeline,
   draftChapter,
   expandChapter,
   extractWorld,
@@ -66,6 +67,12 @@ function asScenes(value: unknown): SceneConstraint[] | undefined {
     });
   }
   return scenes.length > 0 ? scenes : undefined;
+}
+
+/** Szenen-Matrix (pro Kapitel) aus dem Request-Body. */
+function asSceneMatrix(value: unknown): SceneConstraint[][] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => asScenes(entry) ?? []);
 }
 
 function asStoryboard(value: unknown): Storyboard {
@@ -244,6 +251,27 @@ const server = serve({
             language,
             text,
             scenes: asScenes(body.scenes),
+          });
+          return Response.json(result);
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Timeline-Validierung über alle Kapitel/Szenen.
+    "/api/timeline/check": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const result = await checkTimeline({
+            storyboard,
+            scenesByChapter: asSceneMatrix(body.scenesByChapter),
+            model,
+            language,
           });
           return Response.json(result);
         } catch (err) {

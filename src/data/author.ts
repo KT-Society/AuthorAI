@@ -18,6 +18,11 @@ export interface Book {
   tags: string[];
   synopsis: string;
   coverUrl?: string;
+  /** Optionales Back-/Rückseiten-Cover. */
+  coverBackUrl?: string;
+  /** Persistierte Text-Layer (erneut editierbar statt nur eingebrannt). */
+  coverLayers?: import("./cover").CoverTextLayer[];
+  coverBackLayers?: import("./cover").CoverTextLayer[];
   /** Projekt-Vorgabe für Ziel-Wörter pro Kapitel (Kapitel können sie überschreiben). */
   defaultTargetWords?: number;
   storyboard?: Storyboard;

@@ -14,6 +14,8 @@ export interface SceneMeta {
   pov?: string;
   setting?: string;
   time?: string;
+  /** Wortziel dieser Szene (optional). */
+  words?: number;
 }
 
 /** An den Server übergebene, verbindliche Szenen-Vorgabe. */
@@ -23,6 +25,7 @@ export interface SceneConstraint {
   pov?: string;
   setting?: string;
   time?: string;
+  words?: number;
 }
 
 export interface StoryWorld {
@@ -133,6 +136,7 @@ export function sceneConstraints(
       pov: meta.pov,
       setting: meta.setting,
       time: meta.time,
+      words: meta.words,
     };
   });
 }
