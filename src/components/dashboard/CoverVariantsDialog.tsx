@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Image as ImageIcon, Loader2, RefreshCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,9 +25,18 @@ export function CoverVariantsDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [round, setRound] = useState(0);
+  /**
+   * StrictMode führt Effekte doppelt aus — ohne Guard würden statt 3 Bildern
+   * sechs generiert (und bezahlt).
+   */
+  const runKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open || !storyboard) return;
+    const runKey = `${count}:${round}`;
+    if (runKeyRef.current === runKey) return;
+    runKeyRef.current = runKey;
+
     let active = true;
     setBusy(true);
     setError(null);

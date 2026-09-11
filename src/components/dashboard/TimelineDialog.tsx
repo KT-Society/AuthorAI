@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Hourglass, Loader2, RefreshCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,11 @@ export function TimelineDialog({
   const [result, setResult] = useState<TimelineResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * React StrictMode führt Effekte im Dev-Modus doppelt aus (mount → cleanup → mount).
+   * Der Guard verhindert, dass der Check dadurch zweimal gesendet wird.
+   */
+  const startedRef = useRef(false);
 
   const run = () => {
     setBusy(true);
@@ -37,7 +42,8 @@ export function TimelineDialog({
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || startedRef.current) return;
+    startedRef.current = true;
     setResult(null);
     setError(null);
     run();
