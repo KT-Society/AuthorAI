@@ -1,0 +1,90 @@
+name: Fehler melden
+description: Etwas funktioniert nicht wie erwartet
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke fürs Melden! Bitte so präzise wie möglich — das spart Rückfragen.
+
+        ⚠️ **Wichtig:** Keine API-Keys in Logs oder Screenshots posten.
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Was ist passiert?
+      description: Beschreibe das tatsächliche Verhalten.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Was hast du erwartet?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Schritte zum Reproduzieren
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Betroffener Bereich
+      options:
+        - Dashboard
+        - Bibliothek / Buch-Editor / Reader
+        - Pipeline (Storyboard / Rohentwurf / Ausbau)
+        - Prüfungen (Kohärenz / Stil)
+        - Charaktere (inkl. Soul-Scan)
+        - Weltenbau
+        - Plot-Board
+        - Recherche
+        - Statistiken / Streak
+        - Cover
+        - Profile / Persistenz
+        - promptgen
+        - Doku / Tooling
+        - Sonstiges
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model (falls relevant)
+      description: Die verwendete OpenRouter-Model-ID (z. B. für Pipeline-Stufen)
+
+  - type: input
+    id: environment
+    attributes:
+      label: Umgebung
+      placeholder: "Bun-Version, OS, Browser"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Fehlermeldungen
+      description: Terminal-Output des Dev-Servers oder Browser-Konsole (ohne Keys)
+      render: shell
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checkliste
+      options:
+        - label: Ich habe geprüft, dass in Logs/Screenshots keine API-Keys sichtbar sind.
+          required: true
+        - label: Ich habe nach ähnlichen Issues gesucht.
+          required: true

@@ -57,6 +57,7 @@ Idee → Storyboard → Rohentwurf (~500 W) → Ausbau (3.000–5.000 W) → Koh
 ```bash
 bun install        # Root + alle Workspaces
 bun run dev        # Root-App :3000 + promptgen :3001
+bun run check      # Syntax-, Import- und Markdown-Link-Checks
 ```
 
 Danach im Browser **http://localhost:3000** öffnen, ein Profil anlegen und loslegen.
@@ -165,6 +166,17 @@ kein Dropdown, kein Default. Leer = erbt das Standard-Model.
 
 Konzept, Architektur, Pipeline, UI und Dokumentation entstehen gemeinschaftlich —
 KT-Society (Produkt & Betrieb) und Echo (Umsetzung & Systemlogik).
+
+---
+
+## Mitmachen
+
+Beiträge sind willkommen — Fehler melden, Ideen einbringen, Code, Doku oder Presets.
+
+- **[`CONTRIBUTING.md`](CONTRIBUTING.md)** — Workflow, Konventionen, Verifikation
+- **[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)** — unser Umgang miteinander
+- **[`SECURITY.md`](SECURITY.md)** — Sicherheitslücken privat melden
+- **[`docs/roadmap.md`](docs/roadmap.md)** — gute erste Aufgaben
 
 ---
 

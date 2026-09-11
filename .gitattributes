@@ -1,0 +1,22 @@
+# Standardisierte Zeilenenden (Repo wird auf Windows bearbeitet, CI läuft auf Linux)
+* text=auto eol=lf
+
+# Binärdateien nicht „normalisieren"
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary
+
+# Lockfile als generiert markieren (weniger Diff-Rauschen)
+bun.lock linguist-generated=true
+
+# Docs/Seeds: Sprache für Linguist
+*.md linguist-documentation
+src/data/*.ts linguist-vendored=false

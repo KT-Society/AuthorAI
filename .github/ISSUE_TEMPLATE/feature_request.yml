@@ -1,0 +1,62 @@
+name: Feature vorschlagen
+description: Eine Idee oder Verbesserung einbringen
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke für deine Idee! Hilfreich: das Problem, nicht nur die Lösung —
+        dann finden wir den besten Weg.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Welches Problem löst du?
+      description: Was ist heute umständlich, fehlt oder nervt?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Deine Idee
+      description: Wie stellst du dir die Lösung vor?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Bereich
+      options:
+        - Dashboard
+        - Bibliothek / Buch-Editor / Reader
+        - Pipeline (Storyboard / Rohentwurf / Ausbau)
+        - Prüfungen (Kohärenz / Stil)
+        - Charaktere / Soul-Scan
+        - Weltenbau
+        - Plot-Board
+        - Recherche
+        - Statistiken / Streak
+        - Cover
+        - Profile / Persistenz
+        - Export (EPUB / Markdown / Backup)
+        - promptgen
+        - Doku / Tooling
+        - Sonstiges
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativen
+      description: Gab es andere Wege, die du erwogen hast?
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Mitarbeit
+      options:
+        - label: Ich wäre bereit, das (mit) umzusetzen.

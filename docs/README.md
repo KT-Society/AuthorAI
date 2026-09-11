@@ -44,6 +44,8 @@ bun run dev     # App auf http://localhost:3000
 | [`troubleshooting.md`](troubleshooting.md) | alle | Wenn etwas klemmt |
 | [`changelog.md`](changelog.md) | alle | Was sich wann geändert hat |
 | [`roadmap.md`](roadmap.md) | alle | Was als Nächstes kommen kann |
+| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Mitwirkende | Workflow, Konventionen, Verifikation |
+| [`../CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md), [`../SECURITY.md`](../SECURITY.md) | alle | Umgang miteinander & Sicherheit |
 
 ## Konventionen dieser Doku
 
@@ -67,6 +69,7 @@ localStorage Pro-Profil-Persistenz  ·  covers/: generierte Bilder auf Platte
 - **Ich will es nur benutzen** → Root-`README.md`, dann `pipeline.md`.
 - **Ich will es verstehen** → `architecture.md`, dann `data-model.md`.
 - **Ich will es erweitern** → `development.md`, `api.md`, `architecture.md`.
+- **Ich will beitragen** → [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
 - **Es funktioniert nicht** → `troubleshooting.md`.
 
 ## Projekt & Credits

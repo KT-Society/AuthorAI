@@ -104,6 +104,21 @@ Charakteren, Welt, Plot, Recherche, Covern, Profilen und Statistiken.
 - Wochen-Balken unsichtbar (Prozent-Höhe ohne festen Parent).
 - `loadRootEnv` zeigte auf `packages/.env` statt auf das Repo-Root (Eltern-Suche statt fixer Pfad).
 
+### Docs, Richtlinien & Tooling
+
+- **Added** vollständige Dokumentation unter `docs/` (Architektur, Pipeline, Datenmodell,
+  API, Konfiguration, Entwicklung, Troubleshooting, Changelog, Roadmap).
+- **Added** Root-`README.md`, `AGENTS.md`, `LICENSE` (MIT), `CHANGELOG.md`, `SECURITY.md`,
+  `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`.
+- **Added** Screenshots in der README (`public/static/*.png`).
+- **Added** Community-Setup: Issue-Templates (Bug/Feature), PR-Template, PR-Checkliste.
+- **Added** `bun run check` (`scripts/check.ts`): Syntax, Imports, Markdown-Links — ohne Dependencies.
+- **Added** CI (`.github/workflows/ci.yml`): Install, Check, Build bei Push/PR.
+- **Added** `.env.example`, `.editorconfig`, `.gitattributes`.
+- **Changed** `.echo/` ist ignoriert (persönliche Agent-Konfiguration wird nicht veröffentlicht).
+- **Changed** Begrüßung nutzt den **Profilnamen** statt eines festen Namens.
+- **Changed** Entwickler-Angabe durchgängig: **KT-Society & Echo**.
+
 ---
 
 ## [0.0.0] — 2026-09-11

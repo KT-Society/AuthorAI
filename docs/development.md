@@ -3,6 +3,9 @@
 Alles, was du zum Mitarbeiten brauchst: Setup, Skripte, Konventionen und die
 Verifikations-Workflows, mit denen Änderungen abgesichert werden.
 
+Für den Beitrags-Workflow (Branch, Commit-Stil, PR-Regeln, Review):
+siehe [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
+
 ---
 
 ## Voraussetzungen
@@ -34,6 +37,7 @@ Keys siehe [`configuration.md`](configuration.md).
 | `bun run start` | Produktions-Builds servieren |
 | `bun run dev:root` / `build:root` / `start:root` | nur die Root-App |
 | `bun run --cwd packages/promptgen dev` | nur promptgen |
+| `bun run check` | Syntax-, Import- und Markdown-Link-Checks (`scripts/check.ts`) |
 | `ALL_DRY=1 bun run scripts/all.ts dev` | Tasks nur auflisten (Dry-Run) |
 
 ---
@@ -102,27 +106,22 @@ Keys siehe [`configuration.md`](configuration.md).
 
 ## Verifikation
 
-Da im Repo statisch gearbeitet wird, sind drei Checks Standard:
-
-### 1. Syntax-Check (Bun-Transpiler, ohne Dependencies)
+Da im Repo statisch gearbeitet wird, ist ein Check Pflicht:
 
 ```bash
-bun -e "const fs=require('node:fs'),path=require('node:path');
-const t=new Bun.Transpiler({loader:'tsx'});let bad=0,files=0;
-const walk=d=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){
-const p=path.join(d,e.name);if(e.isDirectory()){if(e.name==='node_modules')continue;walk(p);continue;}
-if(!/\.(ts|tsx)$/.test(e.name))continue;files++;
-try{t.transformSync(fs.readFileSync(p,'utf8'))}catch(err){bad++;console.log('FAIL',p,String(err.message))}}};
-walk('src');walk('packages/promptgen/src');
-console.log('checked',files,'files, failures:',bad);"
+bun run check
 ```
 
-### 2. Import-Auflösung
+`scripts/check.ts` prüft — ohne Dependencies, auch in CI:
 
-Prüft, dass alle relativen und `@/`-Importe auf existierende Dateien zeigen
-(kein Bundler nötig).
+1. **Syntax** — Bun-Transpiler über `src/` und `packages/promptgen/src`
+2. **Imports** — relative, `@/*` und `@promptgen/*` müssen existieren
+3. **Markdown-Links** — relative Ziele (inkl. Bilder) müssen existieren
 
-### 3. Echte Verifikation für kritische Pfade
+Der Check läuft in CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml))
+bei jedem Push und Pull Request.
+
+### Echte Verifikation für kritische Pfade
 
 Für Server-Logik mit externen APIs: **echter Test-Call** über ein temporäres Skript
 in `src/` (teilt `tsconfig`-Aliase), danach wieder löschen.

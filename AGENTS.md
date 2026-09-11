@@ -20,6 +20,7 @@ bun run start                # Produktions-Builds servieren
 bun run dev:root             # nur Root-App
 bun run --cwd packages/promptgen dev   # nur promptgen
 ALL_DRY=1 bun run scripts/all.ts dev   # Tasks nur auflisten
+bun run check                # Syntax-, Import- und Markdown-Link-Checks
 ```
 
 Ports: Root **3000**, promptgen **3001** (`PORT` überschreibbar).
@@ -108,12 +109,11 @@ Plot-Karten aus dem Storyboard ab (dedupliziert). Details: [`docs/pipeline.md`](
 
 Vor jedem „fertig":
 
-1. **Syntax-Check** (Bun-Transpiler, ohne Dependencies) über `src/` **und**
-   `packages/promptgen/src` — 0 Fehler.
-2. **Import-Check**: alle relativen und `@/`-Importe müssen auf existierende Dateien zeigen.
-3. **Kritische Pfade real testen** (temporäres Skript in `src/`, danach löschen):
+1. **`bun run check`** — Syntax (Bun-Transpiler) über `src/` **und**
+   `packages/promptgen/src`, Import-Auflösung und Markdown-Links. Muss grün sein.
+2. **Kritische Pfade real testen** (temporäres Skript in `src/`, danach löschen):
    Cover-Erzeugung, ein LLM-Pfad, pure Logik (z. B. `computeStreak`).
-4. **Markdown-Links** prüfen, wenn Doku geändert wurde.
+3. **Markdown-Links** prüft der Check automatisch mit.
 
 **Zero-Warning-Haltung:** Warnungen (Typen, Lint, Build) sind Mängel und werden an der
 Wurzel behoben. **Bestehende** Testfehler werden nicht eigenmächtig angefasst — vorher fragen.
@@ -144,4 +144,6 @@ Wurzel behoben. **Bestehende** Testfehler werden nicht eigenmächtig angefasst �
 | Konventionen & Verifikation | [`docs/development.md`](docs/development.md) |
 | Fehlerbehebung | [`docs/troubleshooting.md`](docs/troubleshooting.md) |
 | Historie & Planung | [`docs/changelog.md`](docs/changelog.md), [`docs/roadmap.md`](docs/roadmap.md) |
+| Beitragen | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Verhaltenskodex / Sicherheit | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), [`SECURITY.md`](SECURITY.md) |
 | Paket-Anleitung promptgen | [`packages/promptgen/AGENTS.md`](packages/promptgen/AGENTS.md) |
