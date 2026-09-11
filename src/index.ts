@@ -9,7 +9,7 @@ import path from "node:path";
 
 import type { Storyboard } from "./data/story";
 import { coversDir, generateCover, saveCoverImage } from "./server/cover";
-import { runtimePort } from "./server/paths";
+import { isStandaloneBinary, runtimePort } from "./server/paths";
 import { runResearch } from "./server/research";
 import {
   checkConsistency,
@@ -67,6 +67,22 @@ function errorResponse(err: unknown): Response {
   const message = err instanceof Error ? err.message : "Unbekannter Serverfehler.";
   console.error("[api]", message);
   return Response.json({ error: message }, { status });
+}
+
+/** Öffnet die App im Standard-Browser (Standalone-Feel; abschaltbar via AUTHORAI_OPEN=0). */
+function openInBrowser(url: string): void {
+  try {
+    const options = { stdio: ["ignore", "ignore", "ignore"] as const };
+    if (process.platform === "win32") {
+      Bun.spawn(["cmd", "/c", "start", "", url], options);
+    } else if (process.platform === "darwin") {
+      Bun.spawn(["open", url], options);
+    } else {
+      Bun.spawn(["xdg-open", url], options);
+    }
+  } catch {
+    // Browser-Start ist optional — Fehler dürfen den Server nicht stören.
+  }
 }
 
 const server = serve({
@@ -315,4 +331,14 @@ const server = serve({
   },
 });
 
-console.log(`🚀 AuthorAI running at ${server.url}`);
+const baseUrl = server.url.toString();
+
+console.log("");
+console.log("  AuthorAI");
+console.log(`  → ${baseUrl}`);
+console.log("  Daten bleiben lokal im Browser · Keys aus .env oder Umgebungsvariablen");
+console.log("");
+
+if (isStandaloneBinary() && process.env.AUTHORAI_OPEN !== "0") {
+  openInBrowser(baseUrl);
+}

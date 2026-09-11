@@ -67,12 +67,24 @@ Produktion:
 ```bash
 bun run build         # bündelt Root-App und Workspaces nach dist/
 bun run start         # serviert die Produktions-Builds
-bun run build:binary  # EINE ausführbare Datei: dist/authorai[.exe]
+bun run build:binary  # auslieferbarer Ordner release/ (Single-Binary + Beigaben)
 ```
 
-Das **Single-Binary** enthält Server **und** UI. Keys liest es aus einer `.env`
-**neben dem Binary** (oder aus Umgebungsvariablen); generierte Cover landen in
-`covers/` beim Binary.
+Das **Single-Binary** enthält Server **und** UI. `release/` enthält zusätzlich
+`LICENSE`, `README.md` und `.env.example` — also eine versandfertige Mappe:
+
+```
+release/
+├─ authorai.exe     Server + UI (eine Datei)
+├─ LICENSE          MIT — bei Weitergabe beilegen
+├─ README.md
+└─ .env.example
+```
+
+Keys liest das Binary aus einer `.env` **neben dem Binary** (oder aus
+Umgebungsvariablen); generierte Cover landen in `covers/` beim Binary.
+
+Für **Signierung, Installer und Auslieferung** siehe [`docs/release.md`](docs/release.md).
 
 Nur ein Paket:
 

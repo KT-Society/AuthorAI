@@ -25,3 +25,8 @@ export function runtimePort(fallback = 3000): number {
   const parsed = Number.parseInt(process.env.PORT ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
+
+/** True, wenn wir als kompiliertes Standalone-Binary laufen (nicht unter `bun`). */
+export function isStandaloneBinary(): boolean {
+  return !path.basename(process.execPath).toLowerCase().startsWith("bun");
+}

@@ -34,12 +34,15 @@ Keys siehe [`configuration.md`](configuration.md).
 | --- | --- |
 | `bun run dev` | Root **und** Workspaces im Dev-Modus (HMR) |
 | `bun run build` | Root **und** Workspaces bündeln (`dist/`) |
-| `bun run build:binary` | Standalone-Binary (Server + UI) — `dist/authorai[.exe]` |
+| `bun run build:binary` | Standalone-Release-Ordner `release/` (Binary + LICENSE/README/.env.example) |
 | `bun run start` | Produktions-Builds servieren |
 | `bun run dev:root` / `build:root` / `start:root` | nur die Root-App |
 | `bun run --cwd packages/promptgen dev` | nur promptgen |
 | `bun run check` | Syntax-, Import- und Markdown-Link-Checks (`scripts/check.ts`) |
 | `ALL_DRY=1 bun run scripts/all.ts dev` | Tasks nur auflisten (Dry-Run) |
+
+Für Signierung, Installer und Auslieferung: [`release.md`](release.md)
+(`scripts/release.ps1`, `scripts/sign-windows.ps1`, `scripts/build-installer.ps1`).
 
 ---
 

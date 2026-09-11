@@ -96,11 +96,28 @@ Charakteren, Welt, Plot, Recherche, Covern, Profilen und Statistiken.
 
 ### Standalone-Build
 
-- **Added** `bun run build:binary` — Server **und** UI in einer ausführbaren Datei
-  (`dist/authorai[.exe]`), inklusive Tailwind-Plugin und Produktions-Defines.
+- **Added** `bun run build:binary` — versandfertiger Ordner `release/` mit ausführbarer
+  Datei (Server + UI), `LICENSE`, `README.md` und `.env.example`; inklusive
+  Tailwind-Plugin und Produktions-Defines.
 - **Added** laufzeit-sichere Pfade: `runtimeRoot()` (Entwicklung: cwd · Binary: Binary-Verzeichnis)
   und `runtimePort()` (Standard 3000, `PORT` überschreibbar).
 - **Changed** Cover-Ablage und `.env`-Suche funktionieren auch neben einem Standalone-Binary.
+- **Changed** Release-Ordner ist `release/` (gitignored) — bewusst nicht `dist/`, weil der
+  Web-Build `dist/` leert.
+
+### Release-Kette (Windows)
+
+- **Added** Inno-Setup-Skript `installer/authorai.iss`: Per-User-Installation (kein UAC),
+  Start-Menü/Desktop-Verknüpfung, erste `.env` aus `.env.example`, Lizenz-Anzeige und
+  Deinstallation mit optionalem Entfernen von Covern/`.env`.
+- **Added** `scripts/release.ps1` (Ein-Befehl-Release), `scripts/build-installer.ps1`,
+  `scripts/sign-windows.ps1` (PFX oder Zertifikat-Thumbprint, SHA-256 + Zeitstempel, Verify).
+  Signierung ist **optional** — ohne Zertifikat wird sie übersprungen, der Rest läuft weiter.
+- **Added** Browser-Auto-Start im Standalone-Binary (`AUTHORAI_OPEN=0` schaltet ab).
+- **Added** Dokumentation [`docs/release.md`](release.md) mit Checkliste und Troubleshooting.
+- **Fixed** Installer-Skript: `InitializeUninstall` ist eine `function … : Boolean` (vorher
+  „Invalid prototype") und das Build-Skript meldet Inno-Fehler jetzt korrekt (Exit-Code-Prüfung).
+- **Noted** Lizenzhinweis zu Inno Setup für **kommerziellen** Vertrieb (ZIP/NSIS als Alternativen).
 
 ### Fixed
 

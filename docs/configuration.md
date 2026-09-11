@@ -102,8 +102,19 @@ kein Default**. Leer = erbt das Standard-Model.
 
 ## Single-Binary (Standalone)
 
-`bun run build:binary` erzeugt **eine ausführbare Datei** (`dist/authorai` bzw.
-`dist/authorai.exe`) mit Server **und** UI.
+`bun run build:binary` erzeugt einen **versandfertigen Ordner** `release/` mit einer
+ausführbaren Datei (Server **und** UI) plus Beigaben:
+
+```
+release/
+├─ authorai(.exe)   Server + UI in einer Datei
+├─ LICENSE          MIT — bei Weitergabe beilegen
+├─ README.md
+└─ .env.example
+```
+
+`release/` ist gitignored. Bewusst **nicht** in `dist/`, weil der Web-Build
+(`bun run build`) `dist/` leert.
 
 | Aspekt | Verhalten |
 | --- | --- |
@@ -112,15 +123,17 @@ kein Default**. Leer = erbt das Standard-Model.
 | **Port** | `PORT` (Standard **3000**) |
 | **Aufruf** | Binary starten, dann `http://localhost:3000` öffnen |
 | **Daten** | weiterhin im Browser, pro Profil |
+| **Größe** | ~90–100 MB (Bun-Runtime enthalten), komprimiert deutlich kleiner |
 
 ```bash
 bun run build:binary
-cd dist
+cd release
 ./authorai          # Windows: .\authorai.exe
 ```
 
 > Damit ist AuthorAI ohne Bun/Node auslieferbar — die Grundlage für eine
-> Desktop-Ausgabe an Endnutzer.
+> Desktop-Ausgabe an Endnutzer. Für **Windows-Warnungen** (SmartScreen) ist der
+> nächste Schritt eine Code-Signatur des Binaries.
 
 ---
 

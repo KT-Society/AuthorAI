@@ -142,6 +142,7 @@ Wurzel behoben. **Bestehende** Testfehler werden nicht eigenm√§chtig angefasst ‚
 | HTTP-API | [`docs/api.md`](docs/api.md) |
 | Env, Modelle, Profile | [`docs/configuration.md`](docs/configuration.md) |
 | Konventionen & Verifikation | [`docs/development.md`](docs/development.md) |
+| Release, Signierung, Installer | [`docs/release.md`](docs/release.md) |
 | Fehlerbehebung | [`docs/troubleshooting.md`](docs/troubleshooting.md) |
 | Historie & Planung | [`docs/changelog.md`](docs/changelog.md), [`docs/roadmap.md`](docs/roadmap.md) |
 | Beitragen | [`CONTRIBUTING.md`](CONTRIBUTING.md) |

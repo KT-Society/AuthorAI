@@ -32,11 +32,15 @@ bun install
 `--compile` braucht einen Entrypoint. Nutze das fertige Skript:
 
 ```bash
-bun run build:binary        # → dist/authorai[.exe]
+bun run build:binary        # → release/authorai[.exe] (+ Beigaben)
 ```
 
-Manuell wäre es `bun build --compile src/index.ts --outfile dist/authorai` —
-das Skript setzt zusätzlich das Tailwind-Plugin und die Produktions-Defines.
+Manuell wäre es `bun build --compile src/index.ts --outfile release/authorai` —
+das Skript setzt zusätzlich das Tailwind-Plugin, die Produktions-Defines und
+kopiert `LICENSE`, `README.md` und `.env.example` mit.
+
+> Lege dein Release **nicht** in `dist/` — `bun run build` leert dieses Verzeichnis.
+> `bun run build:binary` nutzt deshalb `release/`.
 
 ### Standalone-Binary findet die Keys nicht
 

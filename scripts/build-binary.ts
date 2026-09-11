@@ -1,19 +1,25 @@
 #!/usr/bin/env bun
 /**
- * Standalone-Binary: Server **und** UI in einer ausführbaren Datei.
+ * Standalone-Release: Server **und** UI in einer ausführbaren Datei — plus Beigaben.
  *
- *   bun run build:binary        →  dist/authorai  (bzw. dist\authorai.exe)
+ *   bun run build:binary
  *
- * Das Binary liest Keys aus einer `.env` neben dem Binary (oder aus
- * Umgebungsvariablen) und legt Cover in `covers/` beim Binary ab.
+ *   release/
+ *   ├─ authorai(.exe)     Server + UI (eine Datei)
+ *   ├─ LICENSE            MIT — muss bei Weitergabe dabei sein
+ *   ├─ README.md
+ *   └─ .env.example
+ *
+ * Bewusst NICHT in `dist/`, weil der Web-Build (`bun run build`) `dist/` leert.
  */
 
-import { mkdir, rm } from "node:fs/promises";
+import { copyFile, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 
 import tailwind from "bun-plugin-tailwind";
 
-const outDir = path.join(process.cwd(), "dist");
+const root = process.cwd();
+const outDir = path.join(root, "release");
 const outfile = path.join(outDir, process.platform === "win32" ? "authorai.exe" : "authorai");
 
 await rm(outDir, { recursive: true, force: true });
@@ -35,4 +41,15 @@ if (!result.success) {
   process.exit(1);
 }
 
-console.log(`✓ Standalone-Binary: ${path.relative(process.cwd(), outfile)}`);
+const extras = ["LICENSE", "README.md", ".env.example"];
+for (const file of extras) {
+  try {
+    await copyFile(path.join(root, file), path.join(outDir, file));
+  } catch {
+    console.warn(`· ${file} nicht gefunden — übersprungen`);
+  }
+}
+
+console.log(`✓ Release bereit: ${path.relative(root, outDir)}`);
+console.log(`  Enthält: ${path.basename(outfile)}, ${extras.join(", ")}`);
+console.log("  Start: Binary ausführen, .env daneben legen, http://localhost:3000 öffnen");

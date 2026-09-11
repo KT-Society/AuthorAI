@@ -41,6 +41,7 @@ bun run dev     # App auf http://localhost:3000
 | [`api.md`](api.md) | Entwickler | Alle HTTP-Routen mit Payloads |
 | [`configuration.md`](configuration.md) | Betreiber | `.env`, Modelle pro Stufe, Einstellungen, Profile |
 | [`development.md`](development.md) | Entwickler | Setup, Skripte, Konventionen, Verifikation |
+| [`release.md`](release.md) | Betreiber | Binary bauen, signieren, Installer, verteilen |
 | [`troubleshooting.md`](troubleshooting.md) | alle | Wenn etwas klemmt |
 | [`changelog.md`](changelog.md) | alle | Was sich wann geändert hat |
 | [`roadmap.md`](roadmap.md) | alle | Was als Nächstes kommen kann |
