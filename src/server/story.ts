@@ -34,6 +34,7 @@ import type {
 import { EMPTY_WORLD } from "../data/story";
 import { chatCompletion, chatCompletionDetailed, cleanJsonBlock } from "./llm";
 import { extractProse, looksTruncated } from "../lib/prose";
+import { filterNoOpNotes } from "../lib/passNotes";
 import { normalizeWorldTitle } from "../lib/worldMatch";
 
 export interface StoryboardInput {
@@ -744,7 +745,10 @@ OUTPUT FORMAT (exactly, no other text):
 ...the corrected chapter prose...
 </TEXT>
 <NOTES>
-- one short bullet per fixed issue
+- one short bullet per issue you ACTUALLY fixed, phrased as problem → fix
+  (e.g. "Zeitsprung rückwärts in Szene 3 → Reihenfolge korrigiert")
+- only quote text if the wording really changed; NEVER quote two identical strings
+- if you fixed nothing, write exactly: Keine Auffälligkeiten.
 </NOTES>
 You MUST return the COMPLETE chapter text inside <TEXT> — apply every fix and return the full prose, never a summary and never the unchanged original.
 Everything in ${language}.`;
@@ -766,7 +770,10 @@ OUTPUT FORMAT (exactly, no other text):
 ...the polished chapter prose...
 </TEXT>
 <NOTES>
-- one short bullet per notable improvement
+- one short bullet per improvement you ACTUALLY made, phrased as what changed and why
+  (e.g. "Schachtelsatz in Absatz 2 geteilt — Rhythmus")
+- only quote text if the wording really changed; NEVER quote two identical strings
+- if nothing needed changing, write exactly: Keine Auffälligkeiten.
 </NOTES>
 You MUST return the COMPLETE chapter text inside <TEXT> — apply every improvement and return the full prose, never a summary and never the unchanged original.
 Everything in ${language}.`;
@@ -888,10 +895,12 @@ Rewrite ONLY this part (~${chunkWords} words) — never the neighbouring parts, 
   }
 
   const changed = nextText !== previousText;
+  // Notizen ohne echte Änderung („A" wurde zu „A") verstopfen nur den Bericht.
+  const cleaned = filterNoOpNotes(notes);
   const finalNotes = changed
-    ? notes
+    ? cleaned.notes
     : [
-        ...notes,
+        ...cleaned.notes,
         "⚠️ Keine Textänderung erkannt — das Modell hat den Text unverändert zurückgegeben. Ggf. ein stärkeres Modell wählen.",
       ];
   if (looksTruncated(nextText)) {

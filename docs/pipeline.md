@@ -140,6 +140,8 @@ Teile werden gesammelt und dedupliziert.
 - **Stark gekürzt** (< 40 % der jeweiligen Länge) → Fehler, mit Teilnummer.
 - **Falscher Abschnitt** (Teil-Antwort > 160 % der Teil-Länge) → einmal nachfassen.
 - **Mitten im Satz** → automatische Fortsetzung (`completeProse`).
+- **No-Op-Notizen** („A" wurde zu „A") → gefiltert (`lib/passNotes.ts`); die `<NOTES>`-Regeln
+  im Prompt verbieten identische Vorher/Nachher-Zitate ausdrücklich.
 - **Unverändert** → Hinweis im Bericht: *„Keine Textänderung erkannt — ggf. stärkeres Modell."*
 
 Der überarbeitete Text **ersetzt** den Kapiteltext; der Bericht wird gespeichert und

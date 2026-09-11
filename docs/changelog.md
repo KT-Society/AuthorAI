@@ -33,6 +33,13 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ### Fixed
 
+- **Stil-/Kohärenz-Berichte mit No-Op-Notizen**: Kleine Modelle notierten „Änderungen", bei
+  denen beide Seiten identisch waren (z. B. `"ein Schlund … schien" wurde zu "ein Schlund …
+  schien" zur Verbesserung des Satzflusses`). Solche Zeilen dokumentieren nichts und
+  verstopfen den Prüfbericht. `lib/passNotes.ts` erkennt sie (Vorher/Nachher-Zitat plus
+  Änderungs-Marker, Vergleich ohne Satzzeichen/Leerraum) und entfernt sie; echte Notizen
+  bleiben. Die Prompts fordern zusätzlich ausdrücklich: nur Zitate, deren Wortlaut sich
+  wirklich geändert hat, sonst exakt „Keine Auffälligkeiten.".
 - **Kohärenz/Stil bei langen Kapiteln (502 „Antwort unvollständig")**: Beide Pässe verlangten
   die **komplette** überarbeitete Prosa in *einer* Antwort. Bei 3.000–5.000 Wörtern lief das
   ins Ausgabelimit (9000 Tokens angefragt, Modell stoppt früher) → Abbruch mitten im Kapitel.
