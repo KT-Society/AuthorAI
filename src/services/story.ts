@@ -3,7 +3,7 @@
  * Talks only to the local Bun server; keys never reach the browser.
  */
 
-import type { Storyboard, StoryWorld } from "@/data/story";
+import type { SceneConstraint, Storyboard, StoryWorld } from "@/data/story";
 
 import { postJson } from "./http";
 
@@ -25,6 +25,8 @@ export interface ChapterRequest {
   chapterIndex: number;
   model: string;
   language: string;
+  /** Verbindliche Szenen-Vorgaben (Beats + Figuren + POV/Schauplatz/Zeit). */
+  scenes?: SceneConstraint[];
 }
 
 export async function draftChapter(input: ChapterRequest): Promise<string> {
@@ -56,6 +58,7 @@ export interface PassRequest {
   model: string;
   language: string;
   text: string;
+  scenes?: SceneConstraint[];
 }
 
 export async function checkConsistency(input: PassRequest): Promise<PassResult> {

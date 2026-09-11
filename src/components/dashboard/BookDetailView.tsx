@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   FileText,
+  GripVertical,
   Image as ImageIcon,
   Layers,
   Loader2,
@@ -17,6 +18,7 @@ import {
   ScrollText,
   ShieldCheck,
   Sparkles,
+  Save,
   Trash2,
   Type,
   Users,
@@ -37,9 +39,10 @@ import {
   chapterTargetWords,
   countWords,
   manuscriptWordCount,
+  sceneConstraints,
   toParagraphs,
 } from "@/data/story";
-import type { ChapterContent, ChapterPlan } from "@/data/story";
+import type { ChapterContent, ChapterPlan, SceneConstraint, SceneMeta } from "@/data/story";
 import { MODEL_STAGE_LABELS, readLanguage, readStageModel } from "@/lib/generationSettings";
 import { manuscriptOf } from "@/lib/bookManuscript";
 import { buildCoverPrompt, generateCover } from "@/services/cover";
@@ -91,6 +94,8 @@ export function BookDetailView({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [coverEditorOpen, setCoverEditorOpen] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
 
   useEffect(() => {
     setSelectedIndex(initialChapterIndex);
@@ -123,6 +128,84 @@ export function BookDetailView({
         .length,
     [manuscript],
   );
+
+  /* ── Autosave: lokale Puffer, debounced persistiert ─────────────────── */
+
+  const [expandedBuffer, setExpandedBuffer] = useState(selected?.expanded ?? "");
+  const [draftBuffer, setDraftBuffer] = useState(selected?.draft ?? "");
+  const bufferIndexRef = useRef(safeIndex);
+  const commitRef = useRef<(index: number, patch: Partial<ChapterContent>) => void>(() => {});
+  const expandedBufferRef = useRef(expandedBuffer);
+  const draftBufferRef = useRef(draftBuffer);
+  const manuscriptRef = useRef(manuscript);
+  expandedBufferRef.current = expandedBuffer;
+  draftBufferRef.current = draftBuffer;
+  manuscriptRef.current = manuscript;
+
+  /** Ausstehende Puffer-Änderungen eines Kapitels sofort sichern. */
+  const flushBuffer = (index: number) => {
+    const chapter = manuscriptRef.current[index];
+    if (!chapter) return;
+    const patch: Partial<ChapterContent> = {};
+    if (expandedBufferRef.current !== (chapter.expanded ?? "")) {
+      patch.expanded = expandedBufferRef.current;
+    }
+    if (draftBufferRef.current !== (chapter.draft ?? "")) {
+      patch.draft = draftBufferRef.current;
+    }
+    if (Object.keys(patch).length > 0) commitRef.current(index, patch);
+  };
+
+  useEffect(() => {
+    const previousIndex = bufferIndexRef.current;
+    if (previousIndex !== safeIndex) flushBuffer(previousIndex);
+
+    bufferIndexRef.current = safeIndex;
+    setExpandedBuffer(selected?.expanded ?? "");
+    setDraftBuffer(selected?.draft ?? "");
+  }, [safeIndex, selected?.expanded, selected?.draft, manuscript]);
+
+  // Beim Verlassen des Editors ausstehende Änderungen sichern.
+  useEffect(
+    () => () => {
+      flushBuffer(bufferIndexRef.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (expandedBuffer === (selected?.expanded ?? "")) return;
+    const timer = setTimeout(() => {
+      if (bufferIndexRef.current === safeIndex) {
+        commitRef.current(safeIndex, { expanded: expandedBuffer });
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [expandedBuffer, safeIndex, selected?.expanded]);
+
+  useEffect(() => {
+    if (draftBuffer === (selected?.draft ?? "")) return;
+    const timer = setTimeout(() => {
+      if (bufferIndexRef.current === safeIndex) {
+        commitRef.current(safeIndex, { draft: draftBuffer });
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [draftBuffer, safeIndex, selected?.draft]);
+
+  const isDirty =
+    expandedBuffer !== (selected?.expanded ?? "") || draftBuffer !== (selected?.draft ?? "");
+
+  /** Verbindliche Szenen-Vorgaben (Beats + Figuren + Metadaten) für den Server. */
+  const scenesFor = (index: number): SceneConstraint[] => {
+    const chapter = manuscript[index];
+    if (!chapter) return [];
+    return sceneConstraints(
+      chapter,
+      plans[index],
+      (id) => characters.find((character) => character.id === id)?.name ?? "",
+    );
+  };
 
   const commit = (nextManuscript: ChapterContent[], nextPlans?: ChapterPlan[]) => {
     const reindexed = nextManuscript.map((chapter, index) => ({ ...chapter, index }));
@@ -160,6 +243,7 @@ export function BookDetailView({
       plans,
     );
   };
+  commitRef.current = updateChapter;
 
   const addChapter = () => {
     const index = manuscript.length;
@@ -193,24 +277,22 @@ export function BookDetailView({
     setSelectedIndex((prev) => Math.max(0, prev > index ? prev - 1 : prev));
   };
 
-  const moveChapter = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= manuscript.length) return;
+  /** Verschiebt ein Kapitel per Drag & Drop an die Zielposition. */
+  const reorderChapter = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0) return;
+    if (from >= manuscript.length || to >= manuscript.length) return;
+
     const nextManuscript = [...manuscript];
     const nextPlans = [...plans];
-    const a = nextManuscript[index];
-    const b = nextManuscript[target];
-    const pa = nextPlans[index];
-    const pb = nextPlans[target];
-    if (!a || !b) return;
-    nextManuscript[index] = b;
-    nextManuscript[target] = a;
-    if (pa && pb) {
-      nextPlans[index] = pb;
-      nextPlans[target] = pa;
-    }
+    const [movedContent] = nextManuscript.splice(from, 1);
+    const [movedPlan] = nextPlans.splice(from, 1);
+    if (!movedContent) return;
+
+    nextManuscript.splice(to, 0, movedContent);
+    if (movedPlan) nextPlans.splice(to, 0, movedPlan);
+
     commit(nextManuscript, plans.length > 0 ? nextPlans : undefined);
-    setSelectedIndex(target);
+    setSelectedIndex(to);
   };
 
   const toggleChapterCharacter = (index: number, characterId: string) => {
@@ -223,18 +305,77 @@ export function BookDetailView({
     updateChapter(index, { characterIds: next });
   };
 
-  const toggleBeatCharacter = (index: number, beatIndex: number, characterId: string) => {
-    const chapter = manuscript[index];
-    if (!chapter) return;
-    const beatCount = plans[index]?.beats.length ?? 0;
-    const grid: string[][] = Array.from({ length: Math.max(beatCount, chapter.beatCharacters?.length ?? 0) }, (_, i) => [
-      ...(chapter.beatCharacters?.[i] ?? []),
-    ]);
-    const current = grid[beatIndex] ?? [];
-    grid[beatIndex] = current.includes(characterId)
-      ? current.filter((id) => id !== characterId)
-      : [...current, characterId];
-    updateChapter(index, { beatCharacters: grid });
+  /* ── Szenen (Beats als editierbare Untereinheiten) ───────────────────── */
+
+  const scenes = plan?.beats ?? [];
+  const sceneChars: string[][] = scenes.map((_, index) => selected?.beatCharacters?.[index] ?? []);
+  const sceneMetas: SceneMeta[] = scenes.map((_, index) => selected?.sceneMeta?.[index] ?? {});
+
+  const writeScenes = (nextScenes: string[], nextChars: string[][], nextMetas: SceneMeta[]) => {
+    const nextPlans = plans.map((item, index) =>
+      index === safeIndex ? { ...item, beats: nextScenes } : item,
+    );
+    const nextManuscript = manuscript.map((chapter, index) =>
+      index === safeIndex
+        ? { ...chapter, beatCharacters: nextChars, sceneMeta: nextMetas }
+        : chapter,
+    );
+    commit(nextManuscript, plans.length > 0 ? nextPlans : undefined);
+  };
+
+  const setSceneText = (index: number, text: string) =>
+    writeScenes(
+      scenes.map((scene, i) => (i === index ? text : scene)),
+      sceneChars,
+      sceneMetas,
+    );
+
+  const setSceneMeta = (index: number, patch: SceneMeta) =>
+    writeScenes(
+      scenes,
+      sceneChars,
+      sceneMetas.map((meta, i) => (i === index ? { ...meta, ...patch } : meta)),
+    );
+
+  const addScene = () => writeScenes([...scenes, ""], [...sceneChars, []], [...sceneMetas, {}]);
+
+  const removeScene = (index: number) =>
+    writeScenes(
+      scenes.filter((_, i) => i !== index),
+      sceneChars.filter((_, i) => i !== index),
+      sceneMetas.filter((_, i) => i !== index),
+    );
+
+  const moveScene = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= scenes.length) return;
+
+    const nextScenes = [...scenes];
+    const nextChars = [...sceneChars];
+    const nextMetas = [...sceneMetas];
+    const sceneA = nextScenes[index];
+    const sceneB = nextScenes[target];
+    if (sceneA === undefined || sceneB === undefined) return;
+
+    nextScenes[index] = sceneB;
+    nextScenes[target] = sceneA;
+    nextChars[index] = sceneChars[target] ?? [];
+    nextChars[target] = sceneChars[index] ?? [];
+    nextMetas[index] = sceneMetas[target] ?? {};
+    nextMetas[target] = sceneMetas[index] ?? {};
+
+    writeScenes(nextScenes, nextChars, nextMetas);
+  };
+
+  const toggleSceneCharacter = (index: number, characterId: string) => {
+    const current = sceneChars[index] ?? [];
+    const nextChars = sceneChars.map((list, i) => {
+      if (i !== index) return list;
+      return current.includes(characterId)
+        ? current.filter((id) => id !== characterId)
+        : [...current, characterId];
+    });
+    writeScenes(scenes, nextChars, sceneMetas);
   };
 
   const runAllPasses = async (kind: "consistency" | "style") => {
@@ -277,6 +418,7 @@ export function BookDetailView({
           model,
           language,
           text: current[chapterIndex]?.expanded ?? "",
+          scenes: scenesFor(chapterIndex),
         };
         const result =
           kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
@@ -324,6 +466,7 @@ export function BookDetailView({
         chapterIndex: index,
         model,
         language,
+        scenes: scenesFor(index),
       });
       updateChapter(index, { draft });
       onWordsWritten(countWords(draft));
@@ -335,7 +478,9 @@ export function BookDetailView({
   };
 
   const targetFor = (chapter: ChapterContent | undefined): number =>
-    chapter ? chapterTargetWords(chapter) : EXPAND_DEFAULT_WORDS;
+    chapter
+      ? chapterTargetWords(chapter, book.defaultTargetWords)
+      : (book.defaultTargetWords ?? EXPAND_DEFAULT_WORDS);
 
   const runPass = async (kind: "consistency" | "style", index: number) => {
     if (!book.storyboard) {
@@ -361,6 +506,7 @@ export function BookDetailView({
         model,
         language,
         text: source,
+        scenes: scenesFor(index),
       };
       const result = kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
       updateChapter(index, {
@@ -396,6 +542,7 @@ export function BookDetailView({
         language,
         draft: manuscript[index]?.draft ?? "",
         targetWords: targetFor(manuscript[index]),
+        scenes: scenesFor(index),
       });
       updateChapter(index, { expanded });
       onWordsWritten(countWords(expanded));
@@ -441,6 +588,7 @@ export function BookDetailView({
           language,
           draft: current[chapterIndex]?.draft ?? "",
           targetWords: targetFor(current[chapterIndex]),
+          scenes: scenesFor(chapterIndex),
         });
         current = current.map((chapter, i) =>
           i === chapterIndex ? { ...chapter, expanded } : chapter,
@@ -488,11 +636,6 @@ export function BookDetailView({
       .join("\n\n— — —\n\n");
     return header + body;
   }, [book.title, book.subtitle, manuscript]);
-
-  const chapterCharacters = (index: number): Character[] => {
-    const ids = manuscript[index]?.characterIds ?? [];
-    return characters.filter((character) => ids.includes(character.id));
-  };
 
   return (
     <div>
@@ -595,6 +738,38 @@ export function BookDetailView({
 
             <div className="mt-4">
               <ProgressBar value={progress} tone={book.status === "published" ? "emerald" : "cyan"} />
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-end gap-4">
+              <div className="w-44">
+                <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">
+                  Ziel-Wörter pro Kapitel (Projekt)
+                </label>
+                <Input
+                  type="number"
+                  min={EXPAND_MIN_WORDS}
+                  max={EXPAND_MAX_WORDS}
+                  step={250}
+                  value={book.defaultTargetWords ?? EXPAND_DEFAULT_WORDS}
+                  onChange={(event) =>
+                    onUpdate({
+                      ...book,
+                      defaultTargetWords: Math.max(
+                        EXPAND_MIN_WORDS,
+                        Math.min(
+                          EXPAND_MAX_WORDS,
+                          Number.parseInt(event.target.value, 10) || EXPAND_DEFAULT_WORDS,
+                        ),
+                      ),
+                      updatedAt: new Date().toISOString(),
+                    })
+                  }
+                  className="glass h-9 rounded-lg border-white/10 text-sm"
+                />
+              </div>
+              <p className="pb-2 text-[11px] text-muted-foreground">
+                Vorgabe für alle Kapitel ohne eigene Ziel-Wörter.
+              </p>
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
@@ -766,16 +941,49 @@ export function BookDetailView({
                 const statusMeta = chapterStatus(chapter);
                 const words = countWords(chapter.expanded || chapter.draft);
                 const isActive = index === safeIndex;
-                const roster = chapterCharacters(index);
                 return (
                   <div
                     key={index}
+                    onDragOver={(event) => {
+                      if (dragIndex === null) return;
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                      setDragOver(index);
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const raw = event.dataTransfer.getData("text/plain");
+                      const from = Number.parseInt(raw, 10);
+                      if (Number.isFinite(from)) reorderChapter(from, index);
+                      setDragIndex(null);
+                      setDragOver(null);
+                    }}
+                    onDragLeave={() => setDragOver((prev) => (prev === index ? null : prev))}
                     className={cn(
                       "group rounded-lg px-2 py-2 transition-colors",
                       isActive ? "bg-white/10" : "hover:bg-white/5",
+                      dragIndex === index && "opacity-50",
+                      dragOver === index && dragIndex !== null && dragIndex !== index &&
+                        "ring-1 ring-brand-cyan/60",
                     )}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        draggable
+                        onDragStart={(event) => {
+                          setDragIndex(index);
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData("text/plain", String(index));
+                        }}
+                        onDragEnd={() => {
+                          setDragIndex(null);
+                          setDragOver(null);
+                        }}
+                        title="Ziehen zum Sortieren"
+                        className="shrink-0 cursor-grab rounded p-1 text-muted-foreground/50 transition-colors hover:text-foreground active:cursor-grabbing"
+                      >
+                        <GripVertical className="size-3.5" />
+                      </span>
                       <button
                         type="button"
                         onClick={() => setSelectedIndex(index)}
@@ -795,29 +1003,13 @@ export function BookDetailView({
                           <span className="block truncate text-sm">{chapter.title}</span>
                           <span className="block text-[10px] text-muted-foreground">
                             {words > 0 ? `${words} Wörter` : "leer"}
-                            {roster.length > 0 ? ` · ${roster.length} Figur(en)` : ""}
+                            {(plans[index]?.beats.length ?? 0) > 0
+                              ? ` · ${plans[index]?.beats.length} Szenen`
+                              : ""}
                           </span>
                         </span>
                       </button>
                       <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                        <button
-                          type="button"
-                          onClick={() => moveChapter(index, -1)}
-                          disabled={index === 0}
-                          className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
-                          title="Nach oben"
-                        >
-                          <ArrowUp className="size-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveChapter(index, 1)}
-                          disabled={index === manuscript.length - 1}
-                          className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
-                          title="Nach unten"
-                        >
-                          <ArrowDown className="size-3" />
-                        </button>
                         <button
                           type="button"
                           onClick={() => removeChapter(index)}
@@ -983,7 +1175,7 @@ export function BookDetailView({
                       min={EXPAND_MIN_WORDS}
                       max={EXPAND_MAX_WORDS}
                       step={250}
-                      value={chapterTargetWords(selected)}
+                      value={chapterTargetWords(selected, book.defaultTargetWords)}
                       onChange={(event) =>
                         updateChapter(safeIndex, {
                           targetWords: Math.max(
@@ -1001,7 +1193,9 @@ export function BookDetailView({
                   <div className="text-[11px] text-muted-foreground">
                     Ist: {(countWords(selected.expanded) || 0).toLocaleString("de-DE")} Wörter ·{" "}
                     {Math.round(
-                      ((countWords(selected.expanded) || 0) / chapterTargetWords(selected)) * 100,
+                      ((countWords(selected.expanded) || 0) /
+                        chapterTargetWords(selected, book.defaultTargetWords)) *
+                        100,
                     )}{" "}
                     %
                   </div>
@@ -1042,26 +1236,34 @@ export function BookDetailView({
 
                 <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
                   <span>Kapiteltext (ausgebaut)</span>
-                  <span>{countWords(selected.expanded).toLocaleString("de-DE")} Wörter</span>
+                  <span className="inline-flex items-center gap-2">
+                    {isDirty ? (
+                      <span className="text-brand-amber">speichert…</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 opacity-70">
+                        <Save className="size-3" />
+                        automatisch gespeichert
+                      </span>
+                    )}
+                    {countWords(expandedBuffer).toLocaleString("de-DE")} Wörter
+                  </span>
                 </div>
                 <Textarea
                   rows={18}
-                  value={selected.expanded}
-                  onChange={(event) =>
-                    updateChapter(safeIndex, { expanded: event.target.value })
-                  }
+                  value={expandedBuffer}
+                  onChange={(event) => setExpandedBuffer(event.target.value)}
                   placeholder="Noch nicht ausgebaut …"
                   className="glass rounded-xl border-white/10 text-sm leading-relaxed"
                 />
 
                 <details className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
                   <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
-                    Rohentwurf ({countWords(selected.draft).toLocaleString("de-DE")} Wörter)
+                    Rohentwurf ({countWords(draftBuffer).toLocaleString("de-DE")} Wörter)
                   </summary>
                   <Textarea
                     rows={5}
-                    value={selected.draft}
-                    onChange={(event) => updateChapter(safeIndex, { draft: event.target.value })}
+                    value={draftBuffer}
+                    onChange={(event) => setDraftBuffer(event.target.value)}
                     placeholder="Kein Rohentwurf vorhanden …"
                     className="glass mt-3 rounded-lg border-white/10 text-sm"
                   />
@@ -1070,58 +1272,142 @@ export function BookDetailView({
                 {plan ? (
                   <details className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
                     <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
-                      Kapitel-Plan, Beats &amp; Foreshadowing
+                      Kapitel-Plan &amp; Foreshadowing
                     </summary>
-                    <div className="mt-3 space-y-3 text-sm text-foreground/80">
-                      {plan.summary ? <p>{plan.summary}</p> : null}
-
-                      {plan.beats.length > 0 ? (
-                        <div className="space-y-2">
-                          {plan.beats.map((beat, beatIndex) => {
-                            const beatChars = selected.beatCharacters?.[beatIndex] ?? [];
-                            return (
-                              <div
-                                key={beatIndex}
-                                className="rounded-lg border border-white/10 bg-white/5 p-2"
-                              >
-                                <p className="text-xs text-muted-foreground">{beat}</p>
-                                {characters.length > 0 ? (
-                                  <div className="mt-1.5 flex flex-wrap gap-1">
-                                    {characters.map((character) => {
-                                      const active = beatChars.includes(character.id);
-                                      return (
-                                        <button
-                                          key={character.id}
-                                          type="button"
-                                          onClick={() =>
-                                            toggleBeatCharacter(safeIndex, beatIndex, character.id)
-                                          }
-                                          className={cn(
-                                            "rounded-full border px-1.5 py-0.5 text-[10px] transition-colors",
-                                            active
-                                              ? "border-brand-violet/40 bg-brand-violet/10 text-brand-violet"
-                                              : "border-white/10 bg-white/5 text-muted-foreground/70 hover:text-foreground",
-                                          )}
-                                        >
-                                          {character.name}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                ) : null}
-                              </div>
-                            );
-                          })}
-                        </div>
+                    <div className="mt-3 space-y-2 text-sm text-foreground/80">
+                      {plan.summary ? (
+                        <p>{plan.summary}</p>
                       ) : (
-                        <p className="text-[11px] text-muted-foreground">Keine Beats hinterlegt.</p>
+                        <p className="text-[11px] text-muted-foreground">Keine Zusammenfassung.</p>
                       )}
-
                       {plan.foreshadowing.length > 0 ? (
                         <p className="text-[11px] text-brand-violet">
                           Foreshadowing: {plan.foreshadowing.join(" · ")}
                         </p>
                       ) : null}
+                    </div>
+                  </details>
+                ) : null}
+
+                {plan ? (
+                  <details open className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                    <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
+                      Szenen ({scenes.length})
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                      {scenes.length === 0 ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          Noch keine Szenen — gliedere das Kapitel in Beats.
+                        </p>
+                      ) : null}
+
+                      {scenes.map((scene, sceneIndex) => (
+                        <div
+                          key={sceneIndex}
+                          className="rounded-lg border border-white/10 bg-white/5 p-2"
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="mt-1 flex size-5 shrink-0 items-center justify-center rounded bg-white/10 text-[10px] font-bold">
+                              {sceneIndex + 1}
+                            </span>
+                            <Textarea
+                              rows={2}
+                              value={scene}
+                              onChange={(event) => setSceneText(sceneIndex, event.target.value)}
+                              placeholder="Szene / Beat …"
+                              className="glass rounded-lg border-white/10 text-sm"
+                            />
+                            <div className="flex shrink-0 flex-col gap-0.5">
+                              <button
+                                type="button"
+                                onClick={() => moveScene(sceneIndex, -1)}
+                                disabled={sceneIndex === 0}
+                                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+                                title="Nach oben"
+                              >
+                                <ArrowUp className="size-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => moveScene(sceneIndex, 1)}
+                                disabled={sceneIndex === scenes.length - 1}
+                                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+                                title="Nach unten"
+                              >
+                                <ArrowDown className="size-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeScene(sceneIndex)}
+                                className="rounded p-1 text-muted-foreground transition-colors hover:text-brand-rose"
+                                title="Szene löschen"
+                              >
+                                <Trash2 className="size-3" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="mt-1.5 grid grid-cols-1 gap-1.5 pl-7 sm:grid-cols-3">
+                            <Input
+                              value={sceneMetas[sceneIndex]?.pov ?? ""}
+                              onChange={(event) =>
+                                setSceneMeta(sceneIndex, { pov: event.target.value })
+                              }
+                              placeholder="POV"
+                              className="glass h-7 rounded-md border-white/10 text-[11px]"
+                            />
+                            <Input
+                              value={sceneMetas[sceneIndex]?.setting ?? ""}
+                              onChange={(event) =>
+                                setSceneMeta(sceneIndex, { setting: event.target.value })
+                              }
+                              placeholder="Schauplatz"
+                              className="glass h-7 rounded-md border-white/10 text-[11px]"
+                            />
+                            <Input
+                              value={sceneMetas[sceneIndex]?.time ?? ""}
+                              onChange={(event) =>
+                                setSceneMeta(sceneIndex, { time: event.target.value })
+                              }
+                              placeholder="Zeit"
+                              className="glass h-7 rounded-md border-white/10 text-[11px]"
+                            />
+                          </div>
+
+                          {characters.length > 0 ? (
+                            <div className="mt-1.5 flex flex-wrap gap-1 pl-7">
+                              {characters.map((character) => {
+                                const active = (sceneChars[sceneIndex] ?? []).includes(character.id);
+                                return (
+                                  <button
+                                    key={character.id}
+                                    type="button"
+                                    onClick={() => toggleSceneCharacter(sceneIndex, character.id)}
+                                    className={cn(
+                                      "rounded-full border px-1.5 py-0.5 text-[10px] transition-colors",
+                                      active
+                                        ? "border-brand-violet/40 bg-brand-violet/10 text-brand-violet"
+                                        : "border-white/10 bg-white/5 text-muted-foreground/70 hover:text-foreground",
+                                    )}
+                                  >
+                                    {character.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="glass rounded-lg border-white/10"
+                        onClick={addScene}
+                      >
+                        <Plus className="size-3.5" />
+                        Szene hinzufügen
+                      </Button>
                     </div>
                   </details>
                 ) : null}

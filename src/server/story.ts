@@ -23,7 +23,14 @@ import {
   MIN_CHAPTERS,
   countWords,
 } from "../data/story";
-import type { ChapterPlan, Storyboard, StoryCharacter, StoryWorld, WorldItem } from "../data/story";
+import type {
+  ChapterPlan,
+  SceneConstraint,
+  Storyboard,
+  StoryCharacter,
+  StoryWorld,
+  WorldItem,
+} from "../data/story";
 import { EMPTY_WORLD } from "../data/story";
 import { chatCompletion, cleanJsonBlock } from "./llm";
 
@@ -297,9 +304,38 @@ export interface ChapterInput {
   chapterIndex: number;
   model: string;
   language: string;
+  scenes?: SceneConstraint[];
 }
 
-function storyboardContext(storyboard: Storyboard, chapter: ChapterPlan): string {
+/** Rendert die verbindlichen Szenen (oder fällt auf die Plan-Beats zurück). */
+function sceneBlock(scenes: SceneConstraint[] | undefined, fallbackBeats: string[]): string {
+  if (!scenes || scenes.length === 0) {
+    return fallbackBeats.length > 0
+      ? fallbackBeats.map((beat) => `- ${beat}`).join("\n")
+      : "- (none)";
+  }
+
+  return scenes
+    .map((scene, index) => {
+      const meta = [
+        scene.pov ? `POV: ${scene.pov}` : "",
+        scene.setting ? `Setting: ${scene.setting}` : "",
+        scene.time ? `Time: ${scene.time}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      const characters =
+        scene.characters.length > 0 ? `\n   Characters present: ${scene.characters.join(", ")}` : "";
+      return `${index + 1}. ${scene.text}${meta ? `\n   ${meta}` : ""}${characters}`;
+    })
+    .join("\n");
+}
+
+function storyboardContext(
+  storyboard: Storyboard,
+  chapter: ChapterPlan,
+  scenes?: SceneConstraint[],
+): string {
   const characters = storyboard.characters
     .map((character) => `- ${character.name} (${character.role}): ${character.description}`)
     .join("\n");
@@ -319,8 +355,8 @@ CHAPTER ${chapter.index + 1}: ${chapter.title}
 SETTING: ${chapter.setting}
 POV: ${chapter.pov}
 SUMMARY: ${chapter.summary}
-BEATS:
-${chapter.beats.map((beat) => `- ${beat}`).join("\n") || "- (none)"}
+SCENES (binding — follow in this order):
+${sceneBlock(scenes, chapter.beats)}
 FORESHADOWING:
 ${chapter.foreshadowing.map((item) => `- ${item}`).join("\n") || "- (none)"}`;
 }
@@ -330,7 +366,8 @@ function roughDraftSystem(language: string): string {
 ${languageLock(language)}
 Write ONLY the chapter prose — no headings, no titles, no commentary, no bullet points.
 Target roughly 500 words. Prioritise forward motion over polish: get the scene, the conflict and the turn on the page.
-Follow the provided beats in order, stay in the given POV, and end on a hook that makes the next chapter inevitable.
+The SCENES block in the context is BINDING: keep the scenes in the given order, honour each scene's POV, setting and time, and let every listed character appear in that scene.
+End on a hook that makes the next chapter inevitable.
 Write ALL prose in ${language}.`;
 }
 
@@ -340,7 +377,7 @@ export async function draftChapter(input: ChapterInput): Promise<string> {
     throw new ApiError("Kapitel nicht gefunden.", 400);
   }
 
-  const user = `${storyboardContext(input.storyboard, chapter)}
+  const user = `${storyboardContext(input.storyboard, chapter, input.scenes)}
 
 OUTPUT LANGUAGE: ${input.language}
 Write the ~500 word rough draft of this chapter now.`;
@@ -370,6 +407,7 @@ CRAFT RULES (all mandatory):
 - SENSORY GROUNDING: concrete sights, sounds, smells, textures of the setting.
 - SUBTEXT: dialogue carries what characters avoid saying.
 - No purple prose, no clichés, no filler, no repetition of the same beat.
+- SCENES: the binding SCENES block defines the chapter's structure — keep the scenes in order, honour each scene's POV/setting/time, and make every listed character appear in that scene.
 - Keep all plot beats and the ending direction intact, but you may add interiority, dialogue and connective tissue.
 - End the chapter on a hook or an emotional turn.
 
@@ -415,7 +453,7 @@ export async function expandChapter(input: ExpandInput): Promise<string> {
   );
 
   const system = expansionSystem(input.language, target);
-  const user = `${storyboardContext(input.storyboard, chapter)}
+  const user = `${storyboardContext(input.storyboard, chapter, input.scenes)}
 
 OUTPUT LANGUAGE: ${input.language}
 TARGET LENGTH: at least ${target} words.
@@ -484,9 +522,14 @@ export interface PassInput {
   model: string;
   language: string;
   text: string;
+  scenes?: SceneConstraint[];
 }
 
-function passContext(storyboard: Storyboard, chapterIndex: number): string {
+function passContext(
+  storyboard: Storyboard,
+  chapterIndex: number,
+  scenes?: SceneConstraint[],
+): string {
   const chapter = storyboard.chapters[chapterIndex];
   const previous = storyboard.chapters[chapterIndex - 1];
   const next = storyboard.chapters[chapterIndex + 1];
@@ -507,8 +550,8 @@ ${characters || "- (none specified)"}
 PREVIOUS CHAPTER: ${previous ? `${previous.title} — ${previous.summary}` : "(first chapter)"}
 CURRENT CHAPTER ${chapterIndex + 1}: ${chapter?.title ?? ""}
 PLAN: ${chapter?.summary ?? ""}
-BEATS:
-${(chapter?.beats ?? []).map((beat) => `- ${beat}`).join("\n") || "- (none)"}
+SCENES (binding — follow in this order):
+${sceneBlock(scenes, chapter?.beats ?? [])}
 FORESHADOWING: ${(chapter?.foreshadowing ?? []).join(" · ") || "- (none)"}
 NEXT CHAPTER: ${next ? `${next.title} — ${next.summary}` : "(final chapter — the story must be resolved here)"}`;
 }
@@ -556,6 +599,7 @@ TASK: audit the given chapter against the storyboard context AND the neighbourin
 - timeline, location and cause/effect errors
 - characters acting against their established voice or motivation
 - foreshadowing that is ignored, misused or contradicted
+- deviations from the binding SCENES block (order, POV/setting/time, characters present)
 - sudden jumps, unclear staging, dropped threads
 Keep the plot direction, the length and the voice. Do not shorten the chapter.
 
@@ -601,7 +645,7 @@ async function runPass(kind: "consistency" | "style", input: PassInput): Promise
   const content = await chatCompletion({
     model: input.model,
     system: kind === "consistency" ? consistencySystem(input.language) : styleSystem(input.language),
-    user: `${passContext(input.storyboard, input.chapterIndex)}
+    user: `${passContext(input.storyboard, input.chapterIndex, input.scenes)}
 
 CHAPTER TEXT:
 ${input.text}

@@ -8,11 +8,10 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 ## Nah dran (hoher Nutzen, überschaubar)
 
 ### Schreiben & Struktur
-- **Kapitel per Drag & Drop** sortieren (statt ▲/▼)
-- **Szenen-Ebene** innerhalb eines Kapitels (Beats als Untereinheiten editierbar)
-- **Beat-basierter Ausbau**: ausgewählte Figuren/Beats als harte Vorgaben in den Prompt
-- **Autosave** im Editor (debounced) zusätzlich zum manuellen Speichern
-- **Kapitel-Ziel-Wörter als Preset** pro Projekt (ein Wert statt pro Kapitel)
+- **Szenen-Ziele**: Wortziel pro Szene (nicht nur pro Kapitel)
+- **Timeline-Validierung**: Zeitangaben der Szenen gegen die Kapitelreihenfolge prüfen
+- **Kapitel-Versionierung**: Historie mit Wiederherstellung
+- **Szenen-Vorlagen**: wiederverwendbare Szenen-Muster (z. B. „Verfolgungsjagd")
 
 ### Export & Ausgabe
 - **EPUB-Export** (Kapitel + Cover + Metadaten)

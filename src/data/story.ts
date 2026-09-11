@@ -9,6 +9,22 @@ export interface WorldItem {
   description: string;
 }
 
+/** Optionale Metadaten je Szene (parallel zur Szenen-/Beat-Liste). */
+export interface SceneMeta {
+  pov?: string;
+  setting?: string;
+  time?: string;
+}
+
+/** An den Server übergebene, verbindliche Szenen-Vorgabe. */
+export interface SceneConstraint {
+  text: string;
+  characters: string[];
+  pov?: string;
+  setting?: string;
+  time?: string;
+}
+
 export interface StoryWorld {
   locations: WorldItem[];
   factions: WorldItem[];
@@ -60,6 +76,8 @@ export interface ChapterContent {
   characterIds?: string[];
   /** Characters attached to each beat (parallel to the storyboard chapter's beats). */
   beatCharacters?: string[][];
+  /** Optionale POV/Schauplatz/Zeit je Szene (parallel zur Beat-Liste). */
+  sceneMeta?: SceneMeta[];
   /** Report from the coherence/logic pass (newline-separated bullet points). */
   consistencyNotes?: string;
   /** Whether the coherence/logic pass has run (independent of whether it found issues). */
@@ -91,10 +109,32 @@ export function manuscriptWordCount(manuscript: ChapterContent[]): number {
   );
 }
 
-export function chapterTargetWords(chapter: ChapterContent): number {
-  return chapter.targetWords && chapter.targetWords > 0
-    ? chapter.targetWords
-    : EXPAND_DEFAULT_WORDS;
+export function chapterTargetWords(
+  chapter: ChapterContent,
+  bookDefault = EXPAND_DEFAULT_WORDS,
+): number {
+  return chapter.targetWords && chapter.targetWords > 0 ? chapter.targetWords : bookDefault;
+}
+
+/** Baut die verbindlichen Szenen-Vorgaben (Beats + Figuren + Metadaten) für den Server. */
+export function sceneConstraints(
+  chapter: ChapterContent,
+  plan: ChapterPlan | undefined,
+  characterName: (id: string) => string,
+): SceneConstraint[] {
+  const beats = plan?.beats ?? [];
+  return beats.map((text, index) => {
+    const meta = chapter.sceneMeta?.[index] ?? {};
+    return {
+      text,
+      characters: (chapter.beatCharacters?.[index] ?? [])
+        .map((id) => characterName(id))
+        .filter((name) => name.length > 0),
+      pov: meta.pov,
+      setting: meta.setting,
+      time: meta.time,
+    };
+  });
 }
 
 /** Splits prose into paragraphs (blank-line first, then single newlines). */

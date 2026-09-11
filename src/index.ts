@@ -7,7 +7,7 @@ import { ApiError, generateSoul } from "@promptgen/server/api";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
-import type { Storyboard } from "./data/story";
+import type { SceneConstraint, Storyboard } from "./data/story";
 import { coversDir, generateCover, saveCoverImage } from "./server/cover";
 import { isStandaloneBinary, runtimePort } from "./server/paths";
 import { runResearch } from "./server/research";
@@ -44,6 +44,28 @@ function optionalLanguage(value: unknown): string {
 function optionalInt(value: unknown, fallback: number): number {
   const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/** Verbindliche Szenen aus dem Request-Body (oder undefined). */
+function asScenes(value: unknown): SceneConstraint[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const scenes: SceneConstraint[] = [];
+  for (const entry of value) {
+    const item = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const text = typeof item.text === "string" ? item.text.trim() : "";
+    if (!text) continue;
+    scenes.push({
+      text,
+      characters: Array.isArray(item.characters)
+        ? item.characters.filter((name): name is string => typeof name === "string")
+        : [],
+      pov: typeof item.pov === "string" && item.pov.trim() ? item.pov.trim() : undefined,
+      setting:
+        typeof item.setting === "string" && item.setting.trim() ? item.setting.trim() : undefined,
+      time: typeof item.time === "string" && item.time.trim() ? item.time.trim() : undefined,
+    });
+  }
+  return scenes.length > 0 ? scenes : undefined;
 }
 
 function asStoryboard(value: unknown): Storyboard {
@@ -137,7 +159,13 @@ const server = serve({
           const chapterIndex = asChapterIndex(body.chapterIndex, storyboard.chapters.length);
           const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
           const language = optionalLanguage(body.language);
-          const draft = await draftChapter({ storyboard, chapterIndex, model, language });
+          const draft = await draftChapter({
+            storyboard,
+            chapterIndex,
+            model,
+            language,
+            scenes: asScenes(body.scenes),
+          });
           return Response.json({ draft });
         } catch (err) {
           return errorResponse(err);
@@ -163,6 +191,7 @@ const server = serve({
             language,
             draft,
             targetWords,
+            scenes: asScenes(body.scenes),
           });
           return Response.json({ expanded });
         } catch (err) {
@@ -182,7 +211,14 @@ const server = serve({
           const language = optionalLanguage(body.language);
           const text = typeof body.text === "string" ? body.text : "";
           if (!text.trim()) throw new ApiError("Kein Kapiteltext für die Prüfung.", 400);
-          const result = await checkConsistency({ storyboard, chapterIndex, model, language, text });
+          const result = await checkConsistency({
+            storyboard,
+            chapterIndex,
+            model,
+            language,
+            text,
+            scenes: asScenes(body.scenes),
+          });
           return Response.json(result);
         } catch (err) {
           return errorResponse(err);
@@ -201,7 +237,14 @@ const server = serve({
           const language = optionalLanguage(body.language);
           const text = typeof body.text === "string" ? body.text : "";
           if (!text.trim()) throw new ApiError("Kein Kapiteltext für die Prüfung.", 400);
-          const result = await refineStyle({ storyboard, chapterIndex, model, language, text });
+          const result = await refineStyle({
+            storyboard,
+            chapterIndex,
+            model,
+            language,
+            text,
+            scenes: asScenes(body.scenes),
+          });
           return Response.json(result);
         } catch (err) {
           return errorResponse(err);

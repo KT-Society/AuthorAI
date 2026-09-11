@@ -56,9 +56,18 @@ Charakteren, Welt, Plot, Recherche, Covern, Profilen und Statistiken.
 ### Buch-Editor & Reader
 
 - **Added** **BookDetailView** mit Kapitel-Liste, Editor, Reader-Modus (Serif-Typografie, Drucken).
-- **Added** Kapitel **hinzufügen / verschieben / löschen** (Storyboard + Manuskript synchron, Re-Index).
+- **Added** Kapitel **hinzufügen / löschen**; **Sortieren per Drag & Drop** (ersetzt ▲/▼,
+  Storyboard + Manuskript synchron, Re-Index).
+- **Added** **Szenen-Ebene**: Beats pro Kapitel editierbar (Text, hinzufügen/entfernen/verschieben)
+  inkl. Figuren je Szene — Änderungen fließen in Rohentwurf und Ausbau.
+- **Added** **Szenen-Metadaten**: POV, Schauplatz und Zeit je Szene.
+- **Added** **Szenen als verbindliche Vorgabe** in allen Text-Prompts (Rohentwurf, Ausbau,
+  Kohärenz) — Reihenfolge, POV/Schauplatz/Zeit und auftretende Figuren werden beachtet.
+- **Added** **Autosave** im Editor (debounced, 800 ms) mit „speichert…/automatisch gespeichert"-
+  Anzeige, zusätzlich zum impliziten Speichern bei Generierungen.
+- **Added** **Projekt-Vorgabe für Ziel-Wörter pro Kapitel** (Kapitel können sie überschreiben).
 - **Added** **Ziel-Wörter pro Kapitel** (fließt in Ausbau und Fortschritt).
-- **Added** **Charaktere an Kapitel und einzelne Beats** hängen.
+- **Added** **Charaktere an Kapitel und einzelne Szenen** hängen.
 - **Added** Queues: **Alles ausbauen**, **Alle Kohärenz**, **Alle Stil** — mit Fortschritt
   und Persistenz nach jedem Kapitel.
 - **Added** Status-**Plates** pro Kapitel (Ausgebaut / Kohärenz / Stil) und Prüfberichte.
