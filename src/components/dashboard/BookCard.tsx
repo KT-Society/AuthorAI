@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, ListTree, Trash2 } from "lucide-react";
+import { ArrowRight, Clock, Layers, ListTree, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -10,12 +10,15 @@ import { Panel, ProgressBar } from "./primitives";
 export function BookCard({
   book,
   selected,
+  seriesLabel,
   onSelect,
   onOpen,
   onDelete,
 }: {
   book: Book;
   selected: boolean;
+  /** Anzeige der Reihe, z. B. „Aschenchronik · Band 2". */
+  seriesLabel?: string;
   onSelect: (id: string) => void;
   onOpen: (id: string) => void;
   onDelete: (id: string) => void;
@@ -92,6 +95,13 @@ export function BookCard({
         <div className="flex flex-1 flex-col p-4">
           <h3 className="line-clamp-1 text-base font-semibold tracking-tight">{book.title}</h3>
           <p className="line-clamp-1 text-xs text-muted-foreground">{book.subtitle}</p>
+
+          {seriesLabel ? (
+            <span className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-full border border-brand-indigo/30 bg-brand-indigo/10 px-2 py-0.5 text-[10px] font-semibold text-brand-indigo">
+              <Layers className="size-3" />
+              {seriesLabel}
+            </span>
+          ) : null}
 
           <div className="mt-4">
             <div className="mb-1.5 flex items-center justify-between text-[11px]">

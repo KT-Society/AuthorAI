@@ -5,23 +5,6 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 
 ---
 
-## 0.3.0 (in Arbeit) — Inhalt & Qualität
-
-Der Umsetzungsplan wird intern gepflegt (`.echo/plans/`, nicht Teil des öffentlichen Repos);
-der Scope ist implementiert:
-
-- **Kontinuitäts-Datenbank**: Figuren-/Welt-Fakten werden strukturiert erfasst (Kategorie +
-  prüfbare Aussage + Quelle) und den Prüfungen als **harte Vorgaben** mitgegeben — das Modell
-  liest nicht mehr Text gegen Text, sondern prüft gegen Fakten und benennt Widersprüche konkret.
-  → `data/continuity.ts`, `server/continuity.ts`, Route `POST /api/continuity/extract`,
-  Kanon-Panels im Charakter-Editor, View **Kontinuität**.
-- **Figuren-Beziehungsgraph**: Beziehungen (Loyalität, Liebe, Misstrauen, Schuld, Rivalität …)
-  mit Richtung, Intensität und Notiz — als Graph sichtbar und als Kontext für Ausbau und
-  Kohärenz nutzbar.
-  → `lib/graph.ts` (Kreis-Layout, keine Abhängigkeit), Beziehungs-Liste + SVG-Graph.
-
----
-
 ## Nah dran (hoher Nutzen, überschaubar)
 
 ### Schreiben & Struktur
@@ -44,12 +27,11 @@ der Scope ist implementiert:
 ## Mittelfristig
 
 ### Inhalt & Qualität
-- **Kontinuitäts-Datenbank**: Figuren-/Welt-Fakten werden beim Prüfen automatisch
-  gegengelesen (weniger Widersprüche, harte Fakten statt Freitext)
-- **Figuren-Beziehungsgraph** (wer mag wen, wer schuldet wem was)
-- **Timeline-Ansicht** (Ereignisse chronologisch, Konflikte sichtbar)
-- **Serien-Modus**: mehrere Bände mit geteilter Welt und Charakter-Historie
+- **Fakten-Check als eigener Report**: Widersprüche getrennt von der Kohärenz prüfen
+  (`POST /api/continuity/check` mit `{ ok, violations[] }`)
 - **Stil-Profil**: Zielstimme („lakonisch", „barock") als wiederverwendbare Vorgabe
+- **Figuren-Entwicklung über die Zeit**: Beziehungs-Intensität pro Kapitel statt global
+- **Reihen-Übersicht**: alle Bände einer Reihe mit Fortschritt und Bandlücken auf einen Blick
 
 ### Technik & Performance
 - **Streaming** langer Ausgaben (SSE) mit Live-Vorschau

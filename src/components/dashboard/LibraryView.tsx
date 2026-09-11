@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 
 import { STATUS_META, STATUS_ORDER, formatNumber } from "@/data/author";
 import type { Book, BookStatus } from "@/data/author";
+import { seriesOfBook, volumeLabel } from "@/data/series";
+import type { Series } from "@/data/series";
 
 import { BookCard } from "./BookCard";
 import { EmptyState, ViewHeader } from "./primitives";
@@ -33,11 +35,13 @@ function ratio(book: Book): number {
 
 export function LibraryView({
   books,
+  series = [],
   onOpenBook,
   onDeleteBook,
   onCreate,
 }: {
   books: Book[];
+  series?: Series[];
   onOpenBook: (id: string) => void;
   onDeleteBook: (id: string) => void;
   onCreate: () => void;
@@ -58,15 +62,24 @@ export function LibraryView({
     return base;
   }, [books]);
 
+  const seriesLabelFor = (bookId: string): string | undefined => {
+    const entry = seriesOfBook(series, bookId);
+    if (!entry) return undefined;
+    const label = volumeLabel(entry, bookId);
+    return label ? `${entry.name} · ${label}` : entry.name;
+  };
+
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     const filtered = books.filter((book) => {
       const matchesStatus = status === "all" || book.status === status;
+      const entry = seriesOfBook(series, book.id);
       const matchesQuery =
         normalized.length === 0 ||
         book.title.toLowerCase().includes(normalized) ||
         book.subtitle.toLowerCase().includes(normalized) ||
         book.genre.toLowerCase().includes(normalized) ||
+        (entry?.name.toLowerCase().includes(normalized) ?? false) ||
         book.tags.some((tag) => tag.toLowerCase().includes(normalized));
       return matchesStatus && matchesQuery;
     });
@@ -83,7 +96,7 @@ export function LibraryView({
           return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       }
     });
-  }, [books, query, status, sort]);
+  }, [books, series, query, status, sort]);
 
   const totalWords = books.reduce((sum, book) => sum + book.words, 0);
   const totalChapters = books.reduce((sum, book) => sum + book.chaptersDone, 0);
@@ -170,6 +183,7 @@ export function LibraryView({
               key={book.id}
               book={book}
               selected={false}
+              seriesLabel={seriesLabelFor(book.id)}
               onSelect={onOpenBook}
               onOpen={onOpenBook}
               onDelete={onDeleteBook}

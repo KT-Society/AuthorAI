@@ -35,6 +35,27 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 - **Added** **Kanon-Fakten zu den Seed-Daten** (Alter/Verlust/Besitz/Regeln der Beispiel-Figuren),
   damit die Ansicht beim ersten Start nicht leer ist.
 
+### Serien-Modus (Mehrbänder)
+
+- **Added** **Reihen** (`src/data/series.ts`): `Series { id, name, description?, volumeIds[] }`.
+  Die Reihe hält die Band-IDs in **Lesereihenfolge** — `Book` bekommt bewusst kein `seriesId`
+  (eine Quelle der Wahrheit, kein Auseinanderlaufen). Pro Profil gespeichert
+  (`authorai.<profilId>.series`), im Backup enthalten; beim Löschen eines Buchs wird es aus
+  allen Reihen genommen, die Reihe bleibt bestehen.
+- **Added** **Reihen-Dialog** (Kopfzeile der Buch-Ansicht): Reihe anlegen (das Buch wird Band 1),
+  einer bestehenden Reihe beitreten, Name/Beschreibung pflegen, Bände hinzufügen, per
+  ↑/↓ in der Lesereihenfolge verschieben, entfernen, Reihe auflösen (Bücher bleiben erhalten).
+- **Added** **Gemeinsamer Kanon über alle Bände**: Fakten und Beziehungen der ganzen Reihe
+  gelten für jeden Band — `canonVolumeIds()` weitet den Scope in `BookDetailView` auf alle
+  Bände aus (gemeinsame Welt und Figuren-Historie). Figuren mit gleichem Namen gelten über die
+  Bände hinweg als dieselbe Figur; Beziehungen zwischen Bänden sind damit darstellbar.
+- **Added** **Reihen-Scope in der Kontinuitäts-Ansicht**: Der Filter kennt jetzt zusätzlich
+  `Reihe: <Name> (n Bände)` und zeigt Fakten, Beziehungen und Graph über alle Bände. Die
+  Extraktion betrachtet Bekanntes reihenweit — was in einem anderen Band schon steht, wird
+  nicht erneut vorgeschlagen.
+- **Added** **Reihen-Badge in der Bibliothek**: Buchkarten zeigen „Reihe · Band n", die Suche
+  findet auch über den Reihennamen.
+
 _Nächste Themen siehe [`roadmap.md`](roadmap.md)._
 
 ---

@@ -13,6 +13,7 @@ import type { SavedCoverPreset } from "@/data/cover";
 import type { Character } from "@/data/characters";
 import type { PlotCard } from "@/data/plot";
 import type { ResearchNote } from "@/data/research";
+import type { Series } from "@/data/series";
 import type { WorldEntry } from "@/data/world";
 import type { AppNotification } from "@/lib/notifications";
 
@@ -26,7 +27,8 @@ export type DataName =
   | "coverPresets"
   | "notifications"
   | "facts"
-  | "relations";
+  | "relations"
+  | "series";
 
 const ALL_NAMES: DataName[] = [
   "books",
@@ -39,6 +41,7 @@ const ALL_NAMES: DataName[] = [
   "notifications",
   "facts",
   "relations",
+  "series",
 ];
 
 function scopedKey(profileId: string, name: DataName): string {
@@ -100,6 +103,9 @@ export const saveFacts = (profileId: string, value: CanonFact[]) =>
 export const loadRelations = (profileId: string) => load<CharacterRelation>(profileId, "relations");
 export const saveRelations = (profileId: string, value: CharacterRelation[]) =>
   save(profileId, "relations", value);
+
+export const loadSeries = (profileId: string) => load<Series>(profileId, "series");
+export const saveSeries = (profileId: string, value: Series[]) => save(profileId, "series", value);
 
 export const loadPlot = (profileId: string) => load<PlotCard>(profileId, "plot");
 export const savePlot = (profileId: string, value: PlotCard[]) => save(profileId, "plot", value);

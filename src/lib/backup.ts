@@ -7,6 +7,7 @@ import type { Character } from "@/data/characters";
 import type { CanonFact, CharacterRelation } from "@/data/continuity";
 import type { PlotCard } from "@/data/plot";
 import type { ResearchNote } from "@/data/research";
+import type { Series } from "@/data/series";
 import type { AppNotification } from "@/lib/notifications";
 import type { WorldEntry } from "@/data/world";
 
@@ -23,6 +24,7 @@ export interface BackupData {
   notifications: AppNotification[];
   facts: CanonFact[];
   relations: CharacterRelation[];
+  series: Series[];
   meta: DashboardMeta;
 }
 
@@ -76,6 +78,7 @@ export function parseBackup(text: string): ProfileBackup {
     // Ab Version 2 dabei; ältere Backups (v1) liefern hier leere Listen.
     facts: asList(obj.facts) as unknown as CanonFact[],
     relations: asList(obj.relations) as unknown as CharacterRelation[],
+    series: asList(obj.series) as unknown as Series[],
     meta:
       obj.meta && typeof obj.meta === "object"
         ? (obj.meta as DashboardMeta)

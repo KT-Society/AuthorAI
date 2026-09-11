@@ -47,6 +47,8 @@ import {
 } from "@/data/continuity";
 import type { CanonFact, CharacterRelation } from "@/data/continuity";
 import type { WorldEntry } from "@/data/world";
+import type { Series } from "@/data/series";
+import { canonVolumeIds, seriesOfBook, volumeLabel } from "@/data/series";
 import {
   EXPAND_DEFAULT_WORDS,
   EXPAND_MAX_WORDS,
@@ -77,6 +79,7 @@ import type { CoverTextLayer, SavedCoverPreset } from "@/data/cover";
 import { CoverEditorDialog } from "./CoverEditorDialog";
 import type { CoverTarget } from "./CoverEditorDialog";
 import { CoverVariantsDialog } from "./CoverVariantsDialog";
+import { SeriesDialog } from "./SeriesDialog";
 import { TimelineDialog } from "./TimelineDialog";
 import type { TimelineEntry } from "./TimelineDialog";
 import { Panel, ProgressBar } from "./primitives";
@@ -111,6 +114,9 @@ export function BookDetailView({
   facts = [],
   relations = [],
   worlds = [],
+  series = [],
+  onSeriesChange,
+  books = [],
   initialChapterIndex = 0,
   onBack,
   onUpdate,
@@ -126,6 +132,11 @@ export function BookDetailView({
   facts?: CanonFact[];
   relations?: CharacterRelation[];
   worlds?: WorldEntry[];
+  /** Reihen: Bände einer Reihe teilen Welt, Figuren-Historie und Kanon. */
+  series?: Series[];
+  onSeriesChange?: (series: Series[]) => void;
+  /** Alle Bücher (Auswahl weiterer Bände im Reihen-Dialog). */
+  books?: Book[];
   initialChapterIndex?: number;
   onBack: () => void;
   onUpdate: (book: Book) => void;
@@ -140,6 +151,7 @@ export function BookDetailView({
   const [coverTarget, setCoverTarget] = useState<CoverTarget>("front");
   const [coverVariantsOpen, setCoverVariantsOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [seriesOpen, setSeriesOpen] = useState(false);
   const [epubCover, setEpubCover] = useState<"front" | "back" | "none">("front");
   const [exportScope, setExportScope] = useState("all");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -159,6 +171,8 @@ export function BookDetailView({
 
   const manuscript = useMemo(() => manuscriptOf(book), [book.manuscript, book.storyboard]);
 
+  const mySeries = useMemo(() => seriesOfBook(series ?? [], book.id), [series, book.id]);
+
   /**
    * Kanon-Block für alle Generierungs-/Prüf-Pässe: nur Entitäten dieses Projekts
    * (Figuren des Buchs bzw. aus seinem Storyboard, Welteneinträge mit dieser bookId).
@@ -168,20 +182,23 @@ export function BookDetailView({
     const allRelations = relations ?? [];
     if (allFacts.length === 0 && allRelations.length === 0) return undefined;
 
+    // In einer Reihe zählt der Kanon **aller Bände** (gemeinsame Welt und Figuren-Historie).
+    const scopeBookIds = new Set(canonVolumeIds(series ?? [], book.id));
     const storyboardNames = new Set(
       (book.storyboard?.characters ?? []).map((entry) => entry.name.trim().toLowerCase()),
     );
     const scopedCharacters = characters.filter(
       (character) =>
-        character.bookId === book.id || storyboardNames.has(character.name.trim().toLowerCase()),
+        scopeBookIds.has(character.bookId ?? "") ||
+        storyboardNames.has(character.name.trim().toLowerCase()),
     );
     const characterIds = new Set(scopedCharacters.map((character) => character.id));
-    const bookWorlds = (worlds ?? []).filter((entry) => entry.bookId === book.id);
-    const worldIds = new Set(bookWorlds.map((entry) => entry.id));
+    const scopedWorlds = (worlds ?? []).filter((entry) => scopeBookIds.has(entry.bookId ?? ""));
+    const worldIds = new Set(scopedWorlds.map((entry) => entry.id));
 
     const nameOf = (id: string) =>
       scopedCharacters.find((character) => character.id === id)?.name ??
-      bookWorlds.find((entry) => entry.id === id)?.title ??
+      scopedWorlds.find((entry) => entry.id === id)?.title ??
       "";
 
     const block = canonBlock({
@@ -190,7 +207,7 @@ export function BookDetailView({
       nameOf,
     });
     return block.trim().length > 0 ? block : undefined;
-  }, [facts, relations, characters, worlds, book.id, book.storyboard]);
+  }, [facts, relations, characters, worlds, series, book.id, book.storyboard]);
   const plans = useMemo<ChapterPlan[]>(() => book.storyboard?.chapters ?? [], [book.storyboard]);
   const status = STATUS_META[book.status];
   const progress = progressOf(book);
@@ -987,29 +1004,52 @@ export function BookDetailView({
           Zurück zur Bibliothek
         </button>
 
-        <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
-          <button
-            type="button"
-            onClick={() => setMode("edit")}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
-              mode === "edit" ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Pencil className="size-3.5" />
-            Editor
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("read")}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
-              mode === "read" ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <BookText className="size-3.5" />
-            Reader
-          </button>
+        <div className="flex items-center gap-2">
+          {onSeriesChange ? (
+            <button
+              type="button"
+              onClick={() => setSeriesOpen(true)}
+              title={
+                mySeries
+                  ? `Reihe „${mySeries.name}" — ${mySeries.volumeIds.length} Bände`
+                  : "Als Band einer Reihe führen"
+              }
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
+                mySeries
+                  ? "border-brand-indigo/40 bg-brand-indigo/10 text-brand-indigo"
+                  : "border-white/10 bg-white/5 text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Layers className="size-3.5" />
+              {mySeries ? `${mySeries.name} · ${volumeLabel(mySeries, book.id)}` : "Reihe"}
+            </button>
+          ) : null}
+
+          <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
+            <button
+              type="button"
+              onClick={() => setMode("edit")}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                mode === "edit" ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Pencil className="size-3.5" />
+              Editor
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("read")}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                mode === "read" ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <BookText className="size-3.5" />
+              Reader
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1343,6 +1383,17 @@ export function BookDetailView({
           entries={timelineEntries}
           onCheck={runTimelineCheck}
           onClose={() => setTimelineOpen(false)}
+        />
+      ) : null}
+
+      {onSeriesChange ? (
+        <SeriesDialog
+          open={seriesOpen}
+          book={book}
+          series={series ?? []}
+          books={books ?? []}
+          onSeriesChange={onSeriesChange}
+          onClose={() => setSeriesOpen(false)}
         />
       ) : null}
 

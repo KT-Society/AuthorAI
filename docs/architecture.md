@@ -120,6 +120,7 @@ Typen + Seed-Daten, frei von UI-Logik:
 - `cover.ts` — Cover-Text-Layer, Schriftpaare (Presets) und Layouts
 - `continuity.ts` — Kanon: `CanonFact`, `CharacterRelation`, Filter (`factsForBook`,
   `relationsForBook`) und `canonBlock()` (verbindlicher Prompt-Block)
+- `series.ts` — Reihen (`Series`): Band-Reihenfolge, `canonVolumeIds` (Kanon über alle Bände)
 
 ### 4. Bibliothek (`src/lib/*`)
 
@@ -152,7 +153,7 @@ Typen + Seed-Daten, frei von UI-Logik:
   `BookDetailView` (Editor + Reader)
 - **Dialoge:** `BookWizard`, `CharacterGenerator`, `CharacterEditorDialog`,
   `CharacterExtractDialog`, `ContinuityExtractDialog`, `WorldExtractDialog`,
-  `CoverEditorDialog`, `SettingsDialog`, `ProfileGate`
+  `CoverEditorDialog`, `SeriesDialog`, `SettingsDialog`, `ProfileGate`
 - **Bausteine:** `primitives.tsx` (Panel, Badge, ProgressBar, Sparkline, ViewHeader, …),
   `CharacterContinuityPanel.tsx` (Fakten-/Beziehungs-Panels im Charakter-Editor)
 - **Bausteine:** `primitives.tsx` (Panel, Badge, ProgressBar, Sparkline, ViewHeader, …)

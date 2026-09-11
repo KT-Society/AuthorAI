@@ -208,7 +208,9 @@ RELATIONS (binding — keep these dynamics consistent):
 - **Wo**: `chapter/draft`, `chapter/expand`, `chapter/consistency`, `chapter/style` und
   `timeline/check` (Feld `canon`).
 - **Geltungsbereich**: nur Entitäten des Projekts (Figuren mit `bookId` bzw. Namen aus dem
-  Storyboard, Welteneinträge mit `bookId`) — kein Kanon aus anderen Büchern.
+  Storyboard, Welteneinträge mit `bookId`) — kein Kanon aus anderen Büchern. Gehört das Buch zu
+  einer **Reihe**, umfasst der Scope **alle Bände** (`canonVolumeIds`): gemeinsame Welt,
+  Figuren-Historie und Fakten über die Bände hinweg.
 - **Leer = kein Block**: ohne Fakten/Beziehungen taucht der Block nicht auf (kein toter Header).
 - **Quelle**: manuell (Charakter-Editor → Panels „Fakten“/„Beziehungen“) oder
   `POST /api/continuity/extract` mit Review-Dialog.

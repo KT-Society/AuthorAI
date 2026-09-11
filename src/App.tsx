@@ -17,6 +17,7 @@ import {
   savePlot,
   saveRelations,
   saveResearch,
+  saveSeries,
   saveWorld,
 } from "@/lib/persistence";
 import {
@@ -79,6 +80,7 @@ export function App() {
     saveNotifications(profile.id, backup.notifications);
     saveFacts(profile.id, backup.facts);
     saveRelations(profile.id, backup.relations);
+    saveSeries(profile.id, backup.series);
     saveMeta(profile.id, normalizeMeta(backup.meta ?? null));
     saveCoverPresets(profile.id, []);
 

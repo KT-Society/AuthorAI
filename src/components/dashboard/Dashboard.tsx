@@ -12,6 +12,8 @@ import { PLOT_CARDS } from "@/data/plot";
 import type { PlotCard, PlotStatus } from "@/data/plot";
 import { RESEARCH_NOTES } from "@/data/research";
 import type { ResearchNote } from "@/data/research";
+import { SERIES, removeBookFromSeries } from "@/data/series";
+import type { Series } from "@/data/series";
 import { WORLD_ENTRIES, entriesFromStoryWorld } from "@/data/world";
 import type { WorldEntry } from "@/data/world";
 import {
@@ -25,6 +27,7 @@ import {
   loadPlot,
   loadRelations,
   loadResearch,
+  loadSeries,
   loadWorld,
   saveBooks,
   saveCharacters,
@@ -36,6 +39,7 @@ import {
   savePlot,
   saveRelations,
   saveResearch,
+  saveSeries,
   saveWorld,
 } from "@/lib/persistence";
 import { releaseCoverImage } from "@/lib/coverStore";
@@ -207,6 +211,7 @@ export function Dashboard({
   const [relations, setRelations] = useState<CharacterRelation[]>(
     () => loadRelations(profileId) ?? CONTINUITY_RELATIONS,
   );
+  const [series, setSeries] = useState<Series[]>(() => loadSeries(profileId) ?? SERIES);
   const [meta, setMeta] = useState<DashboardMeta>(() => normalizeMeta(loadMeta(profileId)));
   const [activeNav, setActiveNav] = useState("dashboard");
   const [openBookId, setOpenBookId] = useState<string | null>(null);
@@ -244,6 +249,9 @@ export function Dashboard({
   useEffect(() => {
     saveRelations(profileId, relations);
   }, [profileId, relations]);
+  useEffect(() => {
+    saveSeries(profileId, series);
+  }, [profileId, series]);
   useEffect(() => {
     saveMeta(profileId, meta);
   }, [profileId, meta]);
@@ -375,6 +383,8 @@ export function Dashboard({
     const target = books.find((book) => book.id === id);
     setBooks((prev) => prev.filter((book) => book.id !== id));
     setOpenBookId((prev) => (prev === id ? null : prev));
+    // Buch aus allen Reihen nehmen (die Reihe selbst bleibt bestehen).
+    setSeries((prev) => removeBookFromSeries(prev, id));
     if (target?.coverUrl) {
       void releaseCoverImage(target.coverUrl, {
         ignoreRef: { profileId, bookId: id },
@@ -427,6 +437,7 @@ export function Dashboard({
       notifications,
       facts,
       relations,
+      series,
       meta,
     });
 
@@ -449,7 +460,7 @@ export function Dashboard({
           `${parsed.books.length} Bücher · ${parsed.characters.length} Charaktere · ` +
           `${parsed.world.length} Welteneinträge · ${parsed.plot.length} Plot-Karten · ` +
           `${parsed.research.length} Recherchenotizen · ${parsed.facts.length} Fakten · ` +
-          `${parsed.relations.length} Beziehungen`,
+          `${parsed.relations.length} Beziehungen · ${parsed.series.length} Reihen`,
       );
       if (!confirmed) return;
 
@@ -469,6 +480,7 @@ export function Dashboard({
       setNotifications(parsed.notifications);
       setFacts(parsed.facts);
       setRelations(parsed.relations);
+      setSeries(parsed.series);
       setMeta(normalizeMeta(parsed.meta ?? null));
       setOpenBookId(null);
       setActiveNav("dashboard");
@@ -546,6 +558,9 @@ export function Dashboard({
               facts={facts}
               relations={relations}
               worlds={worlds}
+              series={series}
+              onSeriesChange={setSeries}
+              books={books}
               authorName={profileName}
               coverPresets={coverPresets}
               onSaveCoverPreset={(label, layers) =>
@@ -563,6 +578,7 @@ export function Dashboard({
             ) : activeNav === "library" ? (
               <LibraryView
                 books={books}
+                series={series}
                 onOpenBook={(id) => openBook(id)}
                 onDeleteBook={deleteBook}
                 onCreate={startCreate}
@@ -593,6 +609,7 @@ export function Dashboard({
                 worlds={worlds}
                 facts={facts}
                 relations={relations}
+                series={series}
                 onFactsChange={setFacts}
                 onRelationsChange={setRelations}
               />

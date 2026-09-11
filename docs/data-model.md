@@ -171,6 +171,27 @@ für alle Generierungs- und Prüf-Pässe; sind beide Listen leer, liefert er `""
 Header im Prompt). Beim Löschen einer Figur bzw. eines Welteneintrags räumt die Shell
 zugehörige Fakten und Beziehungen mit auf.
 
+### Reihen (`src/data/series.ts`)
+
+```ts
+interface Series {
+  id: string;
+  name: string;
+  description?: string;
+  volumeIds: string[];   // Buch-IDs in Lesereihenfolge (Band 1 … n)
+  createdAt: string;
+}
+```
+
+**Eine Quelle der Wahrheit:** die Reihe hält die Band-IDs — `Book` bekommt bewusst **kein**
+`seriesId`, damit nichts auseinanderlaufen kann. Helfer: `seriesOfBook`, `volumeNumber`,
+`volumeLabel`, `canonVolumeIds`, `availableVolumes`, `addableSeries`, `removeBookFromSeries`.
+
+`canonVolumeIds(series, bookId)` liefert die Band-IDs, die für den Kanon eines Buchs gelten:
+in einer Reihe **alle Bände** (gemeinsame Welt, Figuren-Historie und Fakten über die Bände),
+sonst nur das Buch selbst. Beim Löschen eines Buchs wird es aus allen Reihen entfernt (die
+Reihe bleibt bestehen).
+
 ### Dashboard-Metriken (`DashboardMeta`)
 
 ```ts
@@ -216,6 +237,7 @@ interface AppNotification {
 | `notifications` | `AppNotification[]` |
 | `facts` | `CanonFact[]` (Kontinuität) |
 | `relations` | `CharacterRelation[]` (Beziehungen) |
+| `series` | `Series[]` (Reihen / Mehrbänder) |
 | `meta` | `DashboardMeta` (Objekt, kein Array) |
 
 ### Profile & Einstellungen (geräteweit)

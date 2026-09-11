@@ -35,6 +35,8 @@ import {
   sortFacts,
 } from "@/data/continuity";
 import type { WorldEntry } from "@/data/world";
+import type { Series } from "@/data/series";
+import { canonVolumeIds } from "@/data/series";
 import { readLanguage, readStageModel } from "@/lib/generationSettings";
 import { edgeOpacity, edgePath, edgeWidth, layoutCircle, sortByDegree } from "@/lib/graph";
 import type { GraphNode } from "@/lib/graph";
@@ -77,6 +79,7 @@ export function ContinuityView({
   worlds,
   facts,
   relations,
+  series = [],
   onFactsChange,
   onRelationsChange,
 }: {
@@ -85,6 +88,7 @@ export function ContinuityView({
   worlds: WorldEntry[];
   facts: CanonFact[];
   relations: CharacterRelation[];
+  series?: Series[];
   onFactsChange: (facts: CanonFact[]) => void;
   onRelationsChange: (relations: CharacterRelation[]) => void;
 }) {
@@ -92,7 +96,8 @@ export function ContinuityView({
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<FactKind | "all">("all");
   const [scopeFilter, setScopeFilter] = useState<FactEntityType | "all">("all");
-  const [bookFilter, setBookFilter] = useState<string>("all");
+  /** "all" · "b:<bookId>" (Projekt) · "s:<seriesId>" (Reihe = alle Bände). */
+  const [scope, setScope] = useState<string>("all");
   const [extractBookId, setExtractBookId] = useState<string>(
     () => books.find((book) => book.storyboard)?.id ?? books[0]?.id ?? "",
   );
@@ -102,6 +107,33 @@ export function ContinuityView({
     facts: ExtractedFact[];
     relations: ExtractedRelation[];
   } | null>(null);
+
+  /** Projekte des aktuellen Scopes (null = alle). */
+  const scopedBookIds = useMemo<Set<string> | null>(() => {
+    if (scope === "all") return null;
+    if (scope.startsWith("s:")) {
+      const entry = series.find((item) => item.id === scope.slice(2));
+      return new Set(entry?.volumeIds ?? []);
+    }
+    return new Set([scope.slice(2)]);
+  }, [scope, series]);
+
+  const scopedCharacters = useMemo(
+    () =>
+      scopedBookIds
+        ? characters.filter((character) => scopedBookIds.has(character.bookId ?? ""))
+        : characters,
+    [characters, scopedBookIds],
+  );
+  const scopedWorlds = useMemo(
+    () => (scopedBookIds ? worlds.filter((entry) => scopedBookIds.has(entry.bookId ?? "")) : worlds),
+    [worlds, scopedBookIds],
+  );
+  const characterIds = useMemo(
+    () => new Set(scopedCharacters.map((character) => character.id)),
+    [scopedCharacters],
+  );
+  const worldIds = useMemo(() => new Set(scopedWorlds.map((entry) => entry.id)), [scopedWorlds]);
 
   /** Figuren eines Projekts (Register + Figuren aus dessen Storyboard-Namen). */
   const bookCharacters = (bookId: string): Character[] => {
@@ -119,17 +151,18 @@ export function ContinuityView({
     worlds.find((entry) => entry.id === entityId)?.title ??
     "(unbekannt)";
 
-  const bookOfEntity = (fact: CanonFact): string | undefined =>
-    fact.entityType === "character"
-      ? characters.find((character) => character.id === fact.entityId)?.bookId
-      : worlds.find((entry) => entry.id === fact.entityId)?.bookId;
-
   const visibleFacts = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return sortFacts(facts).filter((fact) => {
       if (kindFilter !== "all" && fact.kind !== kindFilter) return false;
       if (scopeFilter !== "all" && fact.entityType !== scopeFilter) return false;
-      if (bookFilter !== "all" && bookOfEntity(fact) !== bookFilter) return false;
+      if (scopedBookIds) {
+        const inScope =
+          fact.entityType === "character"
+            ? characterIds.has(fact.entityId)
+            : worldIds.has(fact.entityId);
+        if (!inScope) return false;
+      }
       if (normalized.length === 0) return true;
       return (
         fact.statement.toLowerCase().includes(normalized) ||
@@ -137,18 +170,18 @@ export function ContinuityView({
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facts, query, kindFilter, scopeFilter, bookFilter, characters, worlds]);
+  }, [facts, query, kindFilter, scopeFilter, scopedBookIds, characterIds, worldIds, characters, worlds]);
 
-  /** Graph: Figuren des gewählten Projekts und die Beziehungen zwischen ihnen. */
+  /** Graph: Figuren des gewählten Scopes und die Beziehungen zwischen ihnen. */
   const graph = useMemo(() => {
-    const scopeCharacters =
-      bookFilter === "all" ? characters : bookCharacters(bookFilter);
-    const ids = new Set(scopeCharacters.map((character) => character.id));
     const edges = relations.filter(
-      (relation) => ids.has(relation.fromId) && ids.has(relation.toId) && relation.fromId !== relation.toId,
+      (relation) =>
+        characterIds.has(relation.fromId) &&
+        characterIds.has(relation.toId) &&
+        relation.fromId !== relation.toId,
     );
     const ordered = sortByDegree(
-      scopeCharacters.map((character) => ({ id: character.id, name: character.name })),
+      scopedCharacters.map((character) => ({ id: character.id, name: character.name })),
       edges.map((relation) => ({ fromId: relation.fromId, toId: relation.toId })),
     );
     const nodes = layoutCircle(ordered, GRAPH_WIDTH, GRAPH_HEIGHT);
@@ -160,15 +193,12 @@ export function ContinuityView({
       if (from && to) drawn.push({ relation, from, to });
     }
     return { nodes, drawn };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [characters, relations, bookFilter, books]);
+  }, [scopedCharacters, relations, characterIds]);
 
   const visibleRelations = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return relations.filter((relation) => {
-      const ids =
-        bookFilter === "all" ? null : new Set(bookCharacters(bookFilter).map((item) => item.id));
-      if (ids && (!ids.has(relation.fromId) || !ids.has(relation.toId))) return false;
+      if (!characterIds.has(relation.fromId) || !characterIds.has(relation.toId)) return false;
       if (normalized.length === 0) return true;
       return (
         nameOf(relation.fromId).toLowerCase().includes(normalized) ||
@@ -177,7 +207,7 @@ export function ContinuityView({
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [relations, query, bookFilter, characters, books]);
+  }, [relations, query, characterIds, characters, worlds]);
 
   const runExtract = async () => {
     const book = books.find((item) => item.id === extractBookId);
@@ -195,18 +225,35 @@ export function ContinuityView({
     try {
       const scoped = bookCharacters(book.id);
       const bookWorlds = worlds.filter((entry) => entry.bookId === book.id);
-      const scopedIds = new Set(scoped.map((character) => character.id));
-      const worldIds = new Set(bookWorlds.map((entry) => entry.id));
+
+      // Bekanntes gilt **reihenweit**: was in einem anderen Band schon steht, wird nicht
+      // erneut vorgeschlagen.
+      const canonBooks = new Set(canonVolumeIds(series, book.id));
+      const knownCharacterIds = new Set(
+        characters
+          .filter((character) => canonBooks.has(character.bookId ?? ""))
+          .map((character) => character.id),
+      );
+      const knownWorldIds = new Set(
+        worlds.filter((entry) => canonBooks.has(entry.bookId ?? "")).map((entry) => entry.id),
+      );
 
       const result = await extractContinuity({
         storyboard: book.storyboard,
         characters: scoped.map((character) => ({ name: character.name, role: character.role })),
         worldNames: bookWorlds.map((entry) => entry.title),
         knownStatements: facts
-          .filter((fact) => (fact.entityType === "character" ? scopedIds.has(fact.entityId) : worldIds.has(fact.entityId)))
+          .filter((fact) =>
+            fact.entityType === "character"
+              ? knownCharacterIds.has(fact.entityId)
+              : knownWorldIds.has(fact.entityId),
+          )
           .map((fact) => fact.statement),
         knownRelations: relations
-          .filter((relation) => scopedIds.has(relation.fromId) && scopedIds.has(relation.toId))
+          .filter(
+            (relation) =>
+              knownCharacterIds.has(relation.fromId) && knownCharacterIds.has(relation.toId),
+          )
           .map((relation) => `${nameOf(relation.fromId)}→${nameOf(relation.toId)}:${relation.kind}`),
         model,
         language: readLanguage() ?? "German",
@@ -393,14 +440,19 @@ export function ContinuityView({
           />
         </div>
 
-        <Select value={bookFilter} onValueChange={setBookFilter}>
-          <SelectTrigger size="sm" className="glass w-44 border-white/10">
+        <Select value={scope} onValueChange={setScope}>
+          <SelectTrigger size="sm" className="glass w-48 border-white/10">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="glass-strong border-white/10">
             <SelectItem value="all">Alle Projekte</SelectItem>
+            {series.map((entry) => (
+              <SelectItem key={entry.id} value={`s:${entry.id}`}>
+                Reihe: {entry.name} ({entry.volumeIds.length})
+              </SelectItem>
+            ))}
             {books.map((book) => (
-              <SelectItem key={book.id} value={book.id}>
+              <SelectItem key={book.id} value={`b:${book.id}`}>
                 {book.title}
               </SelectItem>
             ))}
