@@ -25,8 +25,26 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   Vorschläge werden vor der Übernahme in einem Review-Dialog einzeln an-/abgewählt; bereits
   getrackte Namen filtert der Server heraus (Tag „Manuskript", verknüpft mit dem Projekt).
 
+### Changed
+
+- **Kapiteltext-Editor ist jetzt zuklappbar**: Der ausführliche Kapiteltext steckt in einem
+  `<details>`-Bereich wie Rohentwurf/Versionen — Wortzahl und Speicherstatus bleiben in der
+  Kopfzeile sichtbar, auch wenn er zugeklappt ist. Standard: aufgeklappt.
+
 ### Fixed
 
+- **Kohärenz/Stil bei langen Kapiteln (502 „Antwort unvollständig")**: Beide Pässe verlangten
+  die **komplette** überarbeitete Prosa in *einer* Antwort. Bei 3.000–5.000 Wörtern lief das
+  ins Ausgabelimit (9000 Tokens angefragt, Modell stoppt früher) → Abbruch mitten im Kapitel.
+  Jetzt zerlegt `splitIntoChunks()` das Kapitel an Absatzgrenzen in Teile von ~1.000 Wörtern
+  (max. 1.400, überlange Absätze an Satzgrenzen), jeder Teil wird einzeln umgeschrieben —
+  Nachbarteile nur als Kontext-Anker — und wieder zusammengesetzt. Ausgabelimit pro Teil
+  4.000 Tokens. Gibt ein Modell den falschen Abschnitt zurück, wird einmal nachgefasst, danach
+  mit klarer Meldung abgebrochen (statt Text zu duplizieren). `<NOTES>` aller Teile werden
+  gesammelt und dedupliziert. Betrifft `POST /api/chapter/consistency` **und**
+  `POST /api/chapter/style`.
+- **Server-Idle-Timeout** auf 180 s erhöht — mehrteilige Pässe, Ausbau und Cover-Varianten
+  laufen nicht mehr Gefahr, mitten im Lauf getrennt zu werden.
 - **Dubletten beim Welten-Scan**: Wiederholte Scans legten denselben Stoff immer wieder an
   („Kinder der Asche" mehrfach, „Die Zerstörung der Welt" neben „Die Zerstörung der alten
   Welt"). Drei Ebenen greifen jetzt:

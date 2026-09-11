@@ -1676,27 +1676,27 @@ export function BookDetailView({
                   )}
                 </div>
 
-                <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span>Kapiteltext (ausgebaut)</span>
-                  <span className="inline-flex items-center gap-2">
+                <details open className="mt-1 rounded-xl border border-white/10 bg-white/5 p-3">
+                  <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
+                    Kapiteltext (ausgebaut) —{" "}
+                    {countWords(expandedBuffer).toLocaleString("de-DE")} Wörter
                     {isDirty ? (
-                      <span className="text-brand-amber">speichert…</span>
+                      <span className="ml-2 font-normal text-brand-amber">speichert…</span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 opacity-70">
+                      <span className="ml-2 inline-flex items-center gap-1 font-normal opacity-70">
                         <Save className="size-3" />
                         automatisch gespeichert
                       </span>
                     )}
-                    {countWords(expandedBuffer).toLocaleString("de-DE")} Wörter
-                  </span>
-                </div>
-                <Textarea
-                  rows={18}
-                  value={expandedBuffer}
-                  onChange={(event) => setExpandedBuffer(event.target.value)}
-                  placeholder="Noch nicht ausgebaut …"
-                  className="glass rounded-xl border-white/10 text-sm leading-relaxed"
-                />
+                  </summary>
+                  <Textarea
+                    rows={18}
+                    value={expandedBuffer}
+                    onChange={(event) => setExpandedBuffer(event.target.value)}
+                    placeholder="Noch nicht ausgebaut …"
+                    className="glass mt-3 rounded-xl border-white/10 text-sm leading-relaxed"
+                  />
+                </details>
 
                 <details className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
                   <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">

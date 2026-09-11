@@ -570,6 +570,88 @@ Continue now, entirely in ${input.language}.`,
   });
 }
 
+/* ─────────────────────── pass chunking (Kohärenz/Stil) ─────────────────────── */
+
+/** Zielgröße pro Chunk. Hält jede Modellantwort klein → kein Token-Abbruch. */
+const PASS_CHUNK_WORDS = 1000;
+/** Harte Obergrenze pro Chunk beim Aufteilen überlanger Absätze. */
+const PASS_CHUNK_MAX_WORDS = 1400;
+/** Ausgabelimit pro Chunk — bewusst unter typischen Modell-Limits (2048–4096). */
+const PASS_CHUNK_MAX_TOKENS = 4000;
+
+/** Zerlegt einen Absatz an Satzgrenzen, wenn er allein schon zu lang ist. */
+function splitLongParagraph(paragraph: string, maxWords: number): string[] {
+  const sentences = paragraph.split(/(?<=[.!?…»"])\s+/);
+  const pieces: string[] = [];
+  let current: string[] = [];
+  let words = 0;
+
+  for (const sentence of sentences) {
+    const count = countWords(sentence);
+    if (words + count > maxWords && current.length > 0) {
+      pieces.push(current.join(" "));
+      current = [];
+      words = 0;
+    }
+    current.push(sentence);
+    words += count;
+  }
+  if (current.length > 0) pieces.push(current.join(" "));
+  return pieces;
+}
+
+/**
+ * Zerlegt ein Kapitel an Absatzgrenzen in Chunks (~PASS_CHUNK_WORDS Wörter).
+ *
+ * Kohärenz und Stil müssen die **vollständige** Prosa zurückgeben — bei langen
+ * Kapiteln sprengt das das Ausgabelimit des Modells und die Antwort bricht ab.
+ * Chunking löst das an der Wurzel: jede Antwort bleibt klein.
+ */
+export function splitIntoChunks(text: string, targetWords = PASS_CHUNK_WORDS): string[] {
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  if (paragraphs.length === 0) return [text.trim()];
+
+  const chunks: string[] = [];
+  let current: string[] = [];
+  let words = 0;
+
+  const flush = () => {
+    if (current.length > 0) {
+      chunks.push(current.join("\n\n"));
+      current = [];
+      words = 0;
+    }
+  };
+
+  for (const paragraph of paragraphs) {
+    const count = countWords(paragraph);
+    if (count > PASS_CHUNK_MAX_WORDS) {
+      flush();
+      for (const piece of splitLongParagraph(paragraph, PASS_CHUNK_MAX_WORDS)) chunks.push(piece);
+      continue;
+    }
+    if (words + count > targetWords && current.length > 0) flush();
+    current.push(paragraph);
+    words += count;
+  }
+  flush();
+
+  return chunks.length > 0 ? chunks : [text.trim()];
+}
+
+/** Letzte Wörter eines Textes (für den Kontext-Anker). */
+function tailOfText(text: string, words: number): string {
+  return text.split(/\s+/).filter(Boolean).slice(-words).join(" ");
+}
+
+/** Erste Wörter eines Textes (für den Kontext-Anker). */
+function headOfText(text: string, words: number): string {
+  return text.split(/\s+/).filter(Boolean).slice(0, words).join(" ");
+}
+
 /* ───────────────────────────── pass steps ───────────────────────────── */
 
 export interface PassResult {
@@ -696,45 +778,107 @@ async function runPass(kind: "consistency" | "style", input: PassInput): Promise
     throw new ApiError("Kapitel nicht gefunden.", 400);
   }
 
-  const content = await chatCompletion({
-    model: input.model,
-    system: kind === "consistency" ? consistencySystem(input.language) : styleSystem(input.language),
-    user: `${passContext(input.storyboard, input.chapterIndex, input.scenes)}
+  const system =
+    kind === "consistency" ? consistencySystem(input.language) : styleSystem(input.language);
+  const context = passContext(input.storyboard, input.chapterIndex, input.scenes);
+  const instruction =
+    kind === "consistency"
+      ? "Apply the continuity and logic fixes now, then list them in <NOTES>."
+      : "Polish the prose now, then list what you improved in <NOTES>.";
 
-CHAPTER TEXT:
-${input.text}
-
-${
-      kind === "consistency"
-        ? "Apply the continuity and logic fixes now, then list them in <NOTES>."
-        : "Polish the prose now, then list what you improved in <NOTES>."
-    }`,
-    maxTokens: 9000,
-    temperature: kind === "consistency" ? 0.35 : 0.6,
-  });
-
-  const parsed = parsePassOutput(content);
   const previousText = input.text.trim();
-  let nextText = parsed.text.trim();
+  const chunks = splitIntoChunks(input.text);
 
-  if (nextText.length === 0) {
-    throw new ApiError(
-      "Das Modell hat keinen überarbeiteten Text geliefert. Bitte ein anderes/größeres Modell wählen.",
-      502,
-    );
+  const parts: string[] = [];
+  const notes: string[] = [];
+
+  for (let index = 0; index < chunks.length; index += 1) {
+    const chunk = chunks[index];
+    const isOnly = chunks.length === 1;
+    const before = index > 0 ? tailOfText(chunks[index - 1], 60) : "";
+    const after = index < chunks.length - 1 ? headOfText(chunks[index + 1], 60) : "";
+    const chunkWords = countWords(chunk);
+
+    // Bei mehreren Teilen: nur diesen Teil umschreiben, Nachbarn nur als Kontext.
+    const partIntro = isOnly
+      ? `CHAPTER TEXT:\n${chunk}`
+      : `This is PART ${index + 1} of ${chunks.length} of the chapter.
+Rewrite ONLY this part (~${chunkWords} words) — never the neighbouring parts, never a summary.${
+          before
+            ? `\n\nPRECEDING TEXT (context only — do not rewrite, do not repeat):\n…${before}`
+            : ""
+        }${
+          after
+            ? `\n\nFOLLOWING TEXT (context only — do not rewrite, do not repeat):\n${after}…`
+            : ""
+        }\n\nPART ${index + 1} TEXT:\n${chunk}`;
+
+    let parsed: PassResult | null = null;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const reminder =
+        attempt === 0
+          ? ""
+          : `\n\nIMPORTANT: the previous attempt returned the wrong span. Return ONLY part ${index + 1} of ${chunks.length} — about ${chunkWords} words, starting at its first sentence and ending at its last.`;
+
+      const content = await chatCompletion({
+        model: input.model,
+        system,
+        user: `${context}\n\n${partIntro}\n\n${instruction}${reminder}`,
+        maxTokens: PASS_CHUNK_MAX_TOKENS,
+        temperature: kind === "consistency" ? 0.35 : 0.6,
+      });
+
+      const candidate = parsePassOutput(content);
+      const text = candidate.text.trim();
+      if (!text) continue;
+      // Modell hat das ganze Kapitel statt des Teils zurückgegeben → einmal nachfassen.
+      if (!isOnly && text.length > chunk.length * 1.6) continue;
+
+      parsed = { ...candidate, text };
+      break;
+    }
+
+    if (!parsed) {
+      throw new ApiError(
+        isOnly
+          ? "Das Modell hat keinen überarbeiteten Text geliefert. Bitte ein anderes/größeres Modell wählen."
+          : `Teil ${index + 1}/${chunks.length} lieferte keinen brauchbaren Text (das Modell gab den falschen Abschnitt zurück). Bitte ein anderes Modell wählen.`,
+        502,
+      );
+    }
+
+    let nextText = parsed.text;
+
+    // Am Token-Limit abgebrochenen Teil zu Ende schreiben.
+    if (looksTruncated(nextText)) {
+      nextText = await completeProse({
+        model: input.model,
+        system,
+        language: input.language,
+        text: nextText,
+        label: isOnly ? "chapter" : `chapter part ${index + 1}`,
+      });
+    }
+
+    if (chunk.length > 200 && nextText.length < chunk.length * 0.4) {
+      throw new ApiError(
+        isOnly
+          ? "Die Antwort war unvollständig (der Text wurde stark gekürzt). Bitte erneut versuchen oder ein anderes Modell wählen."
+          : `Teil ${index + 1} von ${chunks.length} wurde stark gekürzt. Bitte erneut versuchen oder ein anderes Modell wählen.`,
+        502,
+      );
+    }
+
+    parts.push(nextText);
+    for (const note of parsed.notes) {
+      if (!notes.some((existing) => existing.toLowerCase() === note.toLowerCase())) {
+        notes.push(note);
+      }
+    }
   }
 
-  // Am Token-Limit abgebrochene Überarbeitung zu Ende schreiben.
-  if (looksTruncated(nextText)) {
-    nextText = await completeProse({
-      model: input.model,
-      system:
-        kind === "consistency" ? consistencySystem(input.language) : styleSystem(input.language),
-      language: input.language,
-      text: nextText,
-      label: "chapter",
-    });
-  }
+  const nextText = parts.join("\n\n").trim();
 
   if (previousText.length > 200 && nextText.length < previousText.length * 0.4) {
     throw new ApiError(
@@ -744,19 +888,19 @@ ${
   }
 
   const changed = nextText !== previousText;
-  const notes = changed
-    ? [...parsed.notes]
+  const finalNotes = changed
+    ? notes
     : [
-        ...parsed.notes,
+        ...notes,
         "⚠️ Keine Textänderung erkannt — das Modell hat den Text unverändert zurückgegeben. Ggf. ein stärkeres Modell wählen.",
       ];
   if (looksTruncated(nextText)) {
-    notes.push(
+    finalNotes.push(
       "⚠️ Das Kapitel endet weiterhin mitten im Satz. Bitte erneut prüfen oder ein Modell mit größerem Ausgabelimit wählen.",
     );
   }
 
-  return { text: nextText, notes, changed };
+  return { text: nextText, notes: finalNotes, changed };
 }
 
 export function checkConsistency(input: PassInput): Promise<PassResult> {

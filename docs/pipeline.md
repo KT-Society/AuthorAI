@@ -122,10 +122,24 @@ Nachbarkapitel** und **korrigiert**:
 `<NOTES>`/`NOTES:`-Sektion ab und entfernt Restmarker — auch wenn ein Modell das
 schließende Tag vergisst. Führende Markdown-Überschriften fliegen ebenfalls raus.
 
-**Schutzmechanismen**
+**Chunking (Pflicht bei langen Kapiteln):** Der Pass muss die **vollständige** Prosa
+zurückgeben. Bei 3.000–5.000 Wörtern sprengt das das Ausgabelimit vieler Modelle und die
+Antwort bricht mitten im Kapitel ab (`finish_reason: length`). Deshalb zerlegt
+`splitIntoChunks()` das Kapitel an Absatzgrenzen in Teile von **~1.000 Wörtern**
+(harte Obergrenze 1.400; überlange Absätze werden an Satzgrenzen geteilt). Jeder Teil wird
+einzeln überarbeitet — mit vollem Storyboard-Kontext plus den Nachbartexten als reinem
+Kontext-Anker (*„do not rewrite, do not repeat"*) — und anschließend wieder zusammengesetzt.
+Das Ausgabelimit pro Teil liegt bei **4.000 Tokens**, also unter dem typischen Modell-Limit.
+Gibt ein Modell trotzdem das ganze Kapitel statt des Teils zurück, wird einmal nachgefasst;
+danach bricht der Pass mit klarer Meldung ab (statt Text zu duplizieren). Die `<NOTES>` aller
+Teile werden gesammelt und dedupliziert.
+
+**Schutzmechanismen** (pro Teil **und** über das Gesamtkapitel)
 
 - **Leerer Text** → Fehler (kein Datenverlust).
-- **Stark gekürzt** (< 40 % Originallänge) → Fehler.
+- **Stark gekürzt** (< 40 % der jeweiligen Länge) → Fehler, mit Teilnummer.
+- **Falscher Abschnitt** (Teil-Antwort > 160 % der Teil-Länge) → einmal nachfassen.
+- **Mitten im Satz** → automatische Fortsetzung (`completeProse`).
 - **Unverändert** → Hinweis im Bericht: *„Keine Textänderung erkannt — ggf. stärkeres Modell."*
 
 Der überarbeitete Text **ersetzt** den Kapiteltext; der Bericht wird gespeichert und
@@ -137,7 +151,8 @@ Der überarbeitete Text **ersetzt** den Kapiteltext; der Bericht wird gespeicher
 
 Ein Line-Editor poliert **ohne** Inhalt zu verändern: Satzlänge/Rhythmus, Wiederholungen,
 Füllwörter, schwache Verben, Klischees, Grammatik/Punktuation/Zeitform, Dialog-Tags.
-Gleiches Format, gleiche Schutzmechanismen; Ergebnis ersetzt den Text, `styleChecked = true`.
+Gleiches Format, **gleiches Chunking** und gleiche Schutzmechanismen wie die Kohärenz;
+Ergebnis ersetzt den Text, `styleChecked = true`.
 
 ---
 

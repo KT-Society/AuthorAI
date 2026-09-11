@@ -148,6 +148,8 @@ function openInBrowser(url: string): void {
 
 const server = serve({
   port: runtimePort(3000),
+  // Lange Läufe (Chunk-Pässe, Ausbau, Cover-Varianten) dürfen nicht abgeschnitten werden.
+  idleTimeout: 180,
   routes: {
     // Non-secret capability probe + configurable language options.
     "/api/config": {
