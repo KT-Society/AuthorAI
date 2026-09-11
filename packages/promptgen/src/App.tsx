@@ -237,6 +237,16 @@ function App() {
                         fontWeight: "bold",
                       }}
                     />
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={`Pollinations: ${config.pollinations ? "verbunden" : "fehlt"}`}
+                      sx={{
+                        borderColor: config.pollinations ? STATUS_OK : STATUS_FAIL,
+                        color: config.pollinations ? STATUS_OK : STATUS_FAIL,
+                        fontWeight: "bold",
+                      }}
+                    />
                   </Box>
                 </Grid>
               )}

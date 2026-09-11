@@ -9,7 +9,7 @@
  * there is deliberately no hardcoded model list or default.
  */
 
-import { hasOpenRouterKey, hasTavilyKey } from "./env";
+import { hasOpenRouterKey, hasPollinationsKey, hasTavilyKey } from "./env";
 
 export const DEFAULT_LANGUAGES = ["German", "English", "Japanese", "French"];
 export const DEFAULT_LANGUAGE = "German";
@@ -35,6 +35,7 @@ export function getPublicConfig() {
   return {
     tavily: hasTavilyKey(),
     openrouter: hasOpenRouterKey(),
+    pollinations: hasPollinationsKey(),
     languages: getLanguages(),
     defaultLanguage: getDefaultLanguage(),
   };

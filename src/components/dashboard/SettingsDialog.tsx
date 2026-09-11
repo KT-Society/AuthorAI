@@ -271,6 +271,15 @@ export function SettingsDialog({
                 >
                   OpenRouter: {config ? (config.openrouter ? "verbunden" : "fehlt") : "…"}
                 </span>
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
+                  style={{
+                    borderColor: config?.pollinations ? STATUS_OK : STATUS_FAIL,
+                    color: config?.pollinations ? STATUS_OK : STATUS_FAIL,
+                  }}
+                >
+                  Pollinations: {config ? (config.pollinations ? "verbunden" : "fehlt") : "…"}
+                </span>
               </div>
             </div>
           </div>

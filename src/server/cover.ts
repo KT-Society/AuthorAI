@@ -8,14 +8,19 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { ApiError } from "@promptgen/server/api";
+import { getPollinationsKey } from "@promptgen/server/env";
 
 import { runtimeRoot } from "./paths";
 
-const API_BASE = process.env.POLLINATIONS_API_BASE ?? "https://gen.pollinations.ai";
 // In dev: <repo>/covers · im Standalone-Binary: <binary-dir>/covers
 const COVERS_DIR = path.resolve(runtimeRoot(), "covers");
 
 export const DEFAULT_COVER_MODEL = "black-forest-labs/flux.1-schnell";
+
+/** Lazy, damit `.env`-Werte greifen, die erst nach dem Modul-Import geladen werden. */
+function apiBase(): string {
+  return process.env.POLLINATIONS_API_BASE ?? "https://gen.pollinations.ai";
+}
 
 export interface CoverInput {
   prompt: string;
@@ -23,10 +28,6 @@ export interface CoverInput {
   width?: number;
   height?: number;
   seed?: number;
-}
-
-function getKey(): string | undefined {
-  return process.env.POLLINATIONS_API_KEY ?? process.env.POLLINATIONS_TOKEN;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -39,7 +40,7 @@ export function coversDir(): string {
 
 /** Generates a cover image and returns its public URL path (e.g. `/covers/xyz.png`). */
 export async function generateCover(input: CoverInput): Promise<string> {
-  const key = getKey();
+  const key = getPollinationsKey();
   if (!key) {
     throw new ApiError("Kein POLLINATIONS_API_KEY in der .env gefunden.", 500);
   }
@@ -55,7 +56,7 @@ export async function generateCover(input: CoverInput): Promise<string> {
     height: String(height),
     seed: String(seed),
   });
-  const endpoint = `${API_BASE}/image/${encodeURIComponent(input.prompt)}?${params.toString()}`;
+  const endpoint = `${apiBase()}/image/${encodeURIComponent(input.prompt)}?${params.toString()}`;
 
   const response = await fetch(endpoint, {
     headers: {

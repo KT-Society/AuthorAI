@@ -37,7 +37,8 @@ POLLINATIONS_API_KEY=sk_…
 ```
 
 > Fehlt ein Key, antworten die betroffenen Routen mit **HTTP 500** und einer klaren
-> deutschen Meldung. `GET /api/config` zeigt den Status als Booleans.
+> deutschen Meldung. `GET /api/config` liefert den Status als Booleans (`tavily`,
+> `openrouter`, `pollinations`) — die Einstellungen zeigen ihn als Badges an.
 
 ---
 

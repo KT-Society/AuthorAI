@@ -9,6 +9,7 @@
 export interface AppConfig {
   tavily: boolean;
   openrouter: boolean;
+  pollinations: boolean;
   languages: string[];
   defaultLanguage: string;
 }

@@ -17,6 +17,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   Erfolg/Fehlschlag statt still zu scheitern.
 - **Prosa-Extraktion** (`src/lib/prose.ts`) für Server und Client: extrahiert `<TEXT>`-Blöcke
   robust und erkennt mitten im Satz abgebrochene Texte.
+- **Pollinations-Status**: Die Einstellungen zeigen jetzt auch den Cover-Key an
+  (`Pollinations: verbunden/fehlt`) — `GET /api/config` liefert dafür `pollinations`.
 
 ### Fixed
 

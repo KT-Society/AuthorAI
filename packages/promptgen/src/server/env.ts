@@ -99,6 +99,14 @@ export function hasTavilyKey(): boolean {
   return Boolean(getTavilyKey());
 }
 
+export function getPollinationsKey(): string | undefined {
+  return process.env.POLLINATIONS_API_KEY ?? process.env.POLLINATIONS_TOKEN;
+}
+
 export function hasOpenRouterKey(): boolean {
   return Boolean(getOpenRouterKey());
+}
+
+export function hasPollinationsKey(): boolean {
+  return Boolean(getPollinationsKey());
 }
