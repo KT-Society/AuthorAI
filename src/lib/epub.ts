@@ -49,6 +49,8 @@ blockquote { margin: 1em 2em; font-style: italic; }`;
 export interface EpubOptions {
   author: string;
   language: string;
+  /** Welches Cover eingebunden wird (Standard: Front, falls vorhanden). */
+  cover?: "front" | "back" | "none";
 }
 
 export async function buildEpub(book: Book, options: EpubOptions): Promise<Blob> {
@@ -96,9 +98,16 @@ export async function buildEpub(book: Book, options: EpubOptions): Promise<Blob>
   let coverManifest = "";
   let coverSpine = "";
   let coverLegacyMeta = "";
-  if (book.coverUrl) {
+  const coverSource =
+    options.cover === "none"
+      ? undefined
+      : options.cover === "back"
+        ? book.coverBackUrl
+        : book.coverUrl;
+
+  if (coverSource) {
     try {
-      const response = await fetch(book.coverUrl);
+      const response = await fetch(coverSource);
       if (response.ok) {
         entries.push({
           path: "OEBPS/images/cover.png",

@@ -68,11 +68,22 @@ export interface Storyboard {
   chapters: ChapterPlan[];
 }
 
+/** Momentaufnahme eines Kapitels (Versionierung). */
+export interface ChapterVersion {
+  at: string;
+  title: string;
+  draft: string;
+  expanded: string;
+  note?: string;
+}
+
 export interface ChapterContent {
   index: number;
   title: string;
   draft: string;
   expanded: string;
+  /** Frühere Fassungen (neueste zuerst). */
+  history?: ChapterVersion[];
   /** Per-chapter word target for the expansion pass. */
   targetWords?: number;
   /** Characters that appear in this chapter. */

@@ -8,6 +8,7 @@
 
 import { BOOKS, DEFAULT_META } from "@/data/author";
 import type { Book, DashboardMeta, Idea } from "@/data/author";
+import type { SavedCoverPreset } from "@/data/cover";
 import type { Character } from "@/data/characters";
 import type { PlotCard } from "@/data/plot";
 import type { ResearchNote } from "@/data/research";
@@ -21,6 +22,7 @@ export type DataName =
   | "plot"
   | "research"
   | "ideas"
+  | "coverPresets"
   | "notifications";
 
 const ALL_NAMES: DataName[] = [
@@ -30,6 +32,7 @@ const ALL_NAMES: DataName[] = [
   "plot",
   "research",
   "ideas",
+  "coverPresets",
   "notifications",
 ];
 
@@ -94,6 +97,11 @@ export const saveResearch = (profileId: string, value: ResearchNote[]) =>
 
 export const loadIdeas = (profileId: string) => load<Idea>(profileId, "ideas");
 export const saveIdeas = (profileId: string, value: Idea[]) => save(profileId, "ideas", value);
+
+export const loadCoverPresets = (profileId: string) =>
+  load<SavedCoverPreset>(profileId, "coverPresets");
+export const saveCoverPresets = (profileId: string, value: SavedCoverPreset[]) =>
+  save(profileId, "coverPresets", value);
 
 export const loadNotifications = (profileId: string) => {
   const stored = load<AppNotification>(profileId, "notifications");

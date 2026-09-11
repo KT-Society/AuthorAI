@@ -32,14 +32,51 @@ import {
   applyCoverLayout,
   applyCoverPreset,
   defaultCoverLayers,
+  ean13Modules,
   makeCoverLayer,
+  normalizeIsbn,
+  presetFromLayers,
 } from "@/data/cover";
-import type { CoverLayoutId, CoverTextLayer } from "@/data/cover";
+import type { CoverLayoutId, CoverTextLayer, SavedCoverPreset } from "@/data/cover";
 import { saveCoverImage } from "@/services/cover";
 
 type CtxWithSpacing = CanvasRenderingContext2D & { letterSpacing?: string };
 
 export type CoverTarget = "front" | "back";
+
+/** Zeichnet einen EAN-13-Barcode (ISBN) ins Canvas. */
+function drawBarcode(
+  ctx: CanvasRenderingContext2D,
+  layer: CoverTextLayer,
+  width: number,
+  height: number,
+): void {
+  const modules = ean13Modules(layer.text);
+  const digits = normalizeIsbn(layer.text);
+  if (!modules) return;
+
+  const barHeight = layer.size * width;
+  const barWidth = (barHeight * 0.95) / 95;
+  const totalWidth = barWidth * 95;
+  const anchorX = (layer.x / 100) * width;
+  const anchorY = (layer.y / 100) * height;
+  const startX = anchorX - totalWidth / 2;
+  const top = anchorY - barHeight / 2;
+
+  ctx.save();
+  ctx.fillStyle = layer.color;
+  modules.forEach((bar, index) => {
+    if (!bar) return;
+    ctx.fillRect(startX + index * barWidth, top, Math.max(1, barWidth * 0.9), barHeight);
+  });
+
+  const fontSize = barHeight * 0.26;
+  ctx.font = `400 ${fontSize}px "Courier New", monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText(digits, anchorX, top + barHeight + fontSize * 0.18);
+  ctx.restore();
+}
 
 function drawLayer(
   ctx: CanvasRenderingContext2D,
@@ -47,6 +84,11 @@ function drawLayer(
   width: number,
   height: number,
 ): void {
+  if (layer.role === "isbn") {
+    drawBarcode(ctx, layer, width, height);
+    return;
+  }
+
   const fontSize = layer.size * width;
   const text = layer.uppercase ? layer.text.toUpperCase() : layer.text;
   const lines = text.split("\n");
@@ -91,6 +133,8 @@ export function CoverEditorDialog({
   onClose,
   onSaved,
   onSaveLayers,
+  customPresets = [],
+  onSavePreset,
 }: {
   open: boolean;
   imageUrl: string | undefined;
@@ -102,6 +146,8 @@ export function CoverEditorDialog({
   onClose: () => void;
   onSaved: (url: string) => void;
   onSaveLayers: (layers: CoverTextLayer[]) => void;
+  customPresets?: SavedCoverPreset[];
+  onSavePreset?: (label: string, layers: CoverTextLayer[]) => void;
 }) {
   const [layers, setLayers] = useState<CoverTextLayer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -153,8 +199,11 @@ export function CoverEditorDialog({
 
   const selected = layers.find((layer) => layer.id === selectedId) ?? null;
 
-  const addLayer = (kind: "title" | "author" | "plain") => {
-    const layer = makeCoverLayer(kind, kind === "plain" ? "Text" : kind === "author" ? "Autor" : "Titel");
+  const addLayer = (kind: "title" | "author" | "plain" | "isbn") => {
+    const layer = makeCoverLayer(
+      kind,
+      kind === "plain" ? "Text" : kind === "author" ? "Autor" : kind === "isbn" ? "9783161484100" : "Titel",
+    );
     setLayers((prev) => [...prev, layer]);
     setSelectedId(layer.id);
   };
@@ -325,7 +374,40 @@ export function CoverEditorDialog({
                     outlineOffset: "3px",
                   }}
                 >
-                  {layer.uppercase ? layer.text.toUpperCase() : layer.text}
+                  {layer.role === "isbn" ? (
+                    <span className="inline-flex flex-col items-center gap-1">
+                      {ean13Modules(layer.text) ? (
+                        <span className="flex items-end" style={{ height: layer.size * previewWidth }}>
+                          {(ean13Modules(layer.text) ?? []).map((bar, index) => (
+                            <span
+                              key={index}
+                              style={{
+                                width: Math.max(1, (layer.size * previewWidth * 0.95) / 95),
+                                height: bar ? "100%" : "82%",
+                                background: bar ? layer.color : "transparent",
+                              }}
+                            />
+                          ))}
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: Math.max(7, layer.size * previewWidth * 0.3) }}>
+                          ungültige ISBN
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          fontSize: Math.max(6, layer.size * previewWidth * 0.26),
+                          letterSpacing: "0.08em",
+                        }}
+                      >
+                        {normalizeIsbn(layer.text) || "—"}
+                      </span>
+                    </span>
+                  ) : layer.uppercase ? (
+                    layer.text.toUpperCase()
+                  ) : (
+                    layer.text
+                  )}
                 </div>
               ))}
             </div>
@@ -341,16 +423,34 @@ export function CoverEditorDialog({
                 Presets
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {COVER_PRESETS.map((preset) => (
+                {[...COVER_PRESETS, ...customPresets].map((preset) => (
                   <button
                     key={preset.id}
                     type="button"
                     onClick={() => setLayers((prev) => applyCoverPreset(prev, preset))}
-                    className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] transition-colors hover:border-white/20 hover:text-foreground"
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-[11px] transition-colors hover:border-white/20 hover:text-foreground",
+                      "custom" in preset && preset.custom
+                        ? "border-brand-violet/40 bg-brand-violet/10 text-brand-violet"
+                        : "border-white/10 bg-white/5",
+                    )}
                   >
                     {preset.label}
                   </button>
                 ))}
+                {onSavePreset ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const label = window.prompt("Name für dieses Cover-Preset?");
+                      if (label?.trim()) onSavePreset(label.trim(), layers);
+                    }}
+                    className="rounded-full border border-dashed border-white/20 bg-transparent px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                    title="Aktuelle Schrift-/Stilwahl als Preset speichern"
+                  >
+                    + Preset speichern
+                  </button>
+                ) : null}
               </div>
 
               <p className="mt-3 mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -385,6 +485,15 @@ export function CoverEditorDialog({
               </Button>
               <Button size="sm" variant="outline" className="glass rounded-lg border-white/10" onClick={() => addLayer("plain")}>
                 <Plus className="size-3.5" /> Text
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="glass rounded-lg border-white/10"
+                onClick={() => addLayer("isbn")}
+                title="ISBN-Barcode (EAN-13) einfügen"
+              >
+                <Plus className="size-3.5" /> ISBN
               </Button>
             </div>
 

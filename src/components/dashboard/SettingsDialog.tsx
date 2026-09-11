@@ -35,13 +35,16 @@ export function SettingsDialog({
   onClose,
   onExportBackup,
   onImportBackup,
+  onImportBackupAsProfile,
 }: {
   open: boolean;
   onClose: () => void;
   onExportBackup: () => void;
   onImportBackup: (file: File) => void;
+  onImportBackupAsProfile: (file: File) => void;
 }) {
   const backupInputRef = useRef<HTMLInputElement | null>(null);
+  const backupProfileInputRef = useRef<HTMLInputElement | null>(null);
   const [model, setModel] = useState("");
   const [stageModels, setStageModels] = useState<Record<ModelStage, string>>({
     storyboard: "",
@@ -205,9 +208,19 @@ export function SettingsDialog({
                   variant="outline"
                   className="glass rounded-xl border-white/10"
                   onClick={() => backupInputRef.current?.click()}
+                  title="Ersetzt die Daten des aktuellen Profils"
                 >
                   <Upload className="size-4" />
                   Backup importieren
+                </Button>
+                <Button
+                  variant="outline"
+                  className="glass rounded-xl border-white/10"
+                  onClick={() => backupProfileInputRef.current?.click()}
+                  title="Legt ein neues Profil aus dem Backup an — nichts wird überschrieben"
+                >
+                  <Upload className="size-4" />
+                  Als neues Profil
                 </Button>
                 <input
                   ref={backupInputRef}
@@ -217,6 +230,17 @@ export function SettingsDialog({
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (file) onImportBackup(file);
+                    event.target.value = "";
+                  }}
+                />
+                <input
+                  ref={backupProfileInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) onImportBackupAsProfile(file);
                     event.target.value = "";
                   }}
                 />

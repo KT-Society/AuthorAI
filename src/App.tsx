@@ -2,10 +2,24 @@ import { useState } from "react";
 
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import { ProfileGate } from "@/components/dashboard/ProfileGate";
+import { normalizeMeta } from "@/lib/streak";
 import { releaseCoverImage } from "@/lib/coverStore";
-import { loadBooks } from "@/lib/persistence";
+import type { ProfileBackup } from "@/lib/backup";
+import {
+  loadBooks,
+  saveBooks,
+  saveCharacters,
+  saveCoverPresets,
+  saveIdeas,
+  saveMeta,
+  saveNotifications,
+  savePlot,
+  saveResearch,
+  saveWorld,
+} from "@/lib/persistence";
 import {
   clearProfileData,
+  createProfile,
   ensureProfiles,
   loadCurrentProfileId,
   saveCurrentProfileId,
@@ -33,10 +47,11 @@ export function App() {
   };
 
   const remove = (id: string) => {
-    // Release this profile's generated covers before clearing its data.
-    const books = loadBooks(id) ?? [];
-    for (const book of books) {
-      if (book.coverUrl) void releaseCoverImage(book.coverUrl, { ignoreProfile: id });
+    // Cover dieses Profils freigeben, sofern sie nirgends sonst referenziert werden.
+    for (const book of loadBooks(id) ?? []) {
+      for (const url of [book.coverUrl, book.coverBackUrl, ...(book.coverVariants ?? [])]) {
+        if (url) void releaseCoverImage(url, { ignoreProfile: id });
+      }
     }
     clearProfileData(id);
     const next = profiles.filter((profile) => profile.id !== id);
@@ -46,6 +61,24 @@ export function App() {
       setCurrentId(null);
       saveCurrentProfileId(null);
     }
+  };
+
+  /** Importiert ein Backup als **neues** Profil (statt den aktuellen Stand zu ersetzen). */
+  const importAsProfile = (backup: ProfileBackup) => {
+    const nameTaken = profiles.some((profile) => profile.name === backup.profileName);
+    const profile = createProfile(nameTaken ? `${backup.profileName} (Import)` : backup.profileName);
+
+    saveBooks(profile.id, backup.books);
+    saveCharacters(profile.id, backup.characters);
+    saveWorld(profile.id, backup.world);
+    savePlot(profile.id, backup.plot);
+    saveResearch(profile.id, backup.research);
+    saveIdeas(profile.id, backup.ideas);
+    saveNotifications(profile.id, backup.notifications);
+    saveMeta(profile.id, normalizeMeta(backup.meta ?? null));
+    saveCoverPresets(profile.id, []);
+
+    create(profile);
   };
 
   const switchProfile = () => {
@@ -70,6 +103,7 @@ export function App() {
       profileId={current.id}
       profileName={current.name}
       onSwitchProfile={switchProfile}
+      onImportProfile={importAsProfile}
     />
   );
 }

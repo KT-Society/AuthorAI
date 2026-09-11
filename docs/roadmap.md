@@ -5,22 +5,36 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 
 ---
 
+## 0.3.0 (geplant) — Inhalt & Qualität
+
+Der Umsetzungsplan wird intern gepflegt (`.echo/plans/`, nicht Teil des öffentlichen Repos);
+der angestrebte Scope:
+
+- **Kontinuitäts-Datenbank**: Figuren-/Welt-Fakten werden strukturiert erfasst (Kategorie +
+  prüfbare Aussage + Quelle) und den Prüfungen als **harte Vorgaben** mitgegeben — das Modell
+  liest nicht mehr Text gegen Text, sondern prüft gegen Fakten und benennt Widersprüche konkret.
+- **Figuren-Beziehungsgraph**: Beziehungen (Loyalität, Liebe, Misstrauen, Schuld, Rivalität …)
+  mit Richtung, Intensität und Notiz — als Graph sichtbar und als Kontext für Ausbau und
+  Kohärenz nutzbar.
+
+---
+
 ## Nah dran (hoher Nutzen, überschaubar)
 
 ### Schreiben & Struktur
-- **Kapitel-Versionierung**: Historie mit Wiederherstellung
-- **Szenen-Vorlagen**: wiederverwendbare Szenen-Muster (z. B. „Verfolgungsjagd")
-- **Timeline-Ansicht**: chronologische Übersicht aller Szenen mit Konfliktmarkierung
+- **Versions-Diff**: Unterschiede zwischen zwei Kapitelversionen anzeigen
+- **Kapitel-Gerüste**: ganze Kapitelstrukturen als Vorlage wiederverwenden
+- **Szenen-Import/Export**: Szenenplan als JSON austauschen
 
 ### Export & Ausgabe
-- **Backup-Merge**: Import als **neues Profil** statt Ersetzen des aktuellen
-- **Cover-Auswahl im EPUB**: Front-/Back-Cover gezielt einbinden
-- **Direkter PDF-Export** (statt über den Druckdialog)
+- **PDF mit Cover-Seite** (Titelseite aus dem Cover-Bild)
+- **DOCX mit Kommentaren** für Lektorats-Workflows
+- **Automatische Backups** in Intervallen (lokal)
 
 ### Covers
-- **Eigene Presets speichern** (Cover-Vorlagen je Projekt/Genre)
-- **ISBN/Barcode-Feld** auf dem Back-Cover
-- **A/B-Auswahl**: mehrere Varianten in der Bibliothek vergleichen
+- **Rücken (Spine)** als eigener Layer-Bereich
+- **EAN-13-Scan-Test** (Barcode gegen Scanner prüfen)
+- **Hintergrund-Filter** für Cover-Bilder (Duotone/Grain)
 
 ---
 

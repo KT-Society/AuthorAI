@@ -18,6 +18,8 @@ export interface Book {
   tags: string[];
   synopsis: string;
   coverUrl?: string;
+  /** Weitere Cover-Entwürfe zum Vergleichen (A/B-Auswahl). */
+  coverVariants?: string[];
   /** Optionales Back-/Rückseiten-Cover. */
   coverBackUrl?: string;
   /** Persistierte Text-Layer (erneut editierbar statt nur eingebrannt). */

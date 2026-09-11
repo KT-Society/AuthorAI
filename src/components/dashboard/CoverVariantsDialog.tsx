@@ -5,20 +5,21 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import type { Storyboard } from "@/data/story";
-import { buildCoverPrompt, deleteCover, generateCover } from "@/services/cover";
+import { buildCoverPrompt, generateCover } from "@/services/cover";
 
 export function CoverVariantsDialog({
   open,
   storyboard,
   count = 3,
   onClose,
-  onPick,
+  onGenerated,
 }: {
   open: boolean;
   storyboard: Storyboard | undefined;
   count?: number;
   onClose: () => void;
-  onPick: (url: string) => void;
+  /** Alle erzeugten Entwürfe — der Aufrufer verwaltet sie als Kandidaten. */
+  onGenerated: (urls: string[]) => void;
 }) {
   const [variants, setVariants] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -30,18 +31,15 @@ export function CoverVariantsDialog({
     let active = true;
     setBusy(true);
     setError(null);
-    setVariants([]);
+    const urls: string[] = [];
 
     (async () => {
-      const urls: string[] = [];
       try {
         for (let index = 0; index < count; index += 1) {
           urls.push(await generateCover({ prompt: buildCoverPrompt(storyboard) }));
         }
         if (active) setVariants(urls);
       } catch (err) {
-        // Bereits erzeugte Varianten wieder aufräumen
-        for (const url of urls) void deleteCover(url);
         if (active) setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
       } finally {
         if (active) setBusy(false);
@@ -56,32 +54,18 @@ export function CoverVariantsDialog({
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) closeAll();
+      if (event.key === "Escape" && !busy) onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  });
-
-  const closeAll = () => {
-    for (const url of variants) void deleteCover(url);
-    setVariants([]);
-    onClose();
-  };
-
-  const pick = (url: string) => {
-    for (const other of variants) {
-      if (other !== url) void deleteCover(other);
-    }
-    setVariants([]);
-    onPick(url);
-  };
+  }, [open, busy, onClose]);
 
   if (!open) return null;
 
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-6"
-      onClick={() => !busy && closeAll()}
+      onClick={() => !busy && onClose()}
     >
       <div
         className="glass-strong float-in w-full max-w-4xl rounded-2xl p-5"
@@ -95,7 +79,7 @@ export function CoverVariantsDialog({
             <div>
               <h2 className="text-lg font-semibold tracking-tight">Cover-Varianten</h2>
               <p className="text-xs text-muted-foreground">
-                {count} Entwürfe zur Auswahl — nicht gewählte werden wieder gelöscht.
+                {count} Entwürfe — sie landen als Kandidaten im Buch und lassen sich dort vergleichen.
               </p>
             </div>
           </div>
@@ -103,7 +87,7 @@ export function CoverVariantsDialog({
             variant="ghost"
             size="icon-sm"
             className="rounded-lg text-muted-foreground hover:text-foreground"
-            onClick={closeAll}
+            onClick={onClose}
             disabled={busy}
           >
             <X className="size-4" />
@@ -124,27 +108,35 @@ export function CoverVariantsDialog({
         ) : (
           <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
             {variants.map((url, index) => (
-              <button
+              <div
                 key={url}
-                type="button"
-                onClick={() => pick(url)}
                 className={cn(
-                  "group relative overflow-hidden rounded-xl border border-white/10 transition-all",
-                  "hover:-translate-y-1 hover:border-brand-cyan/50",
+                  "relative overflow-hidden rounded-xl border border-white/10 transition-all",
+                  "hover:border-brand-cyan/50",
                 )}
-                title="Diese Variante übernehmen"
               >
                 <img src={url} alt={`Variante ${index + 1}`} className="block h-auto w-full" />
-                <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/60 px-2 py-1.5 text-[11px] font-semibold text-white opacity-0 backdrop-blur transition-opacity group-hover:opacity-100">
-                  <Check className="size-3.5" />
-                  Übernehmen
+                <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+                  <Check className="size-3" />
+                  Kandidat {index + 1}
                 </span>
-              </button>
+              </div>
             ))}
           </div>
         )}
 
         <div className="mt-5 flex justify-end gap-2">
+          <Button
+            variant="outline"
+            className="glass rounded-xl border-white/10"
+            onClick={() => {
+              if (variants.length > 0) onGenerated(variants);
+            }}
+            disabled={busy || variants.length === 0}
+          >
+            <Check className="size-4" />
+            Als Kandidaten übernehmen
+          </Button>
           <Button
             variant="outline"
             className="glass rounded-xl border-white/10"
@@ -159,3 +151,4 @@ export function CoverVariantsDialog({
     </div>
   );
 }
+

@@ -12,25 +12,36 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 - **Added** **Szenen-Ziele**: Wortziel pro Szene — im Szenen-Editor pflegbar und als
   verbindliche Vorgabe im Prompt (`Target: ~N words`).
-- **Added** **Timeline-Validierung**: `POST /api/timeline/check` prüft die Zeitangaben der
-  Szenen gegen die Kapitelreihenfolge (Rückwärtssprünge, unplausible Reise-/Vorbereitungszeiten,
-  Tag/Nacht, Daten) und liefert einen Bericht. Erreichbar über „Timeline prüfen" im Buch.
-- **Changed** Der Kohärenz-Pass berücksichtigt den Szenen-Block inklusive Zeitangaben.
+- **Added** **Timeline-Validierung & -Ansicht**: `POST /api/timeline/check` prüft die
+  Zeitangaben der Szenen gegen die Kapitelreihenfolge (Rückwärtssprünge, unplausible
+  Reise-/Vorbereitungszeiten, Tag/Nacht, Daten). Ein Dialog zeigt die vollständige
+  Chronologie (Zeit/Schauplatz/POV je Szene) und markiert betroffene Kapitel.
+- **Added** **Kapitel-Versionierung**: automatische Momentaufnahme vor jeder Generierung,
+  zusätzlich manuelle Versionen — mit Zeitstempel, Wortzahl und „Wiederherstellen".
+- **Added** **Szenen-Vorlagen**: wiederverwendbare Muster (Verfolgungsjagd, Konfrontation,
+  Enthüllung, ruhige Szene, Kampf/Belagerung) zum Einfügen.
+- **Changed** Der Kohärenz-Pass berücksichtigt den Szenen-Block inklusive Zeitangaben und Worten.
 
 ### Export & Ausgabe
 
 - **Added** **DOCX-Export** (Office Open XML, clientseitig) mit Titelblatt, Kapitel-
   überschriften inkl. Seitenumbruch und Absätzen — für klassische Lektorats-Workflows.
+- **Added** **Direkter PDF-Export** (PDF 1.4, eigener Writer, WinAnsi/Helvetica) mit
+  Titelblatt und Kapitelumbruch — ohne Druckdialog.
 - **Added** **Teil-Export**: Gesamtbuch, Akt I–III oder das aktuelle Kapitel — wahlweise als
-  Markdown, EPUB oder DOCX (Auswahl direkt in der Buch-Ansicht).
+  Markdown, EPUB, DOCX oder PDF.
+- **Added** **Cover-Auswahl im EPUB**: Front-, Back-Cover oder keins.
+- **Added** **Backup als neues Profil**: Import kann die Daten in ein **neues** Profil legen,
+  statt den aktuellen Stand zu ersetzen (Backup-Merge).
 
 ### Covers
 
-- **Added** **Cover-Varianten**: mehrere Entwürfe generieren und auswählen; nicht gewählte
-  Varianten werden automatisch gelöscht (keine verwaisten Bilder).
-- **Added** **Text-Presets** (Schriftpaare: Klassisch/Modern/Thriller/Roman) und
-  **Layout-Presets** (Titel oben · Autor unten / zentriert / unten).
+- **Added** **Cover-Varianten**: mehrere Entwürfe generieren; sie bleiben als **Kandidaten**
+  im Buch und lassen sich dort vergleichen („Als Cover" / einzeln löschen).
+- **Added** **Text-Presets** (Schriftpaare: Klassisch/Modern/Thriller/Roman), **Layout-Presets**
+  und **eigene Presets** (pro Profil speicherbar).
 - **Added** **Front- und Back-Cover** inkl. Umschalter im Cover-Editor und Vorschau-Thumbnail.
+- **Added** **ISBN/EAN-13-Barcode** als Cover-Layer (echte Prüfziffer, gültig/t ungültig wird erkannt).
 - **Added** **Cover-Text-Layer werden persistiert** („Nur Text speichern") und beim erneuten
   Öffnen wieder geladen — Text bleibt editierbar statt nur eingebrannt.
 

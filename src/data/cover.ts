@@ -1,6 +1,6 @@
 /** Cover-Text-Layer: Datenmodell, Presets und Layouts (persistierbar). */
 
-export type CoverTextRole = "title" | "author" | "free";
+export type CoverTextRole = "title" | "author" | "free" | "isbn";
 export type CoverAlign = "left" | "center" | "right";
 
 export interface CoverTextLayer {
@@ -53,6 +53,9 @@ export function makeCoverLayer(role: CoverTextRole, text: string): CoverTextLaye
   if (role === "title") return { ...base, y: 20, size: 0.085, fontWeight: 800 };
   if (role === "author") {
     return { ...base, y: 88, size: 0.045, fontWeight: 600, uppercase: true, letterSpacing: 0.14 };
+  }
+  if (role === "isbn") {
+    return { ...base, x: 82, y: 94, size: 0.05, fontWeight: 400, letterSpacing: 0.04, shadow: false };
   }
   return base;
 }
@@ -119,8 +122,81 @@ export const COVER_LAYOUTS: { id: CoverLayoutId; label: string }[] = [
 
 export function applyCoverLayout(layers: CoverTextLayer[], layout: CoverLayoutId): CoverTextLayer[] {
   return layers.map((layer) => {
+    if (layer.role === "isbn") return { ...layer, x: 82, y: 94 };
     if (layout === "center") return { ...layer, x: 50, y: layer.role === "title" ? 44 : 58 };
     if (layout === "bottom") return { ...layer, x: 50, y: layer.role === "title" ? 78 : 90 };
     return { ...layer, x: 50, y: layer.role === "title" ? 20 : 88 };
   });
+}
+
+/* ── ISBN / EAN-13 ──────────────────────────────────────────────────────── */
+
+const EAN_L = ["0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011", "0110111", "0001011"];
+const EAN_G = ["0100111", "0110011", "0011011", "0100001", "0011101", "0111001", "0000101", "0010001", "0001001", "0010111"];
+const EAN_R = ["1110010", "1100110", "1101100", "1000010", "1011100", "1001110", "1010000", "1000100", "1001000", "1110100"];
+const EAN_PARITY = ["LLLLLL", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG", "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL", "LGGLGL"];
+
+export function ean13CheckDigit(twelve: string): number {
+  let sum = 0;
+  for (let index = 0; index < 12; index += 1) {
+    const digit = Number(twelve[index] ?? 0);
+    sum += index % 2 === 0 ? digit : digit * 3;
+  }
+  return (10 - (sum % 10)) % 10;
+}
+
+export function normalizeIsbn(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+/** 95 Module (true = Stab) für eine EAN-13 — oder null bei ungültiger Eingabe. */
+export function ean13Modules(value: string): boolean[] | null {
+  let digits = normalizeIsbn(value);
+  if (digits.length === 12) digits += String(ean13CheckDigit(digits));
+  if (digits.length !== 13) return null;
+  if (Number(digits[12]) !== ean13CheckDigit(digits.slice(0, 12))) return null;
+
+  const parity = EAN_PARITY[Number(digits[0])] ?? "LLLLLL";
+  let bits = "101";
+  for (let index = 1; index <= 6; index += 1) {
+    const digit = Number(digits[index] ?? 0);
+    bits += parity[index - 1] === "L" ? EAN_L[digit] : EAN_G[digit];
+  }
+  bits += "01010";
+  for (let index = 7; index <= 12; index += 1) {
+    bits += EAN_R[Number(digits[index] ?? 0)];
+  }
+  bits += "101";
+
+  return [...bits].map((bit) => bit === "1");
+}
+
+/* ── Eigene Presets ─────────────────────────────────────────────────────── */
+
+export interface SavedCoverPreset extends CoverPreset {
+  /** true = vom Nutzer angelegt. */
+  custom?: boolean;
+}
+
+/** Zieht Titel-/Autor-Stile aus den aktuellen Layern (für „Als Preset speichern"). */
+export function presetFromLayers(
+  layers: CoverTextLayer[],
+  id: string,
+  label: string,
+): SavedCoverPreset {
+  const pick = (role: CoverTextRole): Partial<CoverTextLayer> => {
+    const layer = layers.find((item) => item.role === role);
+    if (!layer) return {};
+    return {
+      fontFamily: layer.fontFamily,
+      fontWeight: layer.fontWeight,
+      letterSpacing: layer.letterSpacing,
+      uppercase: layer.uppercase,
+      italic: layer.italic,
+      shadow: layer.shadow,
+      color: layer.color,
+      size: layer.size,
+    };
+  };
+  return { id, label, title: pick("title"), author: pick("author"), custom: true };
 }

@@ -4,6 +4,8 @@ import { BOOKS, IDEAS } from "@/data/author";
 import type { Book, DashboardMeta, Idea } from "@/data/author";
 import { CHARACTERS, CHARACTER_GRADIENTS, FALLBACK_GRADIENT } from "@/data/characters";
 import type { Character } from "@/data/characters";
+import type { CoverTextLayer, SavedCoverPreset } from "@/data/cover";
+import { presetFromLayers } from "@/data/cover";
 import { PLOT_CARDS } from "@/data/plot";
 import type { PlotCard, PlotStatus } from "@/data/plot";
 import { RESEARCH_NOTES } from "@/data/research";
@@ -13,6 +15,7 @@ import type { WorldEntry } from "@/data/world";
 import {
   loadBooks,
   loadCharacters,
+  loadCoverPresets,
   loadIdeas,
   loadMeta,
   loadNotifications,
@@ -21,6 +24,7 @@ import {
   loadWorld,
   saveBooks,
   saveCharacters,
+  saveCoverPresets,
   saveIdeas,
   saveMeta,
   saveNotifications,
@@ -30,6 +34,7 @@ import {
 } from "@/lib/persistence";
 import { releaseCoverImage } from "@/lib/coverStore";
 import { createBackup, parseBackup } from "@/lib/backup";
+import type { ProfileBackup } from "@/lib/backup";
 import { emptyMetaToday, normalizeMeta, recordWords } from "@/lib/streak";
 import {
   makeNotification,
@@ -175,10 +180,12 @@ export function Dashboard({
   profileId,
   profileName,
   onSwitchProfile,
+  onImportProfile,
 }: {
   profileId: string;
   profileName: string;
   onSwitchProfile: () => void;
+  onImportProfile?: (backup: ProfileBackup) => void;
 }) {
   const [books, setBooks] = useState<Book[]>(() => loadBooks(profileId) ?? BOOKS);
   const [characters, setCharacters] = useState<Character[]>(
@@ -193,6 +200,9 @@ export function Dashboard({
     () => loadNotifications(profileId) ?? SEED_NOTIFICATIONS,
   );
   const [ideas, setIdeas] = useState<Idea[]>(() => loadIdeas(profileId) ?? IDEAS);
+  const [coverPresets, setCoverPresets] = useState<SavedCoverPreset[]>(
+    () => loadCoverPresets(profileId) ?? [],
+  );
   const [meta, setMeta] = useState<DashboardMeta>(() => normalizeMeta(loadMeta(profileId)));
   const [activeNav, setActiveNav] = useState("dashboard");
   const [openBookId, setOpenBookId] = useState<string | null>(null);
@@ -221,6 +231,9 @@ export function Dashboard({
   useEffect(() => {
     saveIdeas(profileId, ideas);
   }, [profileId, ideas]);
+  useEffect(() => {
+    saveCoverPresets(profileId, coverPresets);
+  }, [profileId, coverPresets]);
   useEffect(() => {
     saveMeta(profileId, meta);
   }, [profileId, meta]);
@@ -460,6 +473,19 @@ export function Dashboard({
   const openedBook = openBookId ? books.find((book) => book.id === openBookId) : undefined;
   const unread = notifications.filter((item) => !item.read).length;
 
+  const handleImportBackupAsProfile = async (file: File) => {
+    try {
+      const parsed = parseBackup(await file.text());
+      if (!onImportProfile) {
+        window.alert("Import als neues Profil ist in dieser Umgebung nicht verfügbar.");
+        return;
+      }
+      onImportProfile(parsed);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Import fehlgeschlagen.");
+    }
+  };
+
   return (
     <NotificationsContext.Provider
       value={{
@@ -497,6 +523,13 @@ export function Dashboard({
               book={openedBook}
               characters={characters}
               authorName={profileName}
+              coverPresets={coverPresets}
+              onSaveCoverPreset={(label, layers) =>
+                setCoverPresets((prev) => [
+                  presetFromLayers(layers, `preset-${Date.now().toString(36)}`, label),
+                  ...prev,
+                ])
+              }
               initialChapterIndex={openChapterIndex}
               onBack={() => setOpenBookId(null)}
               onUpdate={updateBook}
@@ -593,6 +626,7 @@ export function Dashboard({
         onClose={() => setSettingsOpen(false)}
         onExportBackup={handleExportBackup}
         onImportBackup={(file) => void handleImportBackup(file)}
+        onImportBackupAsProfile={(file) => void handleImportBackupAsProfile(file)}
       />
       </div>
     </NotificationsContext.Provider>
