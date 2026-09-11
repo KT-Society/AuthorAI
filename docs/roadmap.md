@@ -14,9 +14,10 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 - **Szenen-Vorlagen**: wiederverwendbare Szenen-Muster (z. B. „Verfolgungsjagd")
 
 ### Export & Ausgabe
-- **EPUB-Export** (Kapitel + Cover + Metadaten)
-- **Markdown-Export** und **Druck-CSS** für sauberes PDF über den Reader
-- **Projekt-Backup**: alle Profildaten als JSON exportieren/importieren
+- **DOCX-Export** für klassische Lektorats-Workflows
+- **Teil-Export**: einzelne Kapitel/Akte als Markdown oder EPUB
+- **Backup-Merge**: Import als **neues Profil** statt Ersetzen des aktuellen
+- **Cover-Varianten im EPUB** (mehrere Cover zur Auswahl)
 
 ### Covers
 - **Varianten**: mehrere Cover generieren und auswählen

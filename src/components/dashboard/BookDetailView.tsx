@@ -45,6 +45,8 @@ import {
 import type { ChapterContent, ChapterPlan, SceneConstraint, SceneMeta } from "@/data/story";
 import { MODEL_STAGE_LABELS, readLanguage, readStageModel } from "@/lib/generationSettings";
 import { manuscriptOf } from "@/lib/bookManuscript";
+import { buildEpub } from "@/lib/epub";
+import { buildMarkdown } from "@/lib/markdown";
 import { buildCoverPrompt, generateCover } from "@/services/cover";
 import { checkConsistency, draftChapter, expandChapter, refineStyle } from "@/services/story";
 
@@ -75,6 +77,7 @@ function chapterStatus(chapter: ChapterContent): { label: string; className: str
 export function BookDetailView({
   book,
   characters,
+  authorName,
   initialChapterIndex = 0,
   onBack,
   onUpdate,
@@ -83,6 +86,7 @@ export function BookDetailView({
 }: {
   book: Book;
   characters: Character[];
+  authorName: string;
   initialChapterIndex?: number;
   onBack: () => void;
   onUpdate: (book: Book) => void;
@@ -100,6 +104,14 @@ export function BookDetailView({
   useEffect(() => {
     setSelectedIndex(initialChapterIndex);
   }, [initialChapterIndex, book.id]);
+
+  // Druck-Scope: nur im Reader wird der Inhalt gedruckt (siehe index.css).
+  useEffect(() => {
+    document.body.dataset.printArea = mode === "read" ? "on" : "off";
+    return () => {
+      delete document.body.dataset.printArea;
+    };
+  }, [mode]);
 
   const manuscript = useMemo(() => manuscriptOf(book), [book.manuscript, book.storyboard]);
   const plans = useMemo<ChapterPlan[]>(() => book.storyboard?.chapters ?? [], [book.storyboard]);
@@ -637,6 +649,42 @@ export function BookDetailView({
     return header + body;
   }, [book.title, book.subtitle, manuscript]);
 
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const fileSafe = (value: string) =>
+    value
+      .replace(/[^\p{L}\p{N}\-_. ]+/gu, "")
+      .trim()
+      .replace(/\s+/g, "_") || "buch";
+
+  const exportMarkdown = () => {
+    downloadBlob(new Blob([buildMarkdown(book)], { type: "text/markdown" }), `${fileSafe(book.title)}.md`);
+  };
+
+  const exportEpub = async () => {
+    if (!book.storyboard && manuscript.length === 0) {
+      setError("Dieses Buch hat noch keine Kapitel.");
+      return;
+    }
+    setError(null);
+    setBusy("EPUB wird erstellt…");
+    try {
+      const blob = await buildEpub(book, { author: authorName, language });
+      downloadBlob(blob, `${fileSafe(book.title)}.epub`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "EPUB-Export fehlgeschlagen.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -825,6 +873,23 @@ export function BookDetailView({
               </Button>
               <Button
                 variant="outline"
+                className="glass rounded-xl border-white/10"
+                onClick={exportMarkdown}
+              >
+                <FileText className="size-4" />
+                Markdown
+              </Button>
+              <Button
+                variant="outline"
+                className="glass rounded-xl border-white/10"
+                onClick={() => void exportEpub()}
+                disabled={Boolean(busy)}
+              >
+                <BookText className="size-4" />
+                EPUB
+              </Button>
+              <Button
+                variant="outline"
                 className="glass rounded-xl border-white/10 text-brand-rose hover:text-brand-rose"
                 onClick={() => {
                   if (window.confirm(`„${book.title}“ inkl. Manuskript löschen?`)) onDelete(book.id);
@@ -880,7 +945,7 @@ export function BookDetailView({
               Drucken
             </Button>
           </div>
-          <article className="mx-auto max-w-2xl">
+          <article className="print-area mx-auto max-w-2xl">
             <header className="mb-12 text-center">
               <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{book.title}</h1>
               <p className="mt-2 text-muted-foreground">{book.subtitle}</p>

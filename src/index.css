@@ -119,3 +119,63 @@ body::after {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Drucken (Reader) ──────────────────────────────────────────────────────
+   In Reader-Modus setzt die App `document.body.dataset.printArea = "on"`.
+   Gedruckt wird dann nur der `.print-area`-Bereich — sauberes PDF via Strg+P. */
+
+@page {
+  margin: 2cm;
+}
+
+@media print {
+  body {
+    background: #fff !important;
+  }
+
+  body[data-print-area="on"]::before,
+  body[data-print-area="on"]::after {
+    display: none !important;
+  }
+
+  body[data-print-area="on"] * {
+    visibility: hidden;
+  }
+
+  body[data-print-area="on"] .print-area,
+  body[data-print-area="on"] .print-area * {
+    visibility: visible;
+  }
+
+  body[data-print-area="on"] .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    color: #111 !important;
+  }
+
+  body[data-print-area="on"] .print-area .glass {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  body[data-print-area="on"] .print-area h1,
+  body[data-print-area="on"] .print-area h2,
+  body[data-print-area="on"] .print-area p {
+    color: #111 !important;
+  }
+
+  body[data-print-area="on"] .print-area section {
+    break-before: page;
+  }
+
+  body[data-print-area="on"] .print-area section:first-of-type {
+    break-before: auto;
+  }
+}
+

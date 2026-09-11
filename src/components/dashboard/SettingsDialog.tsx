@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Cpu, KeyRound, Settings, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Cpu, Database, Download, KeyRound, Settings, Upload, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +30,18 @@ import type { AppConfig } from "@/services/generate";
 const STATUS_OK = "#4caf50";
 const STATUS_FAIL = "#ff5252";
 
-export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function SettingsDialog({
+  open,
+  onClose,
+  onExportBackup,
+  onImportBackup,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onExportBackup: () => void;
+  onImportBackup: (file: File) => void;
+}) {
+  const backupInputRef = useRef<HTMLInputElement | null>(null);
   const [model, setModel] = useState("");
   const [stageModels, setStageModels] = useState<Record<ModelStage, string>>({
     storyboard: "",
@@ -171,6 +182,45 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <Database className="size-3.5" />
+                Daten &amp; Backup
+              </label>
+              <p className="mb-2 text-[11px] text-muted-foreground">
+                Alle Profildaten (Bücher, Charaktere, Welt, Plot, Recherche, Metriken) als JSON.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  className="glass rounded-xl border-white/10"
+                  onClick={onExportBackup}
+                >
+                  <Download className="size-4" />
+                  Backup exportieren
+                </Button>
+                <Button
+                  variant="outline"
+                  className="glass rounded-xl border-white/10"
+                  onClick={() => backupInputRef.current?.click()}
+                >
+                  <Upload className="size-4" />
+                  Backup importieren
+                </Button>
+                <input
+                  ref={backupInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) onImportBackup(file);
+                    event.target.value = "";
+                  }}
+                />
+              </div>
             </div>
 
             <div>

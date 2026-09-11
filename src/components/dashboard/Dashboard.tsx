@@ -29,6 +29,7 @@ import {
   saveWorld,
 } from "@/lib/persistence";
 import { releaseCoverImage } from "@/lib/coverStore";
+import { createBackup, parseBackup } from "@/lib/backup";
 import { emptyMetaToday, normalizeMeta, recordWords } from "@/lib/streak";
 import {
   makeNotification,
@@ -384,6 +385,64 @@ export function Dashboard({
     setCreateRequest((prev) => prev + 1);
   };
 
+  /* ── Projekt-Backup (Export/Import) ─────────────────────────────────── */
+
+  const handleExportBackup = () => {
+    const backup = createBackup(profileName, {
+      books,
+      characters,
+      world: worlds,
+      plot: plotCards,
+      research: notes,
+      ideas,
+      notifications,
+      meta,
+    });
+
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const name = profileName.replace(/[^\p{L}\p{N}\-_ ]+/gu, "").trim() || "profil";
+    anchor.href = url;
+    anchor.download = `authorai-backup-${name}-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportBackup = async (file: File) => {
+    try {
+      const parsed = parseBackup(await file.text());
+      const confirmed = window.confirm(
+        `Backup „${parsed.profileName}“ importieren?\n\n` +
+          `Achtung: ersetzt die Daten dieses Profils.\n\n` +
+          `${parsed.books.length} Bücher · ${parsed.characters.length} Charaktere · ` +
+          `${parsed.world.length} Welteneinträge · ${parsed.plot.length} Plot-Karten · ` +
+          `${parsed.research.length} Recherchenotizen`,
+      );
+      if (!confirmed) return;
+
+      // Cover der ersetzten Bücher freigeben, sofern sie nirgends mehr referenziert werden.
+      for (const previous of books) {
+        if (previous.coverUrl) {
+          void releaseCoverImage(previous.coverUrl, { ignoreProfile: profileId });
+        }
+      }
+
+      setBooks(parsed.books);
+      setCharacters(parsed.characters);
+      setWorlds(parsed.world);
+      setPlotCards(parsed.plot);
+      setNotes(parsed.research);
+      setIdeas(parsed.ideas);
+      setNotifications(parsed.notifications);
+      setMeta(normalizeMeta(parsed.meta ?? null));
+      setOpenBookId(null);
+      setActiveNav("dashboard");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Import fehlgeschlagen.");
+    }
+  };
+
   const activateNotification = (notification: AppNotification) => {
     setNotifications((prev) =>
       prev.map((item) => (item.id === notification.id ? { ...item, read: true } : item)),
@@ -433,16 +492,17 @@ export function Dashboard({
 
           <main className="min-w-0 flex-1">
             {openedBook ? (
-              <BookDetailView
-                key={`${openedBook.id}-${openChapterIndex}`}
-                book={openedBook}
-                characters={characters}
-                initialChapterIndex={openChapterIndex}
-                onBack={() => setOpenBookId(null)}
-                onUpdate={updateBook}
-                onDelete={deleteBook}
-                onWordsWritten={addWords}
-              />
+            <BookDetailView
+              key={`${openedBook.id}-${openChapterIndex}`}
+              book={openedBook}
+              characters={characters}
+              authorName={profileName}
+              initialChapterIndex={openChapterIndex}
+              onBack={() => setOpenBookId(null)}
+              onUpdate={updateBook}
+              onDelete={deleteBook}
+              onWordsWritten={addWords}
+            />
             ) : activeNav === "library" ? (
               <LibraryView
                 books={books}
@@ -528,7 +588,12 @@ export function Dashboard({
           </main>
         </div>
 
-        <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onExportBackup={handleExportBackup}
+        onImportBackup={(file) => void handleImportBackup(file)}
+      />
       </div>
     </NotificationsContext.Provider>
   );

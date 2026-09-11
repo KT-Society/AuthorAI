@@ -128,6 +128,17 @@ Charakteren, Welt, Plot, Recherche, Covern, Profilen und Statistiken.
   „Invalid prototype") und das Build-Skript meldet Inno-Fehler jetzt korrekt (Exit-Code-Prüfung).
 - **Noted** Lizenzhinweis zu Inno Setup für **kommerziellen** Vertrieb (ZIP/NSIS als Alternativen).
 
+### Export & Backup
+
+- **Added** **EPUB-Export** (EPUB 3) clientseitig mit eigenem ZIP-Writer — Cover, Titelblatt,
+  Kapitel, CSS, `nav.xhtml` und `toc.ncx`; `mimetype` korrekt als erster, unkomprimierter Eintrag.
+- **Added** **Markdown-Export** (Titel, Untertitel, Kapitelüberschriften, Absätze, Tags).
+- **Added** **Druck-CSS** für den Reader: `Strg+P` liefert ein sauberes PDF ohne Sidebar/Chrome,
+  mit Seitenumbrüchen je Kapitel (`@page`, `data-print-area`).
+- **Added** **Projekt-Backup**: alle Profildaten (Bücher, Charaktere, Welt, Plot, Recherche,
+  Ideen, Notifications, Metriken) als JSON exportieren/importieren — Import mit Bestätigung
+  und Referenz-Counted-Cover-Freigabe.
+
 ### Fixed
 
 - Storyboard liefert jetzt **exakt** die gewünschte Kapitelzahl (vorher Abbruch durch Output-Limit).
