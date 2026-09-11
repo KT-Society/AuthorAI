@@ -32,6 +32,26 @@ Idee → Storyboard → Rohentwurf (~500 W) → Ausbau (3.000–5.000 W) → Koh
 
 ---
 
+## Screenshots
+
+**Dashboard** — Statistik, Bibliothek, Tagesziel und Aktivität auf einen Blick
+
+![AuthorAI Dashboard](public/static/dashboard.png)
+
+**Plot-Board** — Story-Beats nach Akt und Status planen
+
+![Plot-Board](public/static/plotboard.png)
+
+**Buch-Wizard** — die sechsstufige Pipeline von der Idee bis zum fertigen Manuskript
+
+![Buch-Wizard](public/static/wizzard.png)
+
+**Promptgen** — die Character-Engine des Pakets `packages/promptgen` (Soul-Synthesen)
+
+![Promptgen](public/static/promptgen.png)
+
+---
+
 ## Schnellstart
 
 ```bash
