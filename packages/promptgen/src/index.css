@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-cyan: #00f2ff;
+  --color-brand-magenta: #ff00db;
+  --color-dark-bg: #0a0b10;
+  --font-sans: "Outfit", "Inter", system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+:root {
+  font-family: "Outfit", "Inter", system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  background-color: #0a0b10;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+.neon-border {
+  box-shadow: 0 0 10px rgba(0, 242, 255, 0.5), inset 0 0 5px rgba(0, 242, 255, 0.2);
+  border: 1px solid rgba(0, 242, 255, 0.5);
+}
+
+.neon-text {
+  text-shadow: 0 0 5px rgba(255, 0, 219, 0.8);
+}

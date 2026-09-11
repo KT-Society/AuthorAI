@@ -1,0 +1,216 @@
+import { useEffect, useState } from "react";
+import { Cpu, KeyRound, Settings, X } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+import {
+  DEFAULT_LANGUAGE,
+  FALLBACK_LANGUAGES,
+  MODEL_STAGE_LABELS,
+  MODEL_STAGES,
+  readLanguage,
+  readModel,
+  readStageModelRaw,
+  writeLanguage,
+  writeModel,
+  writeStageModel,
+} from "@/lib/generationSettings";
+import type { ModelStage } from "@/lib/generationSettings";
+import { fetchConfig } from "@/services/generate";
+import type { AppConfig } from "@/services/generate";
+
+const STATUS_OK = "#4caf50";
+const STATUS_FAIL = "#ff5252";
+
+export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [model, setModel] = useState("");
+  const [stageModels, setStageModels] = useState<Record<ModelStage, string>>({
+    storyboard: "",
+    draft: "",
+    expand: "",
+  });
+  const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
+  const [config, setConfig] = useState<AppConfig | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setModel(readModel());
+    setStageModels({
+      storyboard: readStageModelRaw("storyboard"),
+      draft: readStageModelRaw("draft"),
+      expand: readStageModelRaw("expand"),
+    });
+    setLanguage(readLanguage() ?? DEFAULT_LANGUAGE);
+    fetchConfig().then((data) => {
+      if (data) setConfig(data);
+    });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const languages = config?.languages?.length ? config.languages : FALLBACK_LANGUAGES;
+  const languageOptions = languages.includes(language) ? languages : [language, ...languages];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="glass-strong float-in flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 p-6">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-violet to-brand-cyan text-white">
+              <Settings className="size-5" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">Einstellungen</h2>
+              <p className="text-xs text-muted-foreground">
+                Modelle pro Schritt + Ausgabesprache.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="rounded-lg text-muted-foreground hover:text-foreground"
+            onClick={onClose}
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <Cpu className="size-3.5" />
+                Standard-Model (Fallback)
+              </label>
+              <Input
+                value={model}
+                onChange={(event) => {
+                  setModel(event.target.value);
+                  writeModel(event.target.value);
+                }}
+                placeholder="OpenRouter Model-ID"
+                className="glass h-10 rounded-xl border-white/10"
+              />
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Gilt für Charakter-Generierung und für alle Schritte ohne eigene Model-ID.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Model pro Schritt
+              </p>
+              <div className="space-y-3">
+                {MODEL_STAGES.map((stage) => (
+                  <div key={stage}>
+                    <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">
+                      {MODEL_STAGE_LABELS[stage]}
+                    </label>
+                    <Input
+                      value={stageModels[stage]}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setStageModels((prev) => ({ ...prev, [stage]: value }));
+                        writeStageModel(stage, value);
+                      }}
+                      placeholder={model.trim() || "OpenRouter Model-ID"}
+                      className="glass h-9 rounded-lg border-white/10 text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Leer = erbt das Standard-Model. Für jeden Schritt kannst du eine eigene OpenRouter
+                Model-ID eintragen.
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Ausgabesprache
+              </label>
+              <Select
+                value={language}
+                onValueChange={(value) => {
+                  setLanguage(value);
+                  writeLanguage(value);
+                }}
+              >
+                <SelectTrigger className="glass h-10 w-full rounded-xl border-white/10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="glass-strong border-white/10">
+                  {languageOptions.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <KeyRound className="size-3.5" />
+                API-Keys (serverseitig, Root-.env)
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
+                  style={{
+                    borderColor: config?.tavily ? STATUS_OK : STATUS_FAIL,
+                    color: config?.tavily ? STATUS_OK : STATUS_FAIL,
+                  }}
+                >
+                  Tavily: {config ? (config.tavily ? "verbunden" : "fehlt") : "…"}
+                </span>
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
+                  style={{
+                    borderColor: config?.openrouter ? STATUS_OK : STATUS_FAIL,
+                    color: config?.openrouter ? STATUS_OK : STATUS_FAIL,
+                  }}
+                >
+                  OpenRouter: {config ? (config.openrouter ? "verbunden" : "fehlt") : "…"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end border-t border-white/10 p-6">
+          <Button
+            onClick={onClose}
+            className="rounded-xl bg-gradient-to-r from-brand-violet to-brand-indigo px-5 font-semibold text-white shadow-[0_0_30px_-10px_hsl(258_90%_66%/0.95)]"
+          >
+            Fertig
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

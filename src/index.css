@@ -1,0 +1,121 @@
+@import "../styles/globals.css";
+
+@layer base {
+  :root {
+    @apply font-sans;
+  }
+
+  body {
+    @apply min-h-screen overflow-x-hidden bg-background text-foreground antialiased;
+  }
+}
+
+/* Ambient aurora glow behind the whole app */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 40rem at 10% -12%, hsl(258 90% 66% / 0.22), transparent 60%),
+    radial-gradient(52rem 38rem at 96% -6%, hsl(186 100% 55% / 0.16), transparent 55%),
+    radial-gradient(48rem 48rem at 62% 118%, hsl(342 90% 62% / 0.14), transparent 62%);
+}
+
+/* Faint grid texture */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(hsl(0 0% 100% / 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(0 0% 100% / 0.022) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: radial-gradient(circle at 50% 0%, black, transparent 78%);
+  -webkit-mask-image: radial-gradient(circle at 50% 0%, black, transparent 78%);
+}
+
+/* Glassmorphism 3.0 */
+.glass {
+  background: hsl(0 0% 100% / 0.045);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid hsl(0 0% 100% / 0.08);
+  box-shadow: 0 8px 32px 0 rgb(0 0 0 / 0.42);
+}
+
+.glass-strong {
+  background: hsl(0 0% 100% / 0.07);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid hsl(0 0% 100% / 0.12);
+  box-shadow: 0 12px 48px 0 rgb(0 0 0 / 0.5);
+}
+
+.ring-glass {
+  box-shadow: inset 0 1px 0 0 hsl(0 0% 100% / 0.08);
+}
+
+/* Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(0 0% 100% / 0.14) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: hsl(0 0% 100% / 0.12);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(0 0% 100% / 0.2);
+  background-clip: padding-box;
+}
+
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.float-in {
+  animation: float-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background-size: 200% 100%;
+  animation: shimmer 2.6s linear infinite;
+}
+
+@media (prefers-reduced-motion) {
+  *,
+  ::before,
+  ::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
