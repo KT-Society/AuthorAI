@@ -715,6 +715,8 @@ export interface PassInput {
   scenes?: SceneConstraint[];
   /** Verbindlicher Kanon-Block (Fakten + Beziehungen) aus dem Projekt. */
   canon?: string;
+  /** Zielstimme für den Stil-Pass (Preset-Hinweis + eigener Zusatz). */
+  styleProfile?: string;
 }
 
 function passContext(
@@ -801,10 +803,18 @@ You MUST return the COMPLETE chapter text inside <TEXT> — apply every fix and 
 Everything in ${language}.`;
 }
 
-function styleSystem(language: string): string {
+function styleSystem(language: string, styleProfile?: string): string {
+  const voice = styleProfile?.trim()
+    ? `
+VOICE / STYLE PROFILE (binding — this is the target voice):
+${styleProfile.trim()}
+Apply this voice while editing. It outranks your own preferences, but NEVER at the cost of
+plot, facts or meaning.`
+    : "";
+
   return `You are a meticulous line editor.
 ${languageLock(language)}
-
+${voice}
 TASK: improve sentence construction and language usage WITHOUT changing plot, facts or meaning:
 - vary sentence length and rhythm; break up run-ons and monotonous passages
 - remove repetitions, filler words, weak verbs and clichés
@@ -833,7 +843,9 @@ async function runPass(kind: "consistency" | "style", input: PassInput): Promise
   }
 
   const system =
-    kind === "consistency" ? consistencySystem(input.language) : styleSystem(input.language);
+    kind === "consistency"
+      ? consistencySystem(input.language)
+      : styleSystem(input.language, input.styleProfile);
   const context = passContext(input.storyboard, input.chapterIndex, input.scenes, input.canon);
   const instruction =
     kind === "consistency"
@@ -1058,6 +1070,7 @@ export async function checkTimeline(input: TimelineInput): Promise<TimelineResul
     json: true,
     maxTokens: 2500,
     temperature: 0.3,
+    cache: true,
   });
 
   const parsed = parseJson(content, "Timeline");
@@ -1193,6 +1206,7 @@ Extract only the worldbuilding that is missing so far, as JSON, entirely in ${in
     json: true,
     maxTokens: 3500,
     temperature: 0.5,
+    cache: true,
   });
 
   return dedupeWorldResponse(normalizeWorld(parseJson(content, "Weltenbau")), known);
@@ -1332,6 +1346,7 @@ export async function extractCharacters(
     json: true,
     maxTokens: 4000,
     temperature: 0.4,
+    cache: true,
   });
 
   if (finishReason === "length") {

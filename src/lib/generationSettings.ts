@@ -8,8 +8,12 @@
  * (storyboard, rough draft, expansion).
  */
 
+import { DEFAULT_STYLE_PROFILE, normalizeStyleProfile, styleProfileHint } from "@/data/style";
+import type { StyleProfile } from "@/data/style";
+
 export const MODEL_STORAGE_KEY = "authorai.model";
 export const LANGUAGE_STORAGE_KEY = "authorai.language";
+export const STYLE_PROFILE_STORAGE_KEY = "authorai.styleProfile";
 
 export const FALLBACK_LANGUAGES = ["German", "English", "Japanese", "French"];
 export const DEFAULT_LANGUAGE = "German";
@@ -75,4 +79,24 @@ export function readLanguage(): string | null {
 
 export function writeLanguage(value: string): void {
   localStorage.setItem(LANGUAGE_STORAGE_KEY, value);
+}
+
+/** Zielstimme (Preset + Freitext) — geräteweit wie Modelle und Sprache. */
+export function readStyleProfile(): StyleProfile {
+  const raw = localStorage.getItem(STYLE_PROFILE_STORAGE_KEY);
+  if (!raw) return DEFAULT_STYLE_PROFILE;
+  try {
+    return normalizeStyleProfile(JSON.parse(raw));
+  } catch {
+    return DEFAULT_STYLE_PROFILE;
+  }
+}
+
+export function writeStyleProfile(value: StyleProfile): void {
+  localStorage.setItem(STYLE_PROFILE_STORAGE_KEY, JSON.stringify(normalizeStyleProfile(value)));
+}
+
+/** Der wirksame Stimm-Hinweis (Preset + Freitext) oder "" — für Aufrufer, die nur den String brauchen. */
+export function readStyleProfileHint(): string {
+  return styleProfileHint(readStyleProfile());
 }

@@ -65,6 +65,8 @@ export interface PassRequest {
   scenes?: SceneConstraint[];
   /** Verbindlicher Kanon-Block (Fakten + Beziehungen) aus dem Projekt. */
   canon?: string;
+  /** Zielstimme für den Stil-Pass (Preset-Hinweis + eigener Zusatz). */
+  styleProfile?: string;
 }
 
 export async function checkConsistency(input: PassRequest): Promise<PassResult> {

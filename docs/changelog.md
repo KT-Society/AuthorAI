@@ -8,6 +8,30 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Mittelfristig-Paket (Ziel: 0.4.0) — Batch 1
+
+- **Added** **Fakten-Check als eigener Report** (`POST /api/continuity/check`): prüft ein Kapitel
+  **nur gegen den Kanon** (Fakten + Beziehungen) — getrennt von der Kohärenz. Antwort
+  `{ ok, summary, violations[] }` mit `fact` / `quote` / `fix` je Widerspruch. Das Kapitel wird
+  **gechunkt** (dieselbe Robustheit wie Kohärenz/Stil), Dubletten über Teile hinweg werden
+  entfernt, unvollständige Meldungen (ohne Fakt oder Zitat) verworfen. Button **„Fakten-Check"**
+  in der Kapitel-Leiste → Dialog mit Fortschritt über alle Kapitel und Erneut-Prüfen.
+- **Added** **Stil-Profil** (Zielstimme als wiederverwendbare Vorgabe): Presets
+  (Lakonisch, Hart & schnell, Barock, Lyrisch, Sachlich) plus freier Zusatz. Der zusammengesetzte
+  Hinweis geht als verbindlicher `VOICE / STYLE PROFILE`-Block in den Stil-Pass (System **und**
+  Chunk-Prompt) — ausdrücklich „nie auf Kosten von Inhalt, Fakten oder Bedeutung".
+  Einstellungen: neue Sektion **Stil-Profil**; geräteweit gespeichert (`authorai.styleProfile`).
+- **Added** **Reihen-Übersicht** in der Bibliothek: alle Bände einer Reihe mit Bandnummer,
+  Status, Kapitelstand, Wortsumme und Fortschrittsbalken; **Lücken** (gelöschte Bände) und Bände
+  **ohne Storyboard** werden markiert. Klick auf einen Band öffnet ihn. Helfer:
+  `lib/seriesOverview.ts` (pur, getestet).
+- **Added** **Antwort-Cache** für wiederholbare Analysen (`src/server/cache.ts`): LRU mit
+  200 Einträgen und 30 Min TTL über einen SHA-256-Schlüssel aus Modell, Prompt, Temperatur und
+  Limit. **Opt-in pro Aufruf** — nur Welt-Extraktion, Figuren-Extraktion, Kontinuitäts-Extraktion,
+  Fakten-Check und Timeline-Prüfung. Kreative Generierungen (Storyboard, Rohentwurf, Ausbau,
+  Kohärenz, Stil) werden **nie** gecacht, damit „erneut generieren" wirklich neu generiert.
+  Abschaltbar über `AUTHORAI_CACHE=0`; Treffer werden geloggt. Nichts wird auf Platte geschrieben.
+
 ### Kontinuitäts-Datenbank & Beziehungsgraph (Ziel: 0.3.0)
 
 - **Added** **Kanon: Fakten & Beziehungen** (`src/data/continuity.ts`): `CanonFact`

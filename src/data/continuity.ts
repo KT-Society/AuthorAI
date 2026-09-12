@@ -35,6 +35,13 @@ export type RelationKind =
   | "family"
   | "enmity";
 
+export interface RelationArcPoint {
+  /** Kapitelnummer (1-basiert). */
+  chapter: number;
+  /** Intensität an diesem Punkt: −1 (feindselig) … 1 (zugewandt). */
+  intensity: number;
+}
+
 export interface CharacterRelation {
   id: string;
   /** Charakter-ID (Quelle). */
@@ -42,8 +49,13 @@ export interface CharacterRelation {
   /** Charakter-ID (Ziel). */
   toId: string;
   kind: RelationKind;
-  /** −1 (feindselig) … 1 (zugewandt). */
+  /** −1 (feindselig) … 1 (zugewandt). Gilt global, wenn kein Arc gepflegt ist. */
   intensity: number;
+  /**
+   * Entwicklung über die Kapitel (Figuren-Entwicklung über die Zeit).
+   * Ab zwei Punkten hat der Arc Vorrang vor `intensity`.
+   */
+  arc?: RelationArcPoint[];
   note?: string;
   secret?: boolean;
   establishedIn?: string;
@@ -202,8 +214,47 @@ export function formatIntensity(value: number): string {
   return text;
 }
 
-export interface CanonBlockInput {
-  facts: CanonFact[];
+/* ───────────────────────── Beziehungs-Arc (Zeit) ───────────────────────── */
+
+/** Chronologisch sortierte Kopie (Kapitel aufsteigend). */
+export function sortArc(arc: RelationArcPoint[]): RelationArcPoint[] {
+  return [...arc].sort((a, b) => a.chapter - b.chapter);
+}
+
+/** Hat der Arc genug Punkte, um die Einzel-Intensität zu ersetzen? */
+export function hasArc(relation: CharacterRelation): boolean {
+  return (relation.arc?.length ?? 0) >= 2;
+}
+
+/** Intensität an einem Kapitel (nächster bekannter Punkt; sonst die globale). */
+export function arcAt(relation: CharacterRelation, chapter: number): number {
+  if (!hasArc(relation)) return relation.intensity;
+  const points = sortArc(relation.arc ?? []);
+  let value = points[0]?.intensity ?? relation.intensity;
+  for (const point of points) {
+    if (point.chapter <= chapter) value = point.intensity;
+    else break;
+  }
+  return value;
+}
+
+/** Kompakte Darstellung für Prompt und UI: „−0,6 (Kap. 1) → 0,2 (Kap. 12)". */
+export function formatArc(arc: RelationArcPoint[]): string {
+  return sortArc(arc)
+    .map((point) => `${formatIntensity(point.intensity)} (Kap. ${point.chapter})`)
+    .join(" → ");
+}
+
+/** Wie sich die Beziehung über den Arc insgesamt verändert (−1 … 1, 0 = unverändert). */
+export function arcDelta(arc: RelationArcPoint[]): number {
+  const points = sortArc(arc);
+  if (points.length < 2) return 0;
+  const first = points[0]?.intensity ?? 0;
+  const last = points[points.length - 1]?.intensity ?? 0;
+  return Math.round((last - first) * 10) / 10;
+}
+
+export interface CanonBlockInput {  facts: CanonFact[];
   relations: CharacterRelation[];
   /** Liefert den Anzeigenamen zu einer Entitäts-ID (Figur oder Welteintrag). */
   nameOf: (entityId: string) => string;
@@ -243,7 +294,11 @@ export function canonBlock({ facts, relations, nameOf }: CanonBlockInput): strin
         const note = relation.note?.trim() ? ` — ${relation.note.trim()}` : "";
         const chapter = relation.establishedIn?.trim() ? ` (${relation.establishedIn.trim()})` : "";
         const secret = relation.secret ? " [secret]" : "";
-        return `- ${from} → ${to}: ${relation.kind} (${formatIntensity(relation.intensity)})${secret}${note}${chapter}`;
+        // Mit Arc zeigt der Kanon die Entwicklung statt eines Einzelwerts.
+        const value = hasArc(relation)
+          ? `arc: ${formatArc(relation.arc ?? [])}`
+          : `(${formatIntensity(relation.intensity)})`;
+        return `- ${from} → ${to}: ${relation.kind} ${value}${secret}${note}${chapter}`;
       });
     if (lines.length > 0) {
       sections.push(

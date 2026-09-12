@@ -21,7 +21,7 @@ import type {
 } from "../data/continuity";
 import type { Storyboard } from "../data/story";
 import { chatCompletionDetailed, cleanJsonBlock } from "./llm";
-import { languageLock } from "./story";
+import { languageLock, splitIntoChunks } from "./story";
 
 export interface ContinuityExtractInput {
   storyboard: Storyboard;
@@ -287,4 +287,142 @@ Extract the facts and relationships now as JSON, statements in ${input.language}
   }
 
   return normalizeContinuity(parseJson(content), input);
+}
+
+/* ─────────────────────────── Fakten-Check (Kanon) ─────────────────────────── */
+
+export interface CanonCheckInput {
+  storyboard: Storyboard;
+  chapterIndex: number;
+  text: string;
+  /** Fertiger Kanon-Block (`canonBlock`) — gleiche Quelle wie alle Prüf-Pässe. */
+  canon: string;
+  model: string;
+  language: string;
+}
+
+export interface CanonViolation {
+  /** Der geprüfte Kanon-Eintrag (kurz zitiert). */
+  fact: string;
+  /** Die widersprechende Stelle im Text. */
+  quote: string;
+  /** Konkreter Vorschlag zur Auflösung. */
+  fix: string;
+  /** Teil des Kapitels (bei gechunkter Prüfung), 1-basiert. */
+  part?: number;
+}
+
+export interface CanonCheckResult {
+  ok: boolean;
+  summary: string;
+  violations: CanonViolation[];
+}
+
+const MAX_VIOLATIONS = 20;
+
+function canonCheckSystem(language: string): string {
+  return `You are a continuity fact-checker.
+${languageLock(language)}
+
+You receive CANON FACTS / RELATIONS (binding) and one PART of a chapter.
+Report ONLY passages that contradict the canon — nothing else.
+
+Respond ONLY with a single valid JSON object:
+{ "violations": [{ "fact": string, "quote": string, "fix": string }] }
+
+Rules:
+- A violation MUST contradict a stated fact, law, timeline, possession, ability or relationship.
+- NOT style, pacing, wording, dialogue quality or "could be clearer".
+- fact: the canon entry you are checking against, quoted briefly.
+- quote: the contradicting passage from the part, verbatim, at most ~20 words.
+- fix: one concrete sentence on how to resolve the contradiction.
+- If the part is consistent, "violations" MUST be an empty array. Never invent violations.
+- All strings in ${language}.`;
+}
+
+function canonCheckUser(input: CanonCheckInput, part: string): string {
+  const chapter = input.storyboard.chapters[input.chapterIndex];
+  return `${input.canon.trim()}
+
+CHAPTER: ${chapter ? `${chapter.index + 1}. ${chapter.title}` : `#${input.chapterIndex + 1}`}
+
+CHAPTER PART TO CHECK:
+${part}
+
+Check this part against the canon now and return the JSON, entirely in ${input.language}.`;
+}
+
+/** Normalisiert die Modellantwort und wirft Unbrauchbares weg. */
+function normalizeViolations(value: unknown, part: number): CanonViolation[] {
+  const raw = asRecord(value).violations;
+  const result: CanonViolation[] = [];
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    const item = asRecord(entry);
+    const fact = str(item.fact);
+    const quote = str(item.quote);
+    if (!fact || !quote) continue; // ohne beide Seiten ist es keine überprüfbare Meldung
+    result.push({ fact, quote, fix: str(item.fix), part });
+  }
+  return result;
+}
+
+/**
+ * Prüft ein Kapitel **nur gegen den Kanon** (getrennt von der Kohärenz).
+ *
+ * Das Kapitel wird gechunkt: dieselbe Robustheitsmaßnahme wie bei Kohärenz/Stil — ein
+ * 5.000-Wörter-Kapitel in einem Aufruf läuft ins Ausgabelimit und bricht ab.
+ */
+export async function checkCanon(input: CanonCheckInput): Promise<CanonCheckResult> {
+  if (!input.canon.trim()) {
+    throw new ApiError(
+      "Kein Kanon vorhanden — bitte zuerst Fakten oder Beziehungen erfassen oder ableiten.",
+      400,
+    );
+  }
+  if (!input.text.trim()) {
+    throw new ApiError("Kein Kapiteltext für die Prüfung.", 400);
+  }
+
+  const chunks = splitIntoChunks(input.text);
+  const violations: CanonViolation[] = [];
+
+  for (let index = 0; index < chunks.length; index += 1) {
+    const { content, finishReason } = await chatCompletionDetailed({
+      model: input.model,
+      system: canonCheckSystem(input.language),
+      user: canonCheckUser(input, chunks[index] ?? ""),
+      json: true,
+      // Ausgabe ist klein (JSON) — Limit bleibt trotzdem deutlich unter Modellgrenzen.
+      maxTokens: 1500,
+      temperature: 0.1,
+      cache: true,
+    });
+
+    if (finishReason === "length") {
+      throw new ApiError(
+        `Der Fakten-Check wurde bei Teil ${index + 1}/${chunks.length} vom Token-Limit abgeschnitten. Bitte ein anderes Modell wählen.`,
+        502,
+      );
+    }
+
+    for (const violation of normalizeViolations(parseJson(content), index + 1)) {
+      // Dubletten über Teile hinweg vermeiden (gleicher Fakt + gleiches Zitat).
+      const key = `${nameKey(violation.fact)}|${nameKey(violation.quote)}`;
+      if (violations.some((item) => `${nameKey(item.fact)}|${nameKey(item.quote)}` === key)) continue;
+      if (violations.length >= MAX_VIOLATIONS) break;
+      violations.push(violation);
+    }
+    if (violations.length >= MAX_VIOLATIONS) break;
+  }
+
+  const ok = violations.length === 0;
+  return {
+    ok,
+    summary: ok
+      ? "Keine Widersprüche zum Kanon gefunden."
+      : violations.length === 1
+        ? "1 Widerspruch zum Kanon gefunden."
+        : `${violations.length} Widersprüche zum Kanon gefunden.`,
+    violations,
+  };
 }

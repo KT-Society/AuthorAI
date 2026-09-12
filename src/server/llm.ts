@@ -8,6 +8,8 @@
 import { getOpenRouterKey } from "@promptgen/server/env";
 import { ApiError } from "@promptgen/server/api";
 
+import { cacheEnabled, cacheGet, cacheKey, cacheSet } from "./cache";
+
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export interface ChatOptions {
@@ -17,6 +19,11 @@ export interface ChatOptions {
   maxTokens?: number;
   temperature?: number;
   json?: boolean;
+  /**
+   * Antwort cachen — **nur** für wiederholbare Analysen setzen (Extraktion, Fakten-Check,
+   * Timeline). Bei kreativen Generierungen nie, sonst liefert „erneut generieren" dasselbe.
+   */
+  cache?: boolean;
 }
 
 export interface ChatResult {
@@ -26,6 +33,17 @@ export interface ChatResult {
 }
 
 export async function chatCompletionDetailed(options: ChatOptions): Promise<ChatResult> {
+  const useCache = options.cache === true && cacheEnabled();
+  const key = useCache ? cacheKey(options) : "";
+
+  if (useCache) {
+    const hit = cacheGet(key);
+    if (hit) {
+      console.log(`[cache] hit ${key} (${options.model})`);
+      return hit;
+    }
+  }
+
   const apiKey = getOpenRouterKey();
   if (!apiKey) {
     throw new ApiError(
@@ -67,7 +85,10 @@ export async function chatCompletionDetailed(options: ChatOptions): Promise<Chat
   if (!content || content.trim().length === 0) {
     throw new ApiError("OpenRouter hat keine Antwort geliefert.", 502);
   }
-  return { content, finishReason: choice?.finish_reason ?? null };
+  const result: ChatResult = { content, finishReason: choice?.finish_reason ?? null };
+  // Nur brauchbare Antworten cachen (kein Abbruch ins Token-Limit).
+  if (useCache && result.finishReason !== "length") cacheSet(key, result);
+  return result;
 }
 
 /** Bequeme Variante, wenn nur der Text gebraucht wird. */

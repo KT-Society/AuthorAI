@@ -9,7 +9,7 @@ import path from "node:path";
 
 import type { SceneConstraint, Storyboard } from "./data/story";
 import { coversDir, generateCover, saveCoverImage } from "./server/cover";
-import { extractContinuity } from "./server/continuity";
+import { extractContinuity, checkCanon } from "./server/continuity";
 import { isStandaloneBinary, runtimePort } from "./server/paths";
 import { runResearch } from "./server/research";
 import {
@@ -323,6 +323,7 @@ const server = serve({
             text,
             scenes: asScenes(body.scenes),
             canon: optionalString(body.canon),
+            styleProfile: optionalString(body.styleProfile),
           });
           return Response.json(result);
         } catch (err) {
@@ -393,6 +394,29 @@ const server = serve({
             language,
           });
           return Response.json({ characters });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Fact check against the canon only (separate from the coherence pass).
+    "/api/continuity/check": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const result = await checkCanon({
+            storyboard,
+            chapterIndex: optionalInt(body.chapterIndex, 0),
+            text: typeof body.text === "string" ? body.text : "",
+            canon: optionalString(body.canon) ?? "",
+            model,
+            language,
+          });
+          return Response.json(result);
         } catch (err) {
           return errorResponse(err);
         }

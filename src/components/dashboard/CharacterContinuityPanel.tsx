@@ -13,18 +13,22 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-import type { CanonFact, CharacterRelation, FactKind, RelationKind } from "@/data/continuity";
+import type { CanonFact, CharacterRelation, FactKind, RelationArcPoint, RelationKind } from "@/data/continuity";
 import {
   FACT_KINDS,
   FACT_KIND_LABELS,
   RELATION_COLORS,
   RELATION_KINDS,
   RELATION_KIND_LABELS,
+  arcDelta,
   emptyFact,
   formatIntensity,
+  hasArc,
   newRelationId,
+  sortArc,
 } from "@/data/continuity";
 import type { Character } from "@/data/characters";
+import { sparklinePath, sparklineZeroY } from "@/lib/graph";
 
 function PanelShell({
   icon,
@@ -194,6 +198,117 @@ export function FactsPanel({
   );
 }
 
+/** Kleine Verlaufs-Sparkline (−1 … 1) für die Beziehungsliste. */
+export function RelationSparkline({ arc, color }: { arc: RelationArcPoint[]; color: string }) {
+  const values = sortArc(arc).map((point) => point.intensity);
+  if (values.length < 2) return null;
+  return (
+    <svg width={72} height={18} viewBox="0 0 72 18" className="shrink-0" aria-hidden>
+      <line
+        x1={1}
+        y1={sparklineZeroY()}
+        x2={71}
+        y2={sparklineZeroY()}
+        stroke="currentColor"
+        strokeOpacity={0.2}
+        strokeDasharray="2 2"
+      />
+      <path d={sparklinePath(values)} fill="none" stroke={color} strokeWidth={1.5} />
+    </svg>
+  );
+}
+
+/** Verlaufs-Editor: Intensität je Kapitel (Figuren-Entwicklung über die Zeit). */
+function ArcEditor({
+  relation,
+  onChange,
+}: {
+  relation: CharacterRelation;
+  onChange: (patch: Partial<CharacterRelation>) => void;
+}) {
+  const points = sortArc(relation.arc ?? []);
+
+  const update = (index: number, patch: Partial<RelationArcPoint>) =>
+    onChange({ arc: points.map((point, i) => (i === index ? { ...point, ...patch } : point)) });
+
+  const add = () => {
+    const last = points[points.length - 1];
+    onChange({
+      arc: [
+        ...points,
+        { chapter: (last?.chapter ?? 0) + 1, intensity: last?.intensity ?? relation.intensity },
+      ],
+    });
+  };
+
+  const remove = (index: number) => onChange({ arc: points.filter((_, i) => i !== index) });
+
+  return (
+    <div className="mt-2 rounded-lg border border-white/10 bg-white/5 p-2">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          Verlauf (Kapitel → Intensität)
+        </span>
+        <span className="text-[10px] text-muted-foreground">
+          {hasArc(relation)
+            ? `Arc hat Vorrang · Δ ${formatIntensity(arcDelta(points))}`
+            : "ab 2 Punkten gilt der Verlauf statt des Einzelwerts"}
+        </span>
+      </div>
+
+      {points.length === 0 ? (
+        <p className="mb-2 text-[11px] text-muted-foreground">
+          Noch keine Punkte — z. B. Kap. 1 Misstrauen, Kap. 12 Vertrauen.
+        </p>
+      ) : (
+        <div className="mb-2 space-y-1">
+          {points.map((point, index) => (
+            <div key={`${point.chapter}-${index}`} className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={1}
+                value={point.chapter}
+                onChange={(event) =>
+                  update(index, { chapter: Math.max(1, Number(event.target.value) || 1) })
+                }
+                className="glass h-7 w-16 rounded-lg border-white/10 text-[11px]"
+              />
+              <input
+                type="range"
+                min={-1}
+                max={1}
+                step={0.1}
+                value={point.intensity}
+                onChange={(event) => update(index, { intensity: Number(event.target.value) })}
+                className="h-1 flex-1 cursor-pointer accent-brand-violet"
+              />
+              <span className="w-8 text-right text-[11px] font-semibold">
+                {formatIntensity(point.intensity)}
+              </span>
+              <button
+                type="button"
+                onClick={() => remove(index)}
+                className="shrink-0 rounded-md border border-white/10 p-1 text-muted-foreground transition-colors hover:text-brand-rose"
+                title="Punkt löschen"
+              >
+                <Trash2 className="size-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" className="glass h-7 rounded-lg border-white/10 text-[11px]" onClick={add}>
+          <Plus className="size-3" />
+          Punkt
+        </Button>
+        <RelationSparkline arc={points} color={RELATION_COLORS[relation.kind]} />
+      </div>
+    </div>
+  );
+}
+
 /** Beziehungen dieser Figur zu anderen Figuren (gerichtet, mit Intensität). */
 export function RelationsPanel({
   character,
@@ -211,6 +326,7 @@ export function RelationsPanel({
   const [intensity, setIntensity] = useState(0.7);
   const [note, setNote] = useState("");
   const [secret, setSecret] = useState(false);
+  const [arcOpenId, setArcOpenId] = useState<string | null>(null);
 
   const nameOf = (id: string) => characters.find((entry) => entry.id === id)?.name ?? "?";
 
@@ -260,35 +376,66 @@ export function RelationsPanel({
           {mine.map((relation) => {
             const outgoing = relation.fromId === character.id;
             const otherId = outgoing ? relation.toId : relation.fromId;
+            const arcIsOpen = arcOpenId === relation.id;
             return (
               <div
                 key={relation.id}
-                className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-2"
+                className="rounded-lg border border-white/10 bg-white/5 p-2"
               >
-                <span
-                  className="size-2.5 shrink-0 rounded-full"
-                  style={{ background: RELATION_COLORS[relation.kind] }}
-                />
-                <span className="shrink-0 text-[11px] text-muted-foreground">
-                  {outgoing ? "→" : "←"}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-xs">
-                  <span className="font-semibold">{nameOf(otherId)}</span>
-                  <span className="text-muted-foreground">
-                    {" "}
-                    · {RELATION_KIND_LABELS[relation.kind]} ({formatIntensity(relation.intensity)})
-                    {relation.secret ? " · geheim" : ""}
-                    {relation.note ? ` — ${relation.note}` : ""}
+                <div className="flex items-center gap-2">
+                  <span
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={{ background: RELATION_COLORS[relation.kind] }}
+                  />
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {outgoing ? "→" : "←"}
                   </span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => remove(relation.id)}
-                  className="shrink-0 rounded-lg border border-white/10 p-1.5 text-muted-foreground transition-colors hover:text-brand-rose"
-                  title="Beziehung löschen"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+                  <span className="min-w-0 flex-1 truncate text-xs">
+                    <span className="font-semibold">{nameOf(otherId)}</span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      · {RELATION_KIND_LABELS[relation.kind]} (
+                      {hasArc(relation)
+                        ? `Verlauf ${formatIntensity(arcDelta(relation.arc ?? []))}`
+                        : formatIntensity(relation.intensity)}
+                      ){relation.secret ? " · geheim" : ""}
+                      {relation.note ? ` — ${relation.note}` : ""}
+                    </span>
+                  </span>
+
+                  {hasArc(relation) ? (
+                    <RelationSparkline arc={relation.arc ?? []} color={RELATION_COLORS[relation.kind]} />
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={() => setArcOpenId(arcIsOpen ? null : relation.id)}
+                    className={cn(
+                      "shrink-0 rounded-lg border px-2 py-1 text-[10px] font-semibold transition-colors",
+                      arcIsOpen
+                        ? "border-brand-violet/40 bg-brand-violet/10 text-brand-violet"
+                        : "border-white/10 text-muted-foreground hover:text-foreground",
+                    )}
+                    title="Verlauf über die Kapitel pflegen"
+                  >
+                    Verlauf
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => remove(relation.id)}
+                    className="shrink-0 rounded-lg border border-white/10 p-1.5 text-muted-foreground transition-colors hover:text-brand-rose"
+                    title="Beziehung löschen"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+
+                {arcIsOpen ? (
+                  <ArcEditor
+                    relation={relation}
+                    onChange={(patch) => update(relation.id, patch)}
+                  />
+                ) : null}
               </div>
             );
           })}

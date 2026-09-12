@@ -32,6 +32,7 @@ import {
   MODEL_STAGE_LABELS,
   readLanguage,
   readStageModel,
+  readStyleProfileHint,
   writeLanguage,
   writeStageModel,
 } from "@/lib/generationSettings";
@@ -431,7 +432,7 @@ export function BookWizard({
     setError(null);
     setBusy(`${MODEL_STAGE_LABELS[kind]}-Prüfung Kapitel ${index + 1}…`);
     try {
-      const request = { storyboard, chapterIndex: index, model: id, language, text: source, canon: seriesData.canon };
+      const request = { storyboard, chapterIndex: index, model: id, language, text: source, canon: seriesData.canon, styleProfile: readStyleProfileHint() };
       const result = kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
       setExpanded((prev) => {
         const next = [...prev];
@@ -493,7 +494,7 @@ export function BookWizard({
       const source = (current[index] ?? "").trim();
       setBusy(`${MODEL_STAGE_LABELS[kind]}-Prüfung ${position + 1}/${total} · Kapitel ${index + 1}…`);
       try {
-        const request = { storyboard, chapterIndex: index, model: id, language, text: source, canon: seriesData.canon };
+        const request = { storyboard, chapterIndex: index, model: id, language, text: source, canon: seriesData.canon, styleProfile: readStyleProfileHint() };
         const result =
           kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
         current = current.map((text, i) => (i === index ? result.text : text));

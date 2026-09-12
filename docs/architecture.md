@@ -96,7 +96,8 @@ Ports: Root **3000**, promptgen **3001** (eigener `Bun.serve`, überschreibbar p
 | `index.ts` | `Bun.serve` mit allen Routen, Fehler-Handling, HMR in Dev |
 | `server/llm.ts` | OpenRouter-Chat-Helper (`chatCompletion`, `chatCompletionDetailed`, `cleanJsonBlock`) |
 | `server/story.ts` | Storyboard, Rohentwurf, Ausbau, Kohärenz, Stil, Weltenbau-Extraktion, Figuren-Extraktion, Chunking |
-| `server/continuity.ts` | Fakten-/Beziehungs-Extraktion + Normalisierung |
+| `server/continuity.ts` | Fakten-/Beziehungs-Extraktion + Normalisierung, Fakten-Check gegen den Kanon |
+| `server/cache.ts` | Antwort-Cache (LRU + TTL) für wiederholbare Analysen; `AUTHORAI_CACHE=0` schaltet ab |
 | `server/cover.ts` | Pollinations-Bilderzeugung, Dateiablage, Löschen |
 | `server/research.ts` | Tavily-Suche |
 
@@ -121,6 +122,7 @@ Typen + Seed-Daten, frei von UI-Logik:
 - `continuity.ts` — Kanon: `CanonFact`, `CharacterRelation`, Filter (`factsForBook`,
   `relationsForBook`) und `canonBlock()` (verbindlicher Prompt-Block)
 - `series.ts` — Reihen (`Series`): Band-Reihenfolge, `canonVolumeIds` (Kanon über alle Bände)
+- `style.ts` — Stil-Profile (`STYLE_PRESETS`, `styleProfileHint`, Normalisierung)
 
 ### 4. Bibliothek (`src/lib/*`)
 
@@ -139,6 +141,7 @@ Typen + Seed-Daten, frei von UI-Logik:
 | `markdown.ts` | Markdown-Export eines Buchs |
 | `backup.ts` | Projekt-Backup (JSON) erzeugen/validieren |
 | `graph.ts` | Deterministisches Kreis-Layout + Kanten-Helfer für den Beziehungsgraphen |
+| `seriesOverview.ts` | Bände einer Reihe mit Fortschritt, Lücken und Status (pur, getestet) |
 | `seriesContext.ts` | Vorbände-Kontext + Vorbände-Kanon für einen neuen Band (`buildSeriesContext`) |
 | `worldMatch.ts` | Normalisierter Titelvergleich (Dublettenschutz Weltenbau) |
 | `passNotes.ts` | Filtert No-Op-Notizen aus Prüfberichten („A" wurde zu „A") |
@@ -153,7 +156,7 @@ Typen + Seed-Daten, frei von UI-Logik:
   `ContinuityView` (Fakten + Beziehungsgraph), `PlotBoardView`, `ResearchView`, `StatsView`,
   `BookDetailView` (Editor + Reader)
 - **Dialoge:** `BookWizard`, `CharacterGenerator`, `CharacterEditorDialog`,
-  `CharacterExtractDialog`, `ContinuityExtractDialog`, `WorldExtractDialog`,
+  `CharacterExtractDialog`, `ContinuityExtractDialog`, `CanonCheckDialog`, `WorldExtractDialog`,
   `CoverEditorDialog`, `SeriesDialog`, `SettingsDialog`, `ProfileGate`
 - **Bausteine:** `primitives.tsx` (Panel, Badge, ProgressBar, Sparkline, ViewHeader, …),
   `CharacterContinuityPanel.tsx` (Fakten-/Beziehungs-Panels im Charakter-Editor)

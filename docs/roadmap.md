@@ -12,10 +12,20 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 - **Kapitel-Gerüste**: ganze Kapitelstrukturen als Vorlage wiederverwenden
 - **Szenen-Import/Export**: Szenenplan als JSON austauschen
 
+### Kanon & Kontinuität (Anschlüsse an den Fakten-Check)
+- **Widerspruch per Klick beheben**: der Check liefert `fix` — Vorschlag direkt auf die Stelle
+  anwenden statt manuell nachzuziehen
+- **Kanon-Warnung vor dem Speichern**: Kapitel still gegen die Fakten prüfen und erst dann
+  ablegen (Widerspruch sichtbar, bevor er sich einbrennt)
+- **Prüf-Historie je Kapitel**: letzter Fakten-Check + Ergebnis als Badge im Kapitel
+- **Gezielter Check**: nur markierte Fakten oder eine einzelne Figur prüfen
+
 ### Export & Ausgabe
 - **PDF mit Cover-Seite** (Titelseite aus dem Cover-Bild)
 - **DOCX mit Kommentaren** für Lektorats-Workflows
 - **Automatische Backups** in Intervallen (lokal)
+- **Reihen-Export (Omnibus)**: alle Bände einer Reihe als ein EPUB/PDF mit durchlaufender
+  Nummerierung und gemeinsamem Cover (Anschluss an die Reihen-Übersicht)
 
 ### Covers
 - **Rücken (Spine)** als eigener Layer-Bereich
@@ -27,17 +37,26 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 ## Mittelfristig
 
 ### Inhalt & Qualität
-- **Fakten-Check als eigener Report**: Widersprüche getrennt von der Kohärenz prüfen
-  (`POST /api/continuity/check` mit `{ ok, violations[] }`)
-- **Stil-Profil**: Zielstimme („lakonisch", „barock") als wiederverwendbare Vorgabe
 - **Figuren-Entwicklung über die Zeit**: Beziehungs-Intensität pro Kapitel statt global
-- **Reihen-Übersicht**: alle Bände einer Reihe mit Fortschritt und Bandlücken auf einen Blick
+- **Stil-Profil pro Buch und Reihe**: heute geräteweit — pro Projekt überschreibbar, mit
+  Vererbung von der Reihe an ihre Bände
+- **Stil-Eichung**: aus eigenen Kapiteln ein Profil vorschlagen („so klingt dieser Roman")
+- **Stimmen pro Figur**: Dialogfärbung je Figur, damit Nebenfiguren unterscheidbar sprechen
+- **Reihen-Zeitstrahl**: Ereignisse über alle Bände chronologisch, verzahnt mit dem
+  Beziehungs-Arc
+- **Offene Fäden über Bände**: Foreshadowing-Payoff-Matrix je Reihe (was wurde aufgesetzt,
+  was wurde eingelöst)
+- **Kanon-Konflikt zwischen Bänden**: widerspricht Band n+1 einem Fakt aus Band n, wird das
+  im Fakten-Check als eigener Fall gemeldet
 
 ### Technik & Performance
 - **Streaming** langer Ausgaben (SSE) mit Live-Vorschau
 - **Fortschritts-Report** pro Queue im Hintergrund (auch bei geschlossenem Dialog)
 - **Kosten-/Token-Tracking** pro Lauf (Transparenz über API-Nutzung)
-- **Antwort-Cache** für identische Prompts (spart Kosten, beschleunigt Wiederholungen)
+- **Cache-Transparenz**: Trefferquote und gesparte Aufrufe in der UI anzeigen
+- **Persistenter Cache**: Antworten optional über Neustarts hinweg behalten (opt-in)
+- **Sammel-Analysen**: Fakten-Check und Extraktionen über alle Bücher in einem Lauf —
+  profitiert maximal vom Cache
 
 ### UI & Bedienung
 - **Globale Suche/Command-Palette** über Bücher, Kapitel, Figuren, Welt, Notizen
@@ -54,6 +73,8 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 - **Audiobook-Ausgabe** (TTS mit Stimmzuordnung pro Figur)
 - **Publishing-Integrationen** (Cover/Manuskript-Export für Plattformen)
 - **Analyse-Dashboards** (Lesbarkeit, Tempo-Kurven, Wortwiederholungen)
+- **Übersetzungs-Stufe** je Band — Zielsprache behält die Autoren-/Stil-Stimme
+- **Eigene Stimme trainieren**: aus vielen eigenen Texten ein Stil-Profil ableiten (lokal)
 - **Plug-in-Punkte** für eigene Pipeline-Stufen (z. B. „Übersetzung", „Zusammenfassung")
 
 ---

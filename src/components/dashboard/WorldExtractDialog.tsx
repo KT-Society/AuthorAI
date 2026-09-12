@@ -104,7 +104,9 @@ export function WorldExtractDialog({
         <div className="mt-5 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
             {duplicates > 0
-              ? `${duplicates} Vorschlag${duplicates === 1 ? "" : "e"} ähnelt bereits vorhandenen Einträgen und ist abgewählt.`
+              ? duplicates === 1
+                ? "1 Vorschlag ähnelt bereits vorhandenen Einträgen und ist abgewählt."
+                : `${duplicates} Vorschläge ähneln bereits vorhandenen Einträgen und sind abgewählt.`
               : "Neue Vorschläge sind vorausgewählt."}
           </p>
           <button

@@ -60,7 +60,7 @@ import {
   toParagraphs,
 } from "@/data/story";
 import type { ChapterContent, ChapterPlan, SceneConstraint, SceneMeta } from "@/data/story";
-import { MODEL_STAGE_LABELS, readLanguage, readStageModel } from "@/lib/generationSettings";
+import { MODEL_STAGE_LABELS, readLanguage, readStageModel, readStyleProfileHint } from "@/lib/generationSettings";
 import { manuscriptOf } from "@/lib/bookManuscript";
 import { copyText } from "@/lib/clipboard";
 import { looksTruncated } from "@/lib/prose";
@@ -71,6 +71,8 @@ import { buildMarkdown } from "@/lib/markdown";
 import { buildPdf } from "@/lib/pdf";
 import { buildCoverPrompt, deleteCover, generateCover } from "@/services/cover";
 import { checkConsistency, checkTimeline, draftChapter, expandChapter, refineStyle } from "@/services/story";
+import { checkCanon } from "@/services/continuity";
+import type { CanonCheckResult } from "@/services/continuity";
 import type { TimelineResult } from "@/services/story";
 
 import { SCENE_TEMPLATES } from "@/data/sceneTemplates";
@@ -79,6 +81,7 @@ import type { CoverTextLayer, SavedCoverPreset } from "@/data/cover";
 import { CoverEditorDialog } from "./CoverEditorDialog";
 import type { CoverTarget } from "./CoverEditorDialog";
 import { CoverVariantsDialog } from "./CoverVariantsDialog";
+import { CanonCheckDialog } from "./CanonCheckDialog";
 import { SeriesDialog } from "./SeriesDialog";
 import { TimelineDialog } from "./TimelineDialog";
 import type { TimelineEntry } from "./TimelineDialog";
@@ -151,6 +154,7 @@ export function BookDetailView({
   const [coverTarget, setCoverTarget] = useState<CoverTarget>("front");
   const [coverVariantsOpen, setCoverVariantsOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [canonCheckOpen, setCanonCheckOpen] = useState(false);
   const [seriesOpen, setSeriesOpen] = useState(false);
   const [epubCover, setEpubCover] = useState<"front" | "back" | "none">("front");
   const [exportScope, setExportScope] = useState("all");
@@ -526,6 +530,7 @@ export function BookDetailView({
           text: current[chapterIndex]?.expanded ?? "",
           scenes: scenesFor(chapterIndex),
           canon,
+          styleProfile: readStyleProfileHint(),
         };
         const result =
           kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
@@ -617,6 +622,7 @@ export function BookDetailView({
         text: source,
         scenes: scenesFor(index),
         canon,
+        styleProfile: readStyleProfileHint(),
       };
       const result = kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
       updateChapter(index, {
@@ -960,8 +966,41 @@ export function BookDetailView({
     });
   };
 
-  const timelineEntries: TimelineEntry[] = manuscript.map((chapter, index) => ({
-    chapter: index + 1,
+  /** Kapitel mit Text — nur die lohnt der Fakten-Check. */
+  const canonCheckChapters = useMemo(
+    () =>
+      manuscript
+        .map((chapter, index) => ({ index, title: chapter.title || `Kapitel ${index + 1}`, text: (chapter.expanded || chapter.draft || "").trim() }))
+        .filter((entry) => entry.text.length > 0)
+        .map(({ index, title }) => ({ index, title })),
+    [manuscript],
+  );
+
+  const runCanonCheck = async (chapterIndex: number): Promise<CanonCheckResult> => {
+    if (!book.storyboard) {
+      throw new Error("Kein Storyboard vorhanden — Fakten-Check nicht möglich.");
+    }
+    if (!canon) {
+      throw new Error("Kein Kanon vorhanden — bitte zuerst Fakten oder Beziehungen erfassen.");
+    }
+    const model = readStageModel("consistency");
+    if (!model.trim()) {
+      throw new Error(
+        "Bitte eine Model-ID für „Kohärenz“ in den Einstellungen eintragen (der Fakten-Check nutzt sie).",
+      );
+    }
+    const chapter = manuscript[chapterIndex];
+    return checkCanon({
+      storyboard: book.storyboard,
+      chapterIndex,
+      text: chapter?.expanded || chapter?.draft || "",
+      canon,
+      model,
+      language,
+    });
+  };
+
+  const timelineEntries: TimelineEntry[] = manuscript.map((chapter, index) => ({    chapter: index + 1,
     title: chapter.title || `Kapitel ${index + 1}`,
     scenes: (plans[index]?.beats ?? []).map((text, sceneIndex) => ({
       text,
@@ -1224,6 +1263,16 @@ export function BookDetailView({
               <Button
                 variant="outline"
                 className="glass rounded-xl border-white/10"
+                onClick={() => setCanonCheckOpen(true)}
+                disabled={Boolean(busy) || !book.storyboard}
+                title="Alle Kapitel nur gegen den Kanon prüfen (Fakten und Beziehungen)"
+              >
+                <ShieldCheck className="size-4" />
+                Fakten-Check
+              </Button>
+              <Button
+                variant="outline"
+                className="glass rounded-xl border-white/10"
                 onClick={() => void copyManuscript()}
               >
                 <Copy className="size-4" />
@@ -1383,6 +1432,16 @@ export function BookDetailView({
           entries={timelineEntries}
           onCheck={runTimelineCheck}
           onClose={() => setTimelineOpen(false)}
+        />
+      ) : null}
+
+      {canonCheckOpen ? (
+        <CanonCheckDialog
+          open={canonCheckOpen}
+          chapters={canonCheckChapters}
+          canonAvailable={Boolean(canon)}
+          onCheck={runCanonCheck}
+          onClose={() => setCanonCheckOpen(false)}
         />
       ) : null}
 

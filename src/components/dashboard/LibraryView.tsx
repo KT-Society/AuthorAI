@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Library, Plus, Search } from "lucide-react";
+import { Layers, Library, Plus, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,13 +12,14 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-import { STATUS_META, STATUS_ORDER, formatNumber } from "@/data/author";
+import { STATUS_META, STATUS_ORDER, formatNumber, formatPercent } from "@/data/author";
 import type { Book, BookStatus } from "@/data/author";
 import { seriesOfBook, volumeLabel } from "@/data/series";
 import type { Series } from "@/data/series";
+import { seriesOverview } from "@/lib/seriesOverview";
 
 import { BookCard } from "./BookCard";
-import { EmptyState, ViewHeader } from "./primitives";
+import { Badge, EmptyState, ProgressBar, ViewHeader } from "./primitives";
 
 type SortKey = "updated" | "title" | "progress" | "words";
 
@@ -68,6 +69,8 @@ export function LibraryView({
     const label = volumeLabel(entry, bookId);
     return label ? `${entry.name} · ${label}` : entry.name;
   };
+
+  const overviews = useMemo(() => seriesOverview(series, books), [series, books]);
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -128,6 +131,90 @@ export function LibraryView({
           </>
         }
       />
+
+      {overviews.length > 0 ? (
+        <details open className="mb-5 rounded-2xl border border-white/10 bg-white/5 p-4">
+          <summary className="flex cursor-pointer flex-wrap items-center gap-3 text-sm font-semibold">
+            <Layers className="size-4 text-brand-indigo" />
+            Reihen ({overviews.length})
+            <span className="text-[11px] font-normal text-muted-foreground">
+              Bände, Fortschritt und Lücken auf einen Blick
+            </span>
+          </summary>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {overviews.map((overview) => (
+              <div key={overview.id} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold tracking-tight">{overview.name}</span>
+                  <Badge tone="indigo">{overview.volumes.length} Bände</Badge>
+                  {overview.missing > 0 ? (
+                    <Badge tone="rose">
+                      {overview.missing} Lücke{overview.missing === 1 ? "" : "n"}
+                    </Badge>
+                  ) : null}
+                  {overview.withoutStoryboard > 0 ? (
+                    <Badge tone="amber">{overview.withoutStoryboard} ohne Storyboard</Badge>
+                  ) : null}
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    {formatNumber(overview.totalWords)} Wörter
+                  </span>
+                </div>
+
+                {overview.description ? (
+                  <p className="mb-2 text-[11px] text-muted-foreground">{overview.description}</p>
+                ) : null}
+
+                <div className="mb-3 flex items-center gap-2">
+                  <ProgressBar
+                    value={overview.progress}
+                    tone={overview.minProgress >= 100 ? "emerald" : "violet"}
+                  />
+                  <span className="shrink-0 text-[11px] font-semibold">
+                    {formatPercent(overview.progress)}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {overview.volumes.map((volume) => {
+                    const book = volume.book;
+                    const meta = book ? STATUS_META[book.status] : null;
+                    return (
+                      <button
+                        key={volume.bookId}
+                        type="button"
+                        disabled={!book}
+                        onClick={() => book && onOpenBook(book.id)}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors",
+                          book
+                            ? "border-white/10 bg-white/5 hover:border-white/20"
+                            : "cursor-not-allowed border-dashed border-brand-rose/30 bg-brand-rose/5",
+                        )}
+                      >
+                        <span className="w-14 shrink-0 text-[11px] font-semibold text-muted-foreground">
+                          Band {volume.position}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-xs">
+                          {book ? book.title : "(Buch gelöscht)"}
+                        </span>
+                        {meta ? (
+                          <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold", meta.chip)}>
+                            {meta.label}
+                          </span>
+                        ) : null}
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
+                          {book ? `${book.chaptersDone}/${book.chapters || "—"}` : "—"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">

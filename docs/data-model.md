@@ -249,6 +249,7 @@ interface AppNotification {
 | `authorai.model` | Standard-Model (Fallback) |
 | `authorai.model.storyboard` \| `draft` \| `expand` \| `consistency` \| `style` | Model je Stufe |
 | `authorai.language` | Ausgabesprache |
+| `authorai.styleProfile` | Zielstimme: `{ presetId, custom }` (Stil-Pass) |
 
 > Generierungs-Einstellungen sind bewusst **geräteweit**, nicht pro Profil.
 

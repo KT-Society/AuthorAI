@@ -29,7 +29,9 @@ import {
   RELATION_COLORS,
   RELATION_KINDS,
   RELATION_KIND_LABELS,
+  arcDelta,
   formatIntensity,
+  hasArc,
   newFactId,
   newRelationId,
   sortFacts,
@@ -45,6 +47,7 @@ import { extractContinuity } from "@/services/continuity";
 
 import { Badge, EmptyState, ViewHeader } from "./primitives";
 import type { Tone } from "./primitives";
+import { RelationSparkline } from "./CharacterContinuityPanel";
 import { ContinuityExtractDialog } from "./ContinuityExtractDialog";
 
 const FACT_KIND_TONE: Record<FactKind, Tone> = {
@@ -658,7 +661,11 @@ export function ContinuityView({
                       <span className="font-semibold">{nameOf(relation.toId)}</span>
                       <span className="text-muted-foreground">
                         {" "}
-                        · {RELATION_KIND_LABELS[relation.kind]} ({formatIntensity(relation.intensity)})
+                        · {RELATION_KIND_LABELS[relation.kind]} (
+                        {hasArc(relation)
+                          ? `Verlauf ${formatIntensity(arcDelta(relation.arc ?? []))}`
+                          : formatIntensity(relation.intensity)}
+                        )
                         {relation.secret ? " · geheim" : ""}
                         {relation.establishedIn ? ` · ${relation.establishedIn}` : ""}
                       </span>
@@ -667,6 +674,9 @@ export function ContinuityView({
                       <p className="mt-0.5 text-[11px] text-muted-foreground">{relation.note}</p>
                     ) : null}
                   </div>
+                  {hasArc(relation) ? (
+                    <RelationSparkline arc={relation.arc ?? []} color={RELATION_COLORS[relation.kind]} />
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => onRelationsChange(relations.filter((item) => item.id !== relation.id))}

@@ -73,3 +73,33 @@ export function edgeWidth(intensity: number): number {
 export function edgeOpacity(intensity: number): number {
   return 0.25 + Math.abs(Math.max(-1, Math.min(1, intensity))) * 0.6;
 }
+
+/**
+ * SVG-Pfad für eine Sparkline über Intensitätswerten (−1 … 1).
+ * Dient der Beziehungs-Entwicklung (Arc) in Listen.
+ */
+export function sparklinePath(
+  values: number[],
+  width = 72,
+  height = 18,
+  padding = 1,
+): string {
+  if (values.length === 0) return "";
+  const innerHeight = Math.max(1, height - padding * 2);
+  const step = values.length > 1 ? (width - padding * 2) / (values.length - 1) : 0;
+
+  return values
+    .map((value, index) => {
+      const clamped = Math.max(-1, Math.min(1, value));
+      const x = padding + step * index;
+      // +1 (zugewandt) liegt oben.
+      const y = padding + ((1 - clamped) / 2) * innerHeight;
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
+}
+
+/** Mittelwert der „Nulllinie" in einer Sparkline (für die gestrichelte Referenz). */
+export function sparklineZeroY(height = 18, padding = 1): number {
+  return padding + ((1 - 0) / 2) * Math.max(1, height - padding * 2);
+}

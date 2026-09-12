@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Cpu, Database, Download, KeyRound, Settings, Upload, X } from "lucide-react";
+import { Cpu, Database, Download, KeyRound, Palette, Settings, Upload, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,11 +19,19 @@ import {
   readLanguage,
   readModel,
   readStageModelRaw,
+  readStyleProfile,
   writeLanguage,
   writeModel,
   writeStageModel,
+  writeStyleProfile,
 } from "@/lib/generationSettings";
 import type { ModelStage } from "@/lib/generationSettings";
+import {
+  DEFAULT_STYLE_PROFILE,
+  STYLE_PRESETS,
+  styleProfileLabel,
+} from "@/data/style";
+import type { StyleProfile } from "@/data/style";
 import { fetchConfig } from "@/services/generate";
 import type { AppConfig } from "@/services/generate";
 
@@ -52,6 +60,7 @@ export function SettingsDialog({
     expand: "",
   });
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
+  const [styleProfile, setStyleProfile] = useState<StyleProfile>(DEFAULT_STYLE_PROFILE);
   const [config, setConfig] = useState<AppConfig | null>(null);
 
   useEffect(() => {
@@ -63,6 +72,7 @@ export function SettingsDialog({
       expand: readStageModelRaw("expand"),
     });
     setLanguage(readLanguage() ?? DEFAULT_LANGUAGE);
+    setStyleProfile(readStyleProfile());
     fetchConfig().then((data) => {
       if (data) setConfig(data);
     });
@@ -185,6 +195,47 @@ export function SettingsDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <Palette className="size-3.5" />
+                Stil-Profil (Zielstimme)
+              </label>
+              <Select
+                value={styleProfile.presetId}
+                onValueChange={(value) => {
+                  const next = { ...styleProfile, presetId: value };
+                  setStyleProfile(next);
+                  writeStyleProfile(next);
+                }}
+              >
+                <SelectTrigger className="glass h-10 w-full rounded-xl border-white/10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="glass-strong border-white/10">
+                  {STYLE_PRESETS.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <textarea
+                rows={2}
+                value={styleProfile.custom}
+                onChange={(event) => {
+                  const next = { ...styleProfile, custom: event.target.value };
+                  setStyleProfile(next);
+                  writeStyleProfile(next);
+                }}
+                placeholder="Zusatz (optional), z. B. kurze Dialoge, kein Adverb-Overkill"
+                className="glass mt-2 w-full rounded-xl border border-white/10 p-2.5 text-sm"
+              />
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Gilt verbindlich für den <strong>Stil-Pass</strong> — nie auf Kosten von Inhalt,
+                Fakten oder Bedeutung. Aktuell: {styleProfileLabel(styleProfile)}.
+              </p>
             </div>
 
             <div>

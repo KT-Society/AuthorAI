@@ -120,6 +120,39 @@ Schneidet das Token-Limit die Antwort ab, antwortet die Route mit **HTTP 502** u
 Fakten/Beziehungen gehen als `canon`-Block zusätzlich an `chapter/draft`, `chapter/expand`,
 `chapter/consistency`, `chapter/style` und `timeline/check`.
 
+### `POST /api/continuity/check`
+
+**Fakten-Check**: prüft ein Kapitel **nur gegen den Kanon** — getrennt von der Kohärenz.
+Das Kapitel wird serverseitig gechunkt und je Teil einmal geprüft.
+
+**Request**
+
+```json
+{
+  "storyboard": { … },
+  "chapterIndex": 0,
+  "text": "…",
+  "canon": "CANON FACTS (binding):\n- [Elias] (eigenschaft) Elias ist 27 …",
+  "model": "<model-id>",
+  "language": "German"
+}
+```
+
+**Response**
+
+```json
+{
+  "ok": false,
+  "summary": "2 Widersprüche zum Kanon gefunden.",
+  "violations": [
+    { "fact": "Elias ist 27", "quote": "Elias, ein alter Mann", "fix": "Alter korrigieren.", "part": 1 }
+  ]
+}
+```
+
+Ohne Kanon antwortet die Route mit **HTTP 400**, bei Token-Abbruch mit **HTTP 502**.
+Der Aufruf ist **cachebar** (identische Prüfung = keine neuen Kosten).
+
 ---
 
 ## Buch-Pipeline
