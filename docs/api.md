@@ -153,6 +153,61 @@ Das Kapitel wird serverseitig gechunkt und je Teil einmal geprüft.
 Ohne Kanon antwortet die Route mit **HTTP 400**, bei Token-Abbruch mit **HTTP 502**.
 Der Aufruf ist **cachebar** (identische Prüfung = keine neuen Kosten).
 
+### `POST /api/continuity/check/stream`
+
+Prüft **alle Kapitel** in einem Aufruf und schickt jedes Ergebnis, sobald es fertig ist
+(Server-Sent Events). Der Server arbeitet mit **begrenzter Parallelität** (`concurrency`,
+Standard 3, max 6) — sequenziell wäre die Wartezeit die Summe aller Kapitel.
+
+```json
+{
+  "storyboard": { … },
+  "chapters": [{ "index": 0, "text": "…" }],
+  "canon": "CANON FACTS (binding):\n…",
+  "model": "<model-id>",
+  "language": "German",
+  "concurrency": 3
+}
+```
+
+Ereignisse:
+
+```
+data: {"type":"started","chapterIndex":0}
+data: {"type":"result","chapterIndex":0,"result":{ … }}
+data: {"type":"result","chapterIndex":1,"error":"…"}   ← nur dieses Kapitel scheitert
+data: {"type":"done"}
+```
+
+Fehlender Kanon oder fehlende Kapitel → **HTTP 400 vor dem Stream**; Fehler einzelner Kapitel
+beenden den Lauf nicht.
+
+### `POST /api/continuity/repair`
+
+**Quick Fix**: behebt die gemeldeten Widersprüche in einem Kapitel. Nur Textteile, in denen
+ein gemeldetes Zitat wirklich vorkommt, gehen ans Modell — alles andere bleibt wortgleich.
+Ausgabelimit am Teil, Wachstumsgrenze ~⅓, abgeschnittene Antworten werden verworfen.
+
+```json
+{
+  "storyboard": { … },
+  "chapterIndex": 0,
+  "text": "…",
+  "violations": [{ "fact": "Elias ist 27", "quote": "Elias, ein alter Mann", "fix": "Alter korrigieren." }],
+  "canon": "…",
+  "model": "<model-id>",
+  "language": "German"
+}
+```
+
+```json
+{ "text": "…korrigiert…", "changed": true, "applied": 1, "unassigned": 0 }
+```
+
+`unassigned` zählt Widersprüche, deren Stelle nicht sicher zugeordnet werden konnte (oder deren
+Korrektur verworfen wurde) — die Oberfläche meldet das und prüft das Kapitel nach der Korrektur
+**erneut**, damit kein alter Stand stehen bleibt.
+
 ---
 
 ### `POST /api/chapter/draft/stream` und `POST /api/chapter/expand/stream`

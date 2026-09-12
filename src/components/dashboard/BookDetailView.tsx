@@ -73,8 +73,8 @@ import { buildMarkdown } from "@/lib/markdown";
 import { buildPdf } from "@/lib/pdf";
 import { buildCoverPrompt, deleteCover, generateCover } from "@/services/cover";
 import { checkConsistency, checkTimeline, draftChapter, expandChapter, refineStyle } from "@/services/story";
-import { checkCanon } from "@/services/continuity";
-import type { CanonCheckResult } from "@/services/continuity";
+import { checkCanon, repairCanon, streamCanonCheck } from "@/services/continuity";
+import type { CanonCheckResult, CanonStreamHandlers, CanonViolation } from "@/services/continuity";
 import type { TimelineResult } from "@/services/story";
 
 import { SCENE_TEMPLATES } from "@/data/sceneTemplates";
@@ -1019,34 +1019,95 @@ export function BookDetailView({
   };
 
   /** Kapitel mit Text — nur die lohnt der Fakten-Check. */
-  const canonCheckChapters = useMemo(
+  const canonChapters = useMemo(
     () =>
       manuscript
-        .map((chapter, index) => ({ index, title: chapter.title || `Kapitel ${index + 1}`, text: (chapter.expanded || chapter.draft || "").trim() }))
-        .filter((entry) => entry.text.length > 0)
-        .map(({ index, title }) => ({ index, title })),
+        .map((chapter, index) => ({
+          index,
+          title: chapter.title || `Kapitel ${index + 1}`,
+          text: (chapter.expanded || chapter.draft || "").trim(),
+        }))
+        .filter((entry) => entry.text.length > 0),
     [manuscript],
   );
+  const canonCheckChapters = useMemo(
+    () => canonChapters.map(({ index, title }) => ({ index, title })),
+    [canonChapters],
+  );
 
-  const runCanonCheck = async (chapterIndex: number): Promise<CanonCheckResult> => {
-    if (!book.storyboard) {
-      throw new Error("Kein Storyboard vorhanden — Fakten-Check nicht möglich.");
-    }
-    if (!canon) {
-      throw new Error("Kein Kanon vorhanden — bitte zuerst Fakten oder Beziehungen erfassen.");
-    }
+  /** Modell der Kohärenz-Stufe (wird auch für Check und Korrektur genutzt). */
+  const canonModel = (): string => {
     const model = readStageModel("consistency");
     if (!model.trim()) {
       throw new Error(
         "Bitte eine Model-ID für „Kohärenz“ in den Einstellungen eintragen (der Fakten-Check nutzt sie).",
       );
     }
-    const chapter = manuscript[chapterIndex];
-    return checkCanon({
-      storyboard: book.storyboard,
+    return model;
+  };
+
+  const requireCanon = (): string => {
+    if (!book.storyboard) throw new Error("Kein Storyboard vorhanden — Fakten-Check nicht möglich.");
+    if (!canon) {
+      throw new Error("Kein Kanon vorhanden — bitte zuerst Fakten oder Beziehungen erfassen.");
+    }
+    return canon;
+  };
+
+  /** Gestreamter Check über alle Kapitel: Ergebnisse kommen live zurück. */
+  const runCanonCheckStream = async (handlers: CanonStreamHandlers): Promise<void> => {
+    const scope = requireCanon();
+    await streamCanonCheck(
+      {
+        storyboard: book.storyboard as NonNullable<typeof book.storyboard>,
+        chapters: canonChapters.map(({ index, text }) => ({ index, text })),
+        canon: scope,
+        model: canonModel(),
+        language,
+      },
+      handlers,
+    );
+  };
+
+  /**
+   * Quick Fix für ein Kapitel: Widersprüche beheben, Ergebnis ins Buch schreiben und mit dem
+   * **neuen** Text erneut prüfen (kein veralteter Stand in der Liste).
+   */
+  const runCanonRepair = async (
+    chapterIndex: number,
+    violations: CanonViolation[],
+  ): Promise<CanonCheckResult> => {
+    const scope = requireCanon();
+    const model = canonModel();
+    const text = (manuscript[chapterIndex]?.expanded || manuscript[chapterIndex]?.draft || "").trim();
+    if (!text) throw new Error("Dieses Kapitel hat keinen Text.");
+
+    pushSnapshot(chapterIndex, "vor Fakten-Korrektur");
+    const repaired = await repairCanon({
+      storyboard: book.storyboard as NonNullable<typeof book.storyboard>,
       chapterIndex,
-      text: chapter?.expanded || chapter?.draft || "",
-      canon,
+      text,
+      violations,
+      canon: scope,
+      model,
+      language,
+    });
+    if (!repaired.changed) {
+      throw new Error("Das Modell hat keine Änderung geliefert — bitte erneut versuchen.");
+    }
+    updateChapter(chapterIndex, { expanded: repaired.text });
+    if (repaired.unassigned > 0) {
+      showToast(
+        `${repaired.unassigned} Stelle(n) konnten nicht sicher zugeordnet werden`,
+        "info",
+      );
+    }
+
+    return checkCanon({
+      storyboard: book.storyboard as NonNullable<typeof book.storyboard>,
+      chapterIndex,
+      text: repaired.text,
+      canon: scope,
       model,
       language,
     });
@@ -1492,7 +1553,8 @@ export function BookDetailView({
           open={canonCheckOpen}
           chapters={canonCheckChapters}
           canonAvailable={Boolean(canon)}
-          onCheck={runCanonCheck}
+          onStreamCheck={runCanonCheckStream}
+          onRepair={runCanonRepair}
           onClose={() => setCanonCheckOpen(false)}
         />
       ) : null}

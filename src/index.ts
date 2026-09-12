@@ -9,7 +9,8 @@ import path from "node:path";
 
 import type { SceneConstraint, Storyboard } from "./data/story";
 import { coversDir, generateCover, saveCoverImage } from "./server/cover";
-import { extractContinuity, checkCanon } from "./server/continuity";
+import { extractContinuity, checkCanon, checkCanonChapters, repairCanon } from "./server/continuity";
+import type { CanonViolation } from "./server/continuity";
 import { isStandaloneBinary, runtimePort } from "./server/paths";
 import { runResearch } from "./server/research";
 import {
@@ -139,6 +140,40 @@ function asCharacterRefs(value: unknown): { name: string; role?: string }[] {
     if (!name) continue;
     const role = typeof item.role === "string" && item.role.trim() ? item.role.trim() : undefined;
     list.push({ name, role });
+  }
+  return list;
+}
+
+/** Kapitel-Texte für den gestreamten Fakten-Check. */
+function asChapterTexts(value: unknown): { index: number; text: string }[] {
+  if (!Array.isArray(value)) return [];
+  const list: { index: number; text: string }[] = [];
+  for (const entry of value) {
+    const item = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const text = typeof item.text === "string" ? item.text.trim() : "";
+    if (!text) continue;
+    const index =
+      typeof item.index === "number" ? item.index : Number.parseInt(String(item.index ?? ""), 10);
+    list.push({ index: Number.isFinite(index) ? index : list.length, text });
+  }
+  return list;
+}
+
+/** Gemeldete Widersprüche (fact/quote/fix) aus dem Request-Body. */
+function asCanonViolations(value: unknown): CanonViolation[] {
+  if (!Array.isArray(value)) return [];
+  const list: CanonViolation[] = [];
+  for (const entry of value) {
+    const item = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const fact = typeof item.fact === "string" ? item.fact.trim() : "";
+    const quote = typeof item.quote === "string" ? item.quote.trim() : "";
+    if (!fact || !quote) continue;
+    list.push({
+      fact,
+      quote,
+      fix: typeof item.fix === "string" ? item.fix.trim() : "",
+      part: typeof item.part === "number" ? item.part : undefined,
+    });
   }
   return list;
 }
@@ -500,6 +535,70 @@ const server = serve({
             storyboard,
             chapterIndex: optionalInt(body.chapterIndex, 0),
             text: typeof body.text === "string" ? body.text : "",
+            canon: optionalString(body.canon) ?? "",
+            model,
+            language,
+          });
+          return Response.json(result);
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Streaming fact check: one SSE event per finished chapter (limited concurrency).
+    "/api/continuity/check/stream": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const chapters = asChapterTexts(body.chapters);
+          if (chapters.length === 0) {
+            throw new ApiError("Keine Kapitel mit Text für die Prüfung.", 400);
+          }
+          const canon = optionalString(body.canon) ?? "";
+          // Vor dem Stream validieren — sonst käme der Fehler erst als SSE-Ereignis (HTTP 200).
+          if (!canon.trim()) {
+            throw new ApiError(
+              "Kein Kanon vorhanden — bitte zuerst Fakten oder Beziehungen erfassen oder ableiten.",
+              400,
+            );
+          }
+          const input = {
+            storyboard,
+            chapters,
+            canon,
+            model,
+            language,
+            concurrency: optionalInt(body.concurrency, 3),
+          };
+          return sseResponse(async (emit) => {
+            await checkCanonChapters(input, (event) => emit(event));
+            emit({ type: "done" });
+          });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Quick fix: repair the reported canon contradictions in one chapter.
+    "/api/continuity/repair": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const text = typeof body.text === "string" ? body.text : "";
+          if (!text.trim()) throw new ApiError("Kein Kapiteltext für die Korrektur.", 400);
+          const result = await repairCanon({
+            storyboard,
+            chapterIndex: optionalInt(body.chapterIndex, 0),
+            text,
+            violations: asCanonViolations(body.violations),
             canon: optionalString(body.canon) ?? "",
             model,
             language,

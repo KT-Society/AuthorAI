@@ -8,7 +8,23 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
-_Nichts offen — nächste Themen siehe [`roadmap.md`](roadmap.md)._
+### Fakten-Check: Streaming & Quick Fix
+
+- **Added** **Fakten-Check streamt live und parallel** (`POST /api/continuity/check/stream`):
+  Alle Kapitel werden in **einem** Aufruf geprüft — mit begrenzter Parallelität
+  (`concurrency`, Standard 3) statt sequenziell. Jedes Ergebnis kommt als SSE-Ereignis, sobald
+  es fertig ist; die Liste im Dialog füllt sich also während des Laufs und zeigt je Kapitel
+  „prüft…", „keine Widersprüche", Treffer oder Fehler. Ein fehlerhaftes Kapitel beendet den
+  Lauf nicht. Fehlender Kanon/keine Kapitel → **400 vor dem Stream**.
+- **Added** **Quick Fix für gefundene Widersprüche** (`POST /api/continuity/repair`): je Kapitel
+  ein Knopf **„Beheben"** und im Kopf **„Alle beheben (n)"** (läuft als Hintergrund-Job mit
+  Fortschritt und Abbrechen). Ans Modell gehen **nur die Textteile, in denen ein gemeldetes
+  Zitat wirklich vorkommt** — alles andere bleibt wortgleich. Danach wird das Kapitel **erneut
+  geprüft** und die Meldung sagt, ob es behoben ist oder was offen bleibt. Nicht zuordenbare
+  Stellen werden gezählt und gemeldet.
+- **Changed** **Sicherungen wie bei den Pässen**: Ausgabelimit am Textteil (~2,4 Tokens/Wort),
+  am Token-Limit abgebrochene oder über ~⅓ aufblähende Korrekturen werden **verworfen** (der
+  Originaltext bleibt stehen) statt halb angewendet.
 
 ---
 

@@ -11,11 +11,15 @@ export interface StreamHandlers {
   onDelta: (text: string) => void;
 }
 
-export async function streamJson(
+/**
+ * Generischer SSE-Leser für die `/api/*`-Stream-Routen: ruft jedes `data:`-Ereignis ab.
+ * Fehler **vor** dem Start kommen als JSON, Fehler danach als `{ type: "error" }`-Ereignis.
+ */
+export async function streamEvents(
   path: string,
   body: unknown,
-  handlers: StreamHandlers,
-): Promise<string> {
+  onEvent: (event: Record<string, unknown>) => void,
+): Promise<void> {
   const response = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -36,32 +40,26 @@ export async function streamJson(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let full = "";
-  let failure: string | null = null;
+  let serverError: string | null = null;
 
   const consume = (line: string) => {
     const trimmed = line.trim();
     if (!trimmed.startsWith("data:")) return;
     const payload = trimmed.slice(5).trim();
     if (!payload) return;
+
+    let event: Record<string, unknown>;
     try {
-      const event = JSON.parse(payload) as { type?: string; text?: string; error?: string };
-      if (event.type === "delta" && typeof event.text === "string") {
-        full += event.text;
-        handlers.onDelta(event.text);
-        return;
-      }
-      if (event.type === "done" && typeof event.text === "string") {
-        // Der Server schickt den fertigen (nachbearbeiteten) Text — der hat Vorrang.
-        full = event.text;
-        return;
-      }
-      if (event.type === "error") {
-        failure = event.error ?? "Unbekannter Fehler.";
-      }
+      event = JSON.parse(payload) as Record<string, unknown>;
     } catch {
-      // Unvollständiger Rahmen — der Rest kommt mit dem nächsten Chunk.
+      return; // Unvollständiger Rahmen — der Rest kommt mit dem nächsten Chunk.
     }
+
+    if (event.type === "error") {
+      serverError = typeof event.error === "string" ? event.error : "Unbekannter Fehler.";
+      return;
+    }
+    onEvent(event);
   };
 
   while (true) {
@@ -78,7 +76,28 @@ export async function streamJson(
   }
   if (buffer.trim().length > 0) consume(buffer);
 
-  if (failure) throw new Error(failure);
+  if (serverError) throw new Error(serverError);
+}
+
+export async function streamJson(
+  path: string,
+  body: unknown,
+  handlers: StreamHandlers,
+): Promise<string> {
+  let full = "";
+
+  await streamEvents(path, body, (event) => {
+    if (event.type === "delta" && typeof event.text === "string") {
+      full += event.text;
+      handlers.onDelta(event.text);
+      return;
+    }
+    if (event.type === "done" && typeof event.text === "string") {
+      // Der Server schickt den fertigen (nachbearbeiteten) Text — der hat Vorrang.
+      full = event.text;
+    }
+  });
+
   if (full.trim().length === 0) throw new Error("Der Server hat keinen Text geliefert.");
   return full;
 }

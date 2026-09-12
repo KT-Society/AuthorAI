@@ -96,7 +96,8 @@ src/
 | Weltenbau-Extraktion | `POST /api/world/extract` |
 | Figuren-Extraktion (Manuskript) | `POST /api/characters/extract` |
 | Kontinuität: Extraktion | `POST /api/continuity/extract` |
-| Kontinuität: Fakten-Check | `POST /api/continuity/check` |
+| Kontinuität: Fakten-Check | `POST /api/continuity/check` · Queue/Stream: `POST /api/continuity/check/stream` |
+| Kontinuität: Quick Fix | `POST /api/continuity/repair` |
 | Soul-Synthese | `POST /api/generate` |
 | Recherche | `POST /api/research` |
 | Cover | `POST /api/cover`, `POST /api/cover/save`, `DELETE /api/cover/:file` |

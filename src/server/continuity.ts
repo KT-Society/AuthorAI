@@ -20,6 +20,8 @@ import type {
   RelationKind,
 } from "../data/continuity";
 import type { Storyboard } from "../data/story";
+import { countWords } from "../data/story";
+import { extractProse } from "../lib/prose";
 import { chatCompletionDetailed, cleanJsonBlock } from "./llm";
 import { languageLock, splitIntoChunks } from "./story";
 
@@ -424,5 +426,216 @@ export async function checkCanon(input: CanonCheckInput): Promise<CanonCheckResu
         ? "1 Widerspruch zum Kanon gefunden."
         : `${violations.length} Widersprüche zum Kanon gefunden.`,
     violations,
+  };
+}
+
+/* ────────────────── Fakten-Check über mehrere Kapitel (Queue) ────────────────── */
+
+export type CanonChapterEvent =
+  | { type: "started"; chapterIndex: number }
+  | { type: "result"; chapterIndex: number; result?: CanonCheckResult; error?: string };
+
+export interface CanonChaptersInput {
+  storyboard: Storyboard;
+  chapters: { index: number; text: string }[];
+  canon: string;
+  model: string;
+  language: string;
+  /** Gleichzeitige Kapitel-Prüfungen (Standard 3, max 6). */
+  concurrency?: number;
+}
+
+/**
+ * Prüft mehrere Kapitel **mit begrenzter Parallelität** und meldet jedes Ergebnis, sobald es
+ * fertig ist. Die Kapitel sind unabhängig — sequenziell wäre die Wartezeit die Summe aller
+ * Aufrufe (30 Kapitel ≈ 2,5 Minuten), parallel nur ein Bruchteil davon.
+ */
+export async function checkCanonChapters(
+  input: CanonChaptersInput,
+  onEvent: (event: CanonChapterEvent) => void,
+): Promise<void> {
+  if (!input.canon.trim()) {
+    throw new ApiError(
+      "Kein Kanon vorhanden — bitte zuerst Fakten oder Beziehungen erfassen oder ableiten.",
+      400,
+    );
+  }
+
+  const pending = [...input.chapters];
+  const limit = Math.max(1, Math.min(6, input.concurrency ?? CHECK_CONCURRENCY));
+  let cursor = 0;
+
+  const worker = async (): Promise<void> => {
+    while (cursor < pending.length) {
+      const item = pending[cursor];
+      cursor += 1;
+      if (!item) continue;
+      onEvent({ type: "started", chapterIndex: item.index });
+      try {
+        const result = await checkCanon({
+          storyboard: input.storyboard,
+          chapterIndex: item.index,
+          text: item.text,
+          canon: input.canon,
+          model: input.model,
+          language: input.language,
+        });
+        onEvent({ type: "result", chapterIndex: item.index, result });
+      } catch (err) {
+        onEvent({
+          type: "result",
+          chapterIndex: item.index,
+          error: err instanceof Error ? err.message : "Unbekannter Fehler.",
+        });
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, Math.max(1, pending.length)) }, () => worker()),
+  );
+}
+
+/* ─────────────────────── Quick-Fix: Widersprüche beheben ─────────────────────── */
+
+export interface CanonRepairInput {
+  storyboard: Storyboard;
+  chapterIndex: number;
+  text: string;
+  violations: CanonViolation[];
+  canon: string;
+  model: string;
+  language: string;
+}
+
+export interface CanonRepairOutput {
+  text: string;
+  changed: boolean;
+  /** Anzahl der tatsächlich angefassten Widersprüche. */
+  applied: number;
+  /** Widersprüche, deren Stelle nicht sicher zugeordnet werden konnte. */
+  unassigned: number;
+}
+
+/** Politur-Grenze: eine Korrektur darf den Text nicht aufblähen. */
+const REPAIR_MAX_GROWTH = 1.35;
+/** Kapitel-Prüfungen sind unabhängig — begrenzte Parallelität als Standard. */
+const CHECK_CONCURRENCY = 3;
+
+function normalizeForMatch(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function repairSystem(language: string): string {
+  return `You are a continuity repair editor.
+${languageLock(language)}
+
+TASK: fix ONLY the listed canon contradictions in the text part below.
+
+Rules:
+- Change as little as possible: repair the contradicting detail, keep every other sentence
+  word-for-word.
+- Do NOT rewrite style, do NOT add or remove scenes, do NOT change the length noticeably.
+- Keep voice, tense, POV and all names that are not part of a contradiction.
+- If a listed contradiction cannot be fixed without inventing new plot, restate the detail
+  so it no longer contradicts the canon (e.g. drop the exact number/name).
+- Remove any passage that only exists because of the contradiction.
+- Return ONLY the corrected prose inside <TEXT>…</TEXT>. No notes, no explanation.
+Everything in ${language}.`;
+}
+
+function repairUser(input: CanonRepairInput, chunk: string, violations: CanonViolation[]): string {
+  const chapter = input.storyboard.chapters[input.chapterIndex];
+  const list = violations
+    .map(
+      (violation, index) =>
+        `${index + 1}. CANON: ${violation.fact}\n   WRONG IN TEXT: „${violation.quote}"\n   FIX: ${violation.fix || "resolve the contradiction"}`,
+    )
+    .join("\n");
+
+  return `${input.canon.trim()}
+
+CHAPTER: ${chapter ? `${chapter.index + 1}. ${chapter.title}` : `#${input.chapterIndex + 1}`}
+
+CONTRADICTIONS TO FIX (only these):
+${list}
+
+TEXT PART — fix the contradictions, keep everything else as it is:
+${chunk}
+
+Return the corrected part now inside <TEXT>…</TEXT>, entirely in ${input.language}.`;
+}
+
+/**
+ * Behebt die gemeldeten Kanon-Widersprüche in einem Kapitel.
+ *
+ * Nur Teile, in denen ein gemeldetes Zitat wirklich vorkommt, gehen ans Modell — alles andere
+ * bleibt **unangetastet** (spart Aufrufe und verhindert unnötige Umschreibungen). Mit denselben
+ * Sicherungen wie die Prüf-Pässe: Ausgabelimit am Chunk, Wachstumsgrenze, Fortsetzung nur bei
+ * hartem Token-Limit.
+ */
+export async function repairCanon(input: CanonRepairInput): Promise<CanonRepairOutput> {
+  if (input.violations.length === 0) {
+    return { text: input.text, changed: false, applied: 0, unassigned: 0 };
+  }
+
+  const chunks = splitIntoChunks(input.text);
+  // Vergleichsbasis ist der **normalisierte** Ausgangstext: Chunking trimmt Absätze, das darf
+  // nicht als „geändert" gelten.
+  const baseline = chunks.join("\n\n").trim();
+  const parts: string[] = [];
+  let applied = 0;
+
+  for (const chunk of chunks) {
+    const haystack = normalizeForMatch(chunk);
+    const relevant = input.violations.filter((violation) =>
+      violation.quote.trim().length > 0 && haystack.includes(normalizeForMatch(violation.quote)),
+    );
+
+    if (relevant.length === 0) {
+      parts.push(chunk);
+      continue;
+    }
+
+    const chunkWords = countWords(chunk);
+    const { content, finishReason } = await chatCompletionDetailed({
+      model: input.model,
+      system: repairSystem(input.language),
+      user: repairUser(input, chunk, relevant),
+      maxTokens: Math.min(4000, Math.max(800, Math.round(chunkWords * 2.4))),
+      temperature: 0.2,
+    });
+
+    // Am Limit abgebrochene Korrektur ist nicht vertrauenswürdig → Original behalten.
+    if (finishReason === "length") {
+      parts.push(chunk);
+      continue;
+    }
+
+    // Führende Überschriften entfernen (Modelle setzen gern eine).
+    const next = extractProse(content)
+      .replace(/^#{1,6}[^\n]*\n+/, "")
+      .trim();
+    if (!next) {
+      parts.push(chunk);
+      continue;
+    }
+
+    if (chunk.length > 200 && next.length > chunk.length * REPAIR_MAX_GROWTH) {
+      parts.push(chunk);
+      continue;
+    }
+
+    parts.push(next);
+    applied += relevant.length;
+  }
+
+  const text = parts.join("\n\n").trim();
+  return {
+    text,
+    changed: text !== baseline,
+    applied,
+    // Alles, was nicht angefasst wurde — inklusive Zitaten, die in keinem Teil zu finden waren.
+    unassigned: Math.max(0, input.violations.length - applied),
   };
 }

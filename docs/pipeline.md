@@ -219,6 +219,21 @@ RELATIONS (binding — keep these dynamics consistent):
 - **Quelle**: manuell (Charakter-Editor → Panels „Fakten“/„Beziehungen“) oder
   `POST /api/continuity/extract` mit Review-Dialog.
 
+**Fakten-Check & Quick Fix**
+
+- **Einzelprüfung**: `POST /api/continuity/check` prüft ein Kapitel nur gegen den Kanon und
+  nennt Fakt, Zitat und Lösungsvorschlag. Gecacht — identische Prüfung kostet nichts.
+- **Queue mit Live-Ergebnissen**: `POST /api/continuity/check/stream` prüft alle Kapitel
+  **parallel** (Standard 3 gleichzeitig, `concurrency` bis 6) und schickt jedes Ergebnis als
+  SSE-Ereignis. Die Ergebnisliste füllt sich also während des Laufs; ein fehlerhaftes Kapitel
+  beendet den Lauf nicht. Sequenziell wäre die Wartezeit die Summe aller Kapitel.
+- **Quick Fix**: `POST /api/continuity/repair` behebt gemeldete Widersprüche. Ans Modell gehen
+  **nur die Textteile, in denen ein gemeldetes Zitat wirklich vorkommt** — der Rest bleibt
+  wortgleich (spart Aufrufe, verhindert unnötiges Umschreiben). Gleiche Sicherungen wie bei den
+  Pässen: Ausgabelimit am Teil, `finish_reason: "length"` → Korrektur **verwerfen**, Antwort
+  über ~⅓ länger → verwerfen. Die Oberfläche prüft das Kapitel danach **erneut** und zeigt, was
+  übrig bleibt.
+
 ---
 
 ## Ableitungen (Figuren & Weltenbau)

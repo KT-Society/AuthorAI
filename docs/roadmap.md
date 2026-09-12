@@ -13,8 +13,8 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 - **Szenen-Import/Export**: Szenenplan als JSON austauschen
 
 ### Kanon & Kontinuität (Anschlüsse an den Fakten-Check)
-- **Widerspruch per Klick beheben**: der Check liefert `fix` — Vorschlag direkt auf die Stelle
-  anwenden statt manuell nachzuziehen
+- **Diff-Vorschau vor dem Übernehmen**: Beheben zeigt vorher/nachher je Stelle, statt direkt zu schreiben
+- **Einzelne Widersprüche auswählen**: nur markierte Stellen korrigieren statt „alle"
 - **Kanon-Warnung vor dem Speichern**: Kapitel still gegen die Fakten prüfen und erst dann
   ablegen (Widerspruch sichtbar, bevor er sich einbrennt)
 - **Prüf-Historie je Kapitel**: letzter Fakten-Check + Ergebnis als Badge im Kapitel
@@ -53,8 +53,8 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   im Fakten-Check als eigener Fall gemeldet
 
 ### Technik & Performance
-- **Streaming auch für Queues und Prüf-Pässe**: heute streamen nur Rohentwurf und Ausbau —
-  der Live-Text der Pass-Schleifen fehlt noch
+- **Streaming für die Prüf-Pass-Queues**: der Fakten-Check streamt live und parallel — Kohärenz,
+  Stil und Ausbau laufen noch als stille Schleife ohne Live-Text
 - **Stream-Vorschau übernehmen oder verwerfen**: „Text in den Editor übernehmen" und
   „abbrechen" direkt aus der Vorschau
 - **Live-Token-/Kostenzähler** während des Streams (verzahnt mit dem Tracking unten)
