@@ -73,8 +73,12 @@ import { buildMarkdown } from "@/lib/markdown";
 import { buildPdf } from "@/lib/pdf";
 import { buildCoverPrompt, deleteCover, generateCover } from "@/services/cover";
 import { checkConsistency, checkTimeline, draftChapter, expandChapter, refineStyle } from "@/services/story";
-import { checkCanon, repairCanon, streamCanonCheck } from "@/services/continuity";
-import type { CanonCheckResult, CanonStreamHandlers, CanonViolation } from "@/services/continuity";
+import { streamCanonCheck, streamCanonRepair } from "@/services/continuity";
+import type {
+  CanonRepairResultEvent,
+  CanonStreamHandlers,
+  CanonViolation,
+} from "@/services/continuity";
 import type { TimelineResult } from "@/services/story";
 
 import { SCENE_TEMPLATES } from "@/data/sceneTemplates";
@@ -1070,47 +1074,56 @@ export function BookDetailView({
   };
 
   /**
-   * Quick Fix für ein Kapitel: Widersprüche beheben, Ergebnis ins Buch schreiben und mit dem
-   * **neuen** Text erneut prüfen (kein veralteter Stand in der Liste).
+   * Quick Fix (gestreamt): korrigiert die betroffenen Kapitel und schreibt jeden korrigierten
+   * Text ins Buch, sobald er ankommt. Die **Nachprüfung** macht der Server im selben Lauf und
+   * liefert das frische Ergebnis mit zurück — so bleibt kein alter Stand in der Liste stehen.
    */
-  const runCanonRepair = async (
-    chapterIndex: number,
-    violations: CanonViolation[],
-  ): Promise<CanonCheckResult> => {
+  const runCanonRepairMany = async (
+    targets: { chapterIndex: number; violations: CanonViolation[] }[],
+    callbacks: {
+      onStarted: (chapterIndex: number) => void;
+      onResult: (event: CanonRepairResultEvent) => void;
+    },
+  ): Promise<void> => {
     const scope = requireCanon();
     const model = canonModel();
-    const text = (manuscript[chapterIndex]?.expanded || manuscript[chapterIndex]?.draft || "").trim();
-    if (!text) throw new Error("Dieses Kapitel hat keinen Text.");
 
-    pushSnapshot(chapterIndex, "vor Fakten-Korrektur");
-    const repaired = await repairCanon({
-      storyboard: book.storyboard as NonNullable<typeof book.storyboard>,
-      chapterIndex,
-      text,
-      violations,
-      canon: scope,
-      model,
-      language,
+    const chapters = targets.map((target) => {
+      const text = (
+        manuscript[target.chapterIndex]?.expanded ||
+        manuscript[target.chapterIndex]?.draft ||
+        ""
+      ).trim();
+      if (!text) throw new Error(`Kapitel ${target.chapterIndex + 1} hat keinen Text.`);
+      return { index: target.chapterIndex, text, violations: target.violations };
     });
-    if (!repaired.changed) {
-      throw new Error("Das Modell hat keine Änderung geliefert — bitte erneut versuchen.");
-    }
-    updateChapter(chapterIndex, { expanded: repaired.text });
-    if (repaired.unassigned > 0) {
-      showToast(
-        `${repaired.unassigned} Stelle(n) konnten nicht sicher zugeordnet werden`,
-        "info",
-      );
-    }
 
-    return checkCanon({
-      storyboard: book.storyboard as NonNullable<typeof book.storyboard>,
-      chapterIndex,
-      text: repaired.text,
-      canon: scope,
-      model,
-      language,
-    });
+    await streamCanonRepair(
+      {
+        storyboard: book.storyboard as NonNullable<typeof book.storyboard>,
+        canon: scope,
+        model,
+        language,
+        chapters,
+      },
+      {
+        onStarted: callbacks.onStarted,
+        onResult: (event) => {
+          // Korrigierten Text erst sichern, dann ins Buch schreiben.
+          if (event.text && event.changed) {
+            pushSnapshot(event.chapterIndex, "vor Fakten-Korrektur");
+            updateChapter(event.chapterIndex, { expanded: event.text });
+          }
+          if (event.unassigned && event.unassigned > 0) {
+            showToast(
+              `Kapitel ${event.chapterIndex + 1}: ${event.unassigned} Stelle(n) konnten nicht sicher zugeordnet werden`,
+              "info",
+            );
+          }
+          callbacks.onResult(event);
+        },
+      },
+    );
   };
 
   const timelineEntries: TimelineEntry[] = manuscript.map((chapter, index) => ({    chapter: index + 1,
@@ -1554,7 +1567,7 @@ export function BookDetailView({
           chapters={canonCheckChapters}
           canonAvailable={Boolean(canon)}
           onStreamCheck={runCanonCheckStream}
-          onRepair={runCanonRepair}
+          onRepairMany={runCanonRepairMany}
           onClose={() => setCanonCheckOpen(false)}
         />
       ) : null}

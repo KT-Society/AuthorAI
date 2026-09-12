@@ -639,3 +639,117 @@ export async function repairCanon(input: CanonRepairInput): Promise<CanonRepairO
     unassigned: Math.max(0, input.violations.length - applied),
   };
 }
+
+/* ───────────────── Quick Fix über mehrere Kapitel (Queue) ───────────────── */
+
+/** Behebt deutlich schwerer als eine Prüfung — deshalb nur zwei Kapitel gleichzeitig. */
+const REPAIR_CONCURRENCY = 2;
+
+export interface CanonRepairTarget {
+  index: number;
+  text: string;
+  violations: CanonViolation[];
+}
+
+export type CanonRepairEvent =
+  | { type: "started"; chapterIndex: number }
+  | {
+      type: "result";
+      chapterIndex: number;
+      /** Reparierter Text (nur bei `changed`). */
+      text?: string;
+      changed?: boolean;
+      applied?: number;
+      unassigned?: number;
+      /** Frische Prüfung **nach** der Korrektur — zeigt, was übrig bleibt. */
+      result?: CanonCheckResult;
+      error?: string;
+    };
+
+export interface CanonRepairChaptersInput {
+  storyboard: Storyboard;
+  canon: string;
+  model: string;
+  language: string;
+  chapters: CanonRepairTarget[];
+  concurrency?: number;
+}
+
+/**
+ * Quick Fix über mehrere Kapitel mit begrenzter Parallelität: behebt und **prüft danach erneut**,
+ * damit das Ergebnis ehrlich ist. Jedes Kapitel wird gemeldet, sobald es fertig ist.
+ */
+export async function repairCanonChapters(
+  input: CanonRepairChaptersInput,
+  onEvent: (event: CanonRepairEvent) => void,
+): Promise<void> {
+  if (!input.canon.trim()) {
+    throw new ApiError(
+      "Kein Kanon vorhanden — bitte zuerst Fakten oder Beziehungen erfassen oder ableiten.",
+      400,
+    );
+  }
+
+  const pending = [...input.chapters];
+  const limit = Math.max(1, Math.min(4, input.concurrency ?? REPAIR_CONCURRENCY));
+  let cursor = 0;
+
+  const worker = async (): Promise<void> => {
+    while (cursor < pending.length) {
+      const item = pending[cursor];
+      cursor += 1;
+      if (!item) continue;
+      onEvent({ type: "started", chapterIndex: item.index });
+      try {
+        const repaired = await repairCanon({
+          storyboard: input.storyboard,
+          chapterIndex: item.index,
+          text: item.text,
+          violations: item.violations,
+          canon: input.canon,
+          model: input.model,
+          language: input.language,
+        });
+
+        // Nachprüfung getrennt behandeln: scheitert sie, wird die **Korrektur trotzdem**
+        // geliefert (sie darf nicht verloren gehen) — nur das frische Ergebnis fehlt.
+        let result: CanonCheckResult | undefined;
+        let recheckError: string | undefined;
+        try {
+          result = await checkCanon({
+            storyboard: input.storyboard,
+            chapterIndex: item.index,
+            text: repaired.text,
+            canon: input.canon,
+            model: input.model,
+            language: input.language,
+          });
+        } catch (err) {
+          recheckError =
+            err instanceof Error ? err.message : "Nachprüfung fehlgeschlagen.";
+        }
+
+        onEvent({
+          type: "result",
+          chapterIndex: item.index,
+          text: repaired.text,
+          changed: repaired.changed,
+          applied: repaired.applied,
+          unassigned: repaired.unassigned,
+          result,
+          error: recheckError,
+        });
+      } catch (err) {
+        onEvent({
+          type: "result",
+          chapterIndex: item.index,
+          error: err instanceof Error ? err.message : "Unbekannter Fehler.",
+        });
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, Math.max(1, pending.length)) }, () => worker()),
+  );
+}

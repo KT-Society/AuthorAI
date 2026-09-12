@@ -8,6 +8,24 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Figuren-Dubletten
+
+- **Added** **Dublettenerkennung für Figuren** (`src/lib/characterMatch.ts`): Anreden, Ränge und
+  Artikel werden vor dem Vergleich entfernt — **„Prinzessin Lysara" = „Lysara"**, „König Theron"
+  = „Theron", „Lord General Ser Kael" = „Kael". Danach gelten dieselben Regeln wie beim
+  Weltenbau (exakter Vergleich + Token-Überlappung); ein einzelnes Token zählt ab vier Zeichen
+  („Lysara" ↔ „Lysara Thorne"), kurze Namen („Bo") bleiben bewusst außen vor. Verglichen wird
+  **nur innerhalb desselben Projekts**. Der gemeinsame Rechenkern liegt in `lib/nameMatch.ts`
+  (Weltenbau und Figuren teilen ihn).
+- **Added** **„Dubletten entfernen"** in der Charaktere-Ansicht: Der Knopf zeigt die Anzahl
+  gefundener Dubletten, fragt vor dem Löschen nach (mit Hinweis, dass Fakten und Beziehungen der
+  entfernten Figuren mitgelöscht werden) und behält je Figur den **ersten** Eintrag.
+- **Added** **Import prüft auf Dubletten**: Beim Übernehmen aus der Manuskript-Extraktion und
+  beim automatischen Storyboard-Import werden Figuren, die es (unter anderem Namen) schon gibt,
+  übersprungen und gezählt („2 bereits vorhanden (übersprungen)").
+- **Changed** **`lib/worldMatch.ts`** nutzt jetzt den gemeinsamen Kern (`lib/nameMatch.ts`) —
+  Verhalten unverändert (Regression geprüft, 11/11).
+
 ### Fakten-Check: Streaming & Quick Fix
 
 - **Added** **Fakten-Check streamt live und parallel** (`POST /api/continuity/check/stream`):
@@ -17,11 +35,20 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   „prüft…", „keine Widersprüche", Treffer oder Fehler. Ein fehlerhaftes Kapitel beendet den
   Lauf nicht. Fehlender Kanon/keine Kapitel → **400 vor dem Stream**.
 - **Added** **Quick Fix für gefundene Widersprüche** (`POST /api/continuity/repair`): je Kapitel
-  ein Knopf **„Beheben"** und im Kopf **„Alle beheben (n)"** (läuft als Hintergrund-Job mit
-  Fortschritt und Abbrechen). Ans Modell gehen **nur die Textteile, in denen ein gemeldetes
-  Zitat wirklich vorkommt** — alles andere bleibt wortgleich. Danach wird das Kapitel **erneut
-  geprüft** und die Meldung sagt, ob es behoben ist oder was offen bleibt. Nicht zuordenbare
-  Stellen werden gezählt und gemeldet.
+  ein Knopf **„Beheben"** und im Kopf **„Alle beheben (n)"**. Ans Modell gehen **nur die
+  Textteile, in denen ein gemeldetes Zitat wirklich vorkommt** — alles andere bleibt wortgleich.
+  Danach wird das Kapitel **erneut geprüft** und die Meldung sagt, ob es behoben ist oder was
+  offen bleibt. Nicht zuordenbare Stellen werden gezählt und gemeldet.
+- **Added** **„Alle beheben" läuft ebenfalls gestreamt** (`POST /api/continuity/repair/stream`):
+  viele Kapitel in **einem** SSE-Lauf, begrenzt parallel (Standard 2), und jedes Kapitel wird
+  im selben Zug **neu geprüft** — die Liste aktualisiert sich live („korrigiert…" → behoben /
+  offen). Scheitert nur die Nachprüfung, wird die Korrektur trotzdem geliefert, damit keine
+  Arbeit verloren geht. Vor jeder Korrektur wird ein Versions-Snapshot angelegt.
+- **Fixed** **React-Fehler beim Beheben** (`Cannot update a component (JobCenter) while
+  rendering a different component (CanonCheckDialog)`): Der Job-Fortschritt wurde **innerhalb
+  eines State-Updaters** gesetzt (`updateJob` in `setOutcomes`) — das benachrichtigt `JobCenter`
+  mitten im Rendern. Der Zähler liegt jetzt in einem Ref und wird **außerhalb** des Updaters
+  aktualisiert.
 - **Changed** **Sicherungen wie bei den Pässen**: Ausgabelimit am Textteil (~2,4 Tokens/Wort),
   am Token-Limit abgebrochene oder über ~⅓ aufblähende Korrekturen werden **verworfen** (der
   Originaltext bleibt stehen) statt halb angewendet.

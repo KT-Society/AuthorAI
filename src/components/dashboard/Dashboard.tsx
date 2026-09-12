@@ -47,6 +47,7 @@ import { createBackup, parseBackup } from "@/lib/backup";
 import type { ProfileBackup } from "@/lib/backup";
 import { emptyMetaToday, normalizeMeta, recordWords } from "@/lib/streak";
 import { findMatchingEntry } from "@/lib/worldMatch";
+import { findMatchingCharacter } from "@/lib/characterMatch";
 import {
   makeNotification,
   NotificationsContext,
@@ -70,20 +71,24 @@ import { WorldView } from "./WorldView";
 
 /** Characters that exist in a book's storyboard but are not yet in the character list. */
 function collectMissingCharacters(source: Book[], existing: Character[]): Character[] {
-  const seen = new Set(existing.map((character) => character.name.trim().toLowerCase()));
   const additions: Character[] = [];
+
+  /** Überspringt, was es (fast) schon gibt: „Prinzessin Lysara" ≠ „Lysara" nur auf dem Papier. */
+  const push = (character: Character) => {
+    if (findMatchingCharacter(character, existing) || findMatchingCharacter(character, additions)) {
+      return;
+    }
+    additions.push(character);
+  };
 
   for (const book of source) {
     for (const entry of book.storyboard?.characters ?? []) {
       const name = entry.name.trim();
       if (!name) continue;
-      const key = name.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
 
       const description = entry.description.trim();
       const role = entry.role.trim();
-      additions.push(
+      push(
         makeCharacter(
           {
             name,
@@ -603,6 +608,16 @@ export function Dashboard({
                 onRelationsChange={setRelations}
                 onAddCharacter={addCharacter}
                 onAddCharacters={(list) => setCharacters((prev) => [...list, ...prev])}
+                onDeleteCharacters={(ids) => {
+                  const drop = new Set(ids);
+                  setCharacters((prev) => prev.filter((item) => !drop.has(item.id)));
+                  setFacts((prev) => prev.filter((fact) => !drop.has(fact.entityId)));
+                  setRelations((prev) =>
+                    prev.filter(
+                      (relation) => !drop.has(relation.fromId) && !drop.has(relation.toId),
+                    ),
+                  );
+                }}
                 onUpdateCharacter={(character) =>
                   setCharacters((prev) =>
                     prev.map((item) => (item.id === character.id ? character : item)),

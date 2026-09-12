@@ -7,6 +7,8 @@
  * über Tokens. Läuft im Client (Scan-Filter, Aufräumen) und im Server.
  */
 
+import { containedIn, highOverlap, normalizeName, tokenOverlap } from "./nameMatch";
+
 export interface WorldTitleLike {
   title: string;
   category: string;
@@ -45,24 +47,11 @@ export function normalizeWorldTitle(title: string): string {
   const cached = normalizeCache.get(title);
   if (cached !== undefined) return cached;
 
-  const normalized = title
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ß/g, "ss")
-    .replace(/[^a-z0-9\s]+/g, " ")
-    .split(/\s+/)
-    .filter((token) => token.length > 0 && !ARTICLES.has(token))
-    .join(" ")
-    .trim();
+  const normalized = normalizeName(title, ARTICLES);
 
   if (normalizeCache.size > 4000) normalizeCache.clear();
   normalizeCache.set(title, normalized);
   return normalized;
-}
-
-function tokenSet(normalized: string): Set<string> {
-  return new Set(normalized.split(" ").filter(Boolean));
 }
 
 /**
@@ -77,17 +66,12 @@ export function worldTitlesMatch(a: string, b: string): boolean {
   if (!na || !nb) return false;
   if (na === nb) return true;
 
-  const ta = tokenSet(na);
-  const tb = tokenSet(nb);
-  let shared = 0;
-  for (const token of ta) if (tb.has(token)) shared += 1;
-  if (shared === 0) return false;
+  const overlap = tokenOverlap(na, nb);
+  if (overlap.shared === 0) return false;
+  if (highOverlap(overlap)) return true;
 
-  const union = new Set([...ta, ...tb]).size;
-  if (shared / union >= 0.6) return true;
-
-  const smaller = Math.min(ta.size, tb.size);
-  return smaller >= 2 && shared / smaller >= 0.8;
+  // Enthaltung erst ab zwei Tokens: „Zitadelle" ≠ „Ruinen der Zitadelle".
+  return overlap.smaller >= 2 && containedIn(overlap);
 }
 
 /**

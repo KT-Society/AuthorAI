@@ -37,6 +37,9 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 ## Mittelfristig
 
 ### Inhalt & Qualität
+- **Figuren zusammenführen statt löschen**: Dubletten-Aufräumen hängt Fakten und Beziehungen der
+  entfernten Figur an die behaltene um (heute werden sie mitgelöscht)
+- **Dubletten-Vorschau vor dem Löschen**: anzeigen, was zusammenfällt und was dabei verloren geht
 - **Arc-Vorschläge aus dem Manuskript**: die Extraktion schlägt Beziehungs-Verläufe
   (Intensität je Kapitel) vor, statt sie von Hand zu pflegen
 - **Arc-Scrubber im Graphen**: Kapitel-Regler, der Knoten und Kanten auf den Stand des

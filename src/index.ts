@@ -9,8 +9,14 @@ import path from "node:path";
 
 import type { SceneConstraint, Storyboard } from "./data/story";
 import { coversDir, generateCover, saveCoverImage } from "./server/cover";
-import { extractContinuity, checkCanon, checkCanonChapters, repairCanon } from "./server/continuity";
-import type { CanonViolation } from "./server/continuity";
+import {
+  extractContinuity,
+  checkCanon,
+  checkCanonChapters,
+  repairCanon,
+  repairCanonChapters,
+} from "./server/continuity";
+import type { CanonRepairTarget, CanonViolation } from "./server/continuity";
 import { isStandaloneBinary, runtimePort } from "./server/paths";
 import { runResearch } from "./server/research";
 import {
@@ -178,7 +184,24 @@ function asCanonViolations(value: unknown): CanonViolation[] {
   return list;
 }
 
-/** Bereits getrackte Welteneinträge (Titel + Kategorie) aus dem Request-Body. */function asKnownWorldEntries(value: unknown): { title: string; category: string }[] {
+/** Kapitel mit Widersprüchen für den gestreamten Quick Fix. */
+function asRepairChapters(value: unknown): CanonRepairTarget[] {
+  if (!Array.isArray(value)) return [];
+  const list: CanonRepairTarget[] = [];
+  for (const entry of value) {
+    const item = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const text = typeof item.text === "string" ? item.text : "";
+    const violations = asCanonViolations(item.violations);
+    if (!text.trim() || violations.length === 0) continue;
+    const index =
+      typeof item.index === "number" ? item.index : Number.parseInt(String(item.index ?? ""), 10);
+    list.push({ index: Number.isFinite(index) ? index : list.length, text, violations });
+  }
+  return list;
+}
+
+/** Bereits getrackte Welteneinträge (Titel + Kategorie) aus dem Request-Body. */
+function asKnownWorldEntries(value: unknown): { title: string; category: string }[] {
   if (!Array.isArray(value)) return [];
   const entries: { title: string; category: string }[] = [];
   for (const entry of value) {
@@ -576,6 +599,43 @@ const server = serve({
           };
           return sseResponse(async (emit) => {
             await checkCanonChapters(input, (event) => emit(event));
+            emit({ type: "done" });
+          });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Streaming quick fix: repairs each chapter and re-checks it, one SSE event per chapter.
+    "/api/continuity/repair/stream": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const canon = optionalString(body.canon) ?? "";
+          if (!canon.trim()) {
+            throw new ApiError(
+              "Kein Kanon vorhanden — bitte zuerst Fakten oder Beziehungen erfassen oder ableiten.",
+              400,
+            );
+          }
+          const chapters = asRepairChapters(body.chapters);
+          if (chapters.length === 0) {
+            throw new ApiError("Keine Kapitel mit Widersprüchen für die Korrektur.", 400);
+          }
+          const input = {
+            storyboard,
+            canon,
+            model,
+            language,
+            chapters,
+            concurrency: optionalInt(body.concurrency, 2),
+          };
+          return sseResponse(async (emit) => {
+            await repairCanonChapters(input, (event) => emit(event));
             emit({ type: "done" });
           });
         } catch (err) {

@@ -14,7 +14,12 @@ import { cn } from "@/lib/utils";
 
 import { createJob, finishJob, isCancelled, updateJob } from "@/lib/jobs";
 import { showToast } from "@/lib/toast";
-import type { CanonCheckResult, CanonStreamHandlers, CanonViolation } from "@/services/continuity";
+import type {
+  CanonCheckResult,
+  CanonRepairResultEvent,
+  CanonStreamHandlers,
+  CanonViolation,
+} from "@/services/continuity";
 
 export interface CanonCheckChapter {
   index: number;
@@ -40,7 +45,7 @@ export function CanonCheckDialog({
   chapters,
   canonAvailable,
   onStreamCheck,
-  onRepair,
+  onRepairMany,
   onClose,
 }: {
   open: boolean;
@@ -49,20 +54,31 @@ export function CanonCheckDialog({
   /** Startet den gestreamten Check über alle Kapitel (Payload baut der Aufrufer). */
   onStreamCheck: (handlers: CanonStreamHandlers) => Promise<void>;
   /**
-   * Behebt die gemeldeten Widersprüche eines Kapitels und prüft es mit dem **neuen** Text
-   * erneut — gibt das frische Ergebnis zurück (so bleibt kein veralteter Stand stehen).
+   * Behebt Widersprüche und prüft die betroffenen Kapitel **direkt danach erneut** (SSE).
+   * Der Aufrufer schreibt die korrigierten Texte ins Buch; hier kommen die frischen Ergebnisse an.
    */
-  onRepair: (chapterIndex: number, violations: CanonViolation[]) => Promise<CanonCheckResult>;
+  onRepairMany: (
+    targets: { chapterIndex: number; violations: CanonViolation[] }[],
+    callbacks: {
+      onStarted: (chapterIndex: number) => void;
+      onResult: (event: CanonRepairResultEvent) => void;
+    },
+  ) => Promise<void>;
   onClose: () => void;
 }) {
   const [outcomes, setOutcomes] = useState<Map<number, ChapterOutcome>>(new Map());
   const [running, setRunning] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
-  const [repairing, setRepairing] = useState<number | null>(null);
+  const [repairing, setRepairing] = useState<Set<number>>(new Set());
   const [repairAllBusy, setRepairAllBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** StrictMode führt Effekte doppelt aus — Guard verhindert doppelte Läufe. */
   const startedRef = useRef(false);
+  /**
+   * Fortschrittszähler als Ref: `updateJob` darf **nicht** in einem State-Updater laufen —
+   * das würde `JobCenter` während des Renderns aktualisieren (React-Fehler).
+   */
+  const progressRef = useRef(0);
 
   const order = new Map(chapters.map((chapter, position) => [chapter.index, position]));
   const sorted = [...outcomes.values()].sort(
@@ -78,6 +94,7 @@ export function CanonCheckDialog({
     setError(null);
     setOutcomes(new Map());
     setRunning(new Set());
+    progressRef.current = 0;
 
     const jobId = createJob({
       title: `Fakten-Check · ${chapters.length} Kapitel`,
@@ -94,17 +111,17 @@ export function CanonCheckDialog({
             index: chapterIndex,
             title: "",
           };
+          // Zähler zuerst (außerhalb des Updaters), dann reine State-Updates.
+          progressRef.current += 1;
+          updateJob(jobId, { done: progressRef.current });
           setRunning((prev) => {
             const next = new Set(prev);
             next.delete(chapterIndex);
             return next;
           });
-          setOutcomes((prev) => {
-            const next = new Map(prev);
-            next.set(chapterIndex, { chapter, result, error: errorMessage });
-            updateJob(jobId, { done: next.size });
-            return next;
-          });
+          setOutcomes((prev) =>
+            new Map(prev).set(chapterIndex, { chapter, result, error: errorMessage }),
+          );
         },
       });
       finishJob(jobId, "done", "Prüfung abgeschlossen");
@@ -118,74 +135,83 @@ export function CanonCheckDialog({
     }
   };
 
-  const repairOne = async (chapterIndex: number, violationList: CanonViolation[]) => {
-    setRepairing(chapterIndex);
-    setError(null);
-    try {
-      // Korrektur **und** Nachprüfung macht der Aufrufer mit dem neuen Text.
-      const refreshed = await onRepair(chapterIndex, violationList);
-      setOutcomes((prev) => {
-        const next = new Map(prev);
-        const existing = next.get(chapterIndex);
-        next.set(chapterIndex, {
-          chapter: existing?.chapter ?? { index: chapterIndex, title: "" },
-          result: refreshed,
-        });
-        return next;
-      });
-      const left = refreshed.violations.length;
-      showToast(
-        left === 0
-          ? `Kapitel ${chapterIndex + 1}: Widerspruch behoben ✓`
-          : `Kapitel ${chapterIndex + 1}: korrigiert, ${left} offen`,
-        left === 0 ? "ok" : "info",
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
-    } finally {
-      setRepairing(null);
-    }
-  };
-
-  const repairAll = async () => {
-    const targets = sorted.filter(
-      (outcome) => (outcome.result?.violations.length ?? 0) > 0 && !outcome.error,
-    );
+  /** Behebt die Widersprüche der angegebenen Kapitel (gestreamt, mit Nachprüfung). */
+  const runRepair = async (
+    targets: { chapterIndex: number; violations: CanonViolation[] }[],
+  ) => {
     if (targets.length === 0) return;
-
+    setError(null);
     setRepairAllBusy(true);
+    progressRef.current = 0;
+
     const jobId = createJob({
       title: `Fakten-Korrektur · ${targets.length} Kapitel`,
       kind: "canon-repair",
       total: targets.length,
     });
-    let aborted = false;
     let failure: string | null = null;
+    let aborted = false;
 
-    for (let position = 0; position < targets.length; position += 1) {
-      const outcome = targets[position];
-      if (!outcome) continue;
-      if (isCancelled(jobId)) {
-        aborted = true;
-        break;
-      }
-      updateJob(jobId, { done: position, label: `Kapitel ${outcome.chapter.index + 1}` });
-      try {
-        await repairOne(outcome.chapter.index, outcome.result?.violations ?? []);
-      } catch (err) {
-        failure = err instanceof Error ? err.message : "Unbekannter Fehler.";
-        break;
-      }
-    }
+    try {
+      await onRepairMany(targets, {
+        onStarted: (chapterIndex) =>
+          setRepairing((prev) => new Set(prev).add(chapterIndex)),
+        onResult: (event) => {
+          progressRef.current += 1;
+          updateJob(jobId, { done: progressRef.current });
+          setRepairing((prev) => {
+            const next = new Set(prev);
+            next.delete(event.chapterIndex);
+            return next;
+          });
 
-    if (aborted) finishJob(jobId, "cancelled", "Korrektur abgebrochen");
-    else if (failure) finishJob(jobId, "error", failure);
-    else {
-      updateJob(jobId, { done: targets.length });
-      finishJob(jobId, "done", `${targets.length} Kapitel bearbeitet`);
+          if (event.error) {
+            setError(
+              `Kapitel ${event.chapterIndex + 1}: ${event.error}`,
+            );
+            return;
+          }
+          if (event.result) {
+            setOutcomes((prev) => {
+              const existing = prev.get(event.chapterIndex);
+              return new Map(prev).set(event.chapterIndex, {
+                chapter: existing?.chapter ?? { index: event.chapterIndex, title: "" },
+                result: event.result,
+              });
+            });
+            const left = event.result.violations.length;
+            showToast(
+              left === 0
+                ? `Kapitel ${event.chapterIndex + 1}: Widerspruch behoben ✓`
+                : `Kapitel ${event.chapterIndex + 1}: korrigiert, ${left} offen`,
+              left === 0 ? "ok" : "info",
+            );
+          }
+        },
+      });
+    } catch (err) {
+      failure = err instanceof Error ? err.message : "Unbekannter Fehler.";
+      setError(failure);
+      aborted = isCancelled(jobId);
+    } finally {
+      if (aborted) finishJob(jobId, "cancelled", "Korrektur abgebrochen");
+      else if (failure) finishJob(jobId, "error", failure);
+      else {
+        updateJob(jobId, { done: targets.length });
+        finishJob(jobId, "done", `${targets.length} Kapitel bearbeitet`);
+      }
+      setRepairing(new Set());
+      setRepairAllBusy(false);
     }
-    setRepairAllBusy(false);
   };
+
+  const repairableTargets = () =>
+    sorted
+      .filter((outcome) => (outcome.result?.violations.length ?? 0) > 0 && !outcome.error)
+      .map((outcome) => ({
+        chapterIndex: outcome.chapter.index,
+        violations: outcome.result?.violations ?? [],
+      }));
 
   useEffect(() => {
     if (!open || startedRef.current) return;
@@ -295,8 +321,8 @@ export function CanonCheckDialog({
                     <Button
                       size="sm"
                       className="h-8 rounded-lg bg-gradient-to-r from-brand-emerald to-brand-cyan font-semibold text-white disabled:opacity-50"
-                      onClick={() => void repairAll()}
-                      disabled={repairAllBusy || repairing !== null}
+                      onClick={() => void runRepair(repairableTargets())}
+                      disabled={repairAllBusy || repairing.size > 0}
                       title="Alle gemeldeten Widersprüche korrigieren und danach erneut prüfen"
                     >
                       {repairAllBusy ? (
@@ -304,7 +330,7 @@ export function CanonCheckDialog({
                       ) : (
                         <Wand2 className="size-3.5" />
                       )}
-                      Alle beheben ({sorted.filter((o) => (o.result?.violations.length ?? 0) > 0).length})
+                      Alle beheben ({repairableTargets().length})
                     </Button>
                   ) : null}
                   <Button
@@ -342,7 +368,7 @@ export function CanonCheckDialog({
               {chapters.map((chapter) => {
                 const outcome = outcomes.get(chapter.index);
                 const isRunning = running.has(chapter.index);
-                const isRepairing = repairing === chapter.index;
+                const isRepairing = repairing.has(chapter.index);
                 const count = outcome?.result?.violations.length ?? 0;
 
                 return (
@@ -385,8 +411,15 @@ export function CanonCheckDialog({
                               size="sm"
                               variant="outline"
                               className="glass h-7 rounded-lg border-white/10 px-2 text-[11px]"
-                              onClick={() => void repairOne(chapter.index, outcome?.result?.violations ?? [])}
-                              disabled={busyOverall || repairing !== null}
+                              onClick={() =>
+                                void runRepair([
+                                  {
+                                    chapterIndex: chapter.index,
+                                    violations: outcome?.result?.violations ?? [],
+                                  },
+                                ])
+                              }
+                              disabled={busyOverall || repairing.size > 0}
                               title="Nur dieses Kapitel korrigieren und danach erneut prüfen"
                             >
                               <Wand2 className="size-3" />

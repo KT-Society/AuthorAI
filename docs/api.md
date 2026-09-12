@@ -208,6 +208,36 @@ Ausgabelimit am Teil, Wachstumsgrenze ~⅓, abgeschnittene Antworten werden verw
 Korrektur verworfen wurde) — die Oberfläche meldet das und prüft das Kapitel nach der Korrektur
 **erneut**, damit kein alter Stand stehen bleibt.
 
+### `POST /api/continuity/repair/stream`
+
+Gestreamte Variante des Quick Fix für **mehrere** Kapitel: der Server korrigiert mit begrenzter
+Parallelität (`concurrency`, Standard 2) und prüft jedes Kapitel **direkt danach erneut** — das
+frische Prüfergebnis kommt mit demselben Ereignis zurück.
+
+```json
+{
+  "storyboard": { … },
+  "canon": "…",
+  "model": "<model-id>",
+  "language": "German",
+  "chapters": [
+    { "index": 0, "text": "…", "violations": [{ "fact": "…", "quote": "…", "fix": "…" }] }
+  ],
+  "concurrency": 2
+}
+```
+
+```
+data: {"type":"started","chapterIndex":0}
+data: {"type":"result","chapterIndex":0,"text":"…","changed":true,"applied":1,"unassigned":0,"result":{ … }}
+data: {"type":"result","chapterIndex":1,"error":"…"}
+data: {"type":"done"}
+```
+
+Scheitert die **Nachprüfung**, wird die Korrektur trotzdem geliefert (`text`), im Ereignis steht
+dann nur `error` — so geht keine Arbeit verloren. `POST /api/continuity/repair` bleibt als
+nicht-streamende Variante für **ein** Kapitel bestehen.
+
 ---
 
 ### `POST /api/chapter/draft/stream` und `POST /api/chapter/expand/stream`

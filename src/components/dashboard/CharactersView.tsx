@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Loader2, Plus, Search, Sparkles, Users } from "lucide-react";
+import { Loader2, Plus, Search, Sparkles, Users, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { makeCharacter } from "@/data/characters";
 import type { CanonFact, CharacterRelation } from "@/data/continuity";
 import type { StoryCharacter } from "@/data/story";
 import { manuscriptOf } from "@/lib/bookManuscript";
+import { dedupeCharacters, findMatchingCharacter } from "@/lib/characterMatch";
 import { readLanguage, readStageModel } from "@/lib/generationSettings";
 import { showToast } from "@/lib/toast";
 import { extractCharacters } from "@/services/story";
@@ -39,6 +40,7 @@ export function CharactersView({
   onAddCharacters,
   onUpdateCharacter,
   onDeleteCharacter,
+  onDeleteCharacters,
 }: {
   books: Book[];
   characters: Character[];
@@ -50,6 +52,8 @@ export function CharactersView({
   onAddCharacters: (characters: Character[]) => void;
   onUpdateCharacter: (character: Character) => void;
   onDeleteCharacter: (id: string) => void;
+  /** Mehrere Figuren auf einmal entfernen (Dubletten-Aufräumen). */
+  onDeleteCharacters: (ids: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
   const [bookFilter, setBookFilter] = useState<string>("all");
@@ -112,8 +116,11 @@ export function CharactersView({
 
   const acceptCandidates = (accepted: StoryCharacter[]) => {
     const book = books.find((item) => item.id === extractBookId);
-    const created = accepted.map((entry, index) =>
-      makeCharacter(
+    const created: Character[] = [];
+    let skipped = 0;
+
+    for (const entry of accepted) {
+      const candidate = makeCharacter(
         {
           name: entry.name,
           role: entry.role,
@@ -121,15 +128,56 @@ export function CharactersView({
           bookId: book?.id,
           tags: ["Manuskript"],
         },
-        characters.length + index,
-      ),
-    );
-    onAddCharacters(created);
-    showToast(
-      created.length === 1 ? "1 Figur übernommen" : `${created.length} Figuren übernommen`,
-    );
+        characters.length + created.length,
+      );
+      // Dublettenprüfung: „Prinzessin Lysara" ist „Lysara" (Anreden/Ränge werden ignoriert).
+      if (
+        findMatchingCharacter(candidate, characters) ||
+        findMatchingCharacter(candidate, created)
+      ) {
+        skipped += 1;
+        continue;
+      }
+      created.push(candidate);
+    }
+
+    if (created.length > 0) onAddCharacters(created);
+
+    const parts = [
+      created.length > 0
+        ? created.length === 1
+          ? "1 Figur übernommen"
+          : `${created.length} Figuren übernommen`
+        : "",
+      skipped > 0 ? `${skipped} bereits vorhanden (übersprungen)` : "",
+    ].filter(Boolean);
+    showToast(parts.join(" · ") || "Nichts übernommen", created.length > 0 ? "ok" : "info");
     setCandidates(null);
   };
+
+  /** Bestehende Dubletten aufräumen (behält je Figur den ersten Eintrag). */
+  const removeDuplicates = () => {
+    const { kept, removed } = dedupeCharacters(characters);
+    if (removed.length === 0) {
+      showToast("Keine Dubletten gefunden", "info");
+      return;
+    }
+    const confirmed = window.confirm(
+      `${removed.length} Dublette${removed.length === 1 ? "" : "n"} entfernen? Es bleiben ${kept.length} Figuren.` +
+        `\n\nBehalten wird jeweils der erste Eintrag. Fakten und Beziehungen der entfernten Figuren werden mitgelöscht.`,
+    );
+    if (!confirmed) return;
+    onDeleteCharacters(removed.map((character) => character.id));
+    showToast(
+      removed.length === 1 ? "1 Dublette entfernt" : `${removed.length} Dubletten entfernt`,
+    );
+  };
+
+  /** Wie viele Dubletten stecken aktuell in der Liste? (für die Button-Beschriftung) */
+  const duplicateCount = useMemo(
+    () => dedupeCharacters(characters).removed.length,
+    [characters],
+  );
 
   const booksWithCharacters = useMemo(() => {
     const ids = new Set(
@@ -211,6 +259,22 @@ export function CharactersView({
             <Sparkles className="size-3.5" />
           )}
           Figuren aus Manuskript ableiten
+        </Button>
+        <Button
+          size="sm"
+          variant={duplicateCount > 0 ? "default" : "outline"}
+          className={cn(
+            "rounded-lg",
+            duplicateCount > 0
+              ? "bg-gradient-to-r from-brand-amber to-brand-rose font-semibold text-white"
+              : "glass border-white/10",
+          )}
+          onClick={removeDuplicates}
+          disabled={characters.length < 2}
+          title="Figuren mit gleichem Namen zusammenfassen — Anreden wie Prinzessin werden ignoriert"
+        >
+          <Wand2 className="size-3.5" />
+          {duplicateCount > 0 ? `Dubletten entfernen (${duplicateCount})` : "Dubletten entfernen"}
         </Button>
       </div>
 

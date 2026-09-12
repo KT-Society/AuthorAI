@@ -231,8 +231,12 @@ RELATIONS (binding — keep these dynamics consistent):
   **nur die Textteile, in denen ein gemeldetes Zitat wirklich vorkommt** — der Rest bleibt
   wortgleich (spart Aufrufe, verhindert unnötiges Umschreiben). Gleiche Sicherungen wie bei den
   Pässen: Ausgabelimit am Teil, `finish_reason: "length"` → Korrektur **verwerfen**, Antwort
-  über ~⅓ länger → verwerfen. Die Oberfläche prüft das Kapitel danach **erneut** und zeigt, was
-  übrig bleibt.
+  über ~⅓ länger → verwerfen.
+- **Quick Fix als Queue**: `POST /api/continuity/repair/stream` macht dasselbe für viele
+  Kapitel in **einem** SSE-Lauf (Standard 2 parallel, Korrekturen sind teurer als Prüfungen) und
+  **prüft jedes Kapitel direkt danach erneut** — das frische Ergebnis kommt im selben Ereignis,
+  die Liste zeigt also sofort, was behoben ist und was offen bleibt. Scheitert nur die
+  Nachprüfung, wird die Korrektur trotzdem geliefert (keine Arbeit verloren).
 
 ---
 

@@ -135,3 +135,58 @@ export async function repairCanon(input: CanonRepairRequest): Promise<CanonRepai
     unassigned: typeof data.unassigned === "number" ? data.unassigned : 0,
   };
 }
+
+export interface CanonRepairTarget {
+  index: number;
+  text: string;
+  violations: CanonViolation[];
+}
+
+export interface CanonRepairResultEvent {
+  chapterIndex: number;
+  text?: string;
+  changed?: boolean;
+  applied?: number;
+  unassigned?: number;
+  /** Frische Prüfung nach der Korrektur. */
+  result?: CanonCheckResult;
+  error?: string;
+}
+
+export interface CanonRepairStreamHandlers {
+  onStarted?: (chapterIndex: number) => void;
+  onResult: (event: CanonRepairResultEvent) => void;
+}
+
+/**
+ * Quick Fix über mehrere Kapitel in **einem** SSE-Aufruf: der Server korrigiert (begrenzt
+ * parallel) und prüft jedes Kapitel direkt danach erneut. Ergebnisse kommen live zurück.
+ */
+export async function streamCanonRepair(
+  input: {
+    storyboard: Storyboard;
+    canon: string;
+    model: string;
+    language: string;
+    chapters: CanonRepairTarget[];
+    concurrency?: number;
+  },
+  handlers: CanonRepairStreamHandlers,
+): Promise<void> {
+  await streamEvents("/api/continuity/repair/stream", input, (event) => {
+    if (event.type === "started" && typeof event.chapterIndex === "number") {
+      handlers.onStarted?.(event.chapterIndex);
+      return;
+    }
+    if (event.type !== "result" || typeof event.chapterIndex !== "number") return;
+    handlers.onResult({
+      chapterIndex: event.chapterIndex,
+      text: typeof event.text === "string" ? event.text : undefined,
+      changed: event.changed === true,
+      applied: typeof event.applied === "number" ? event.applied : undefined,
+      unassigned: typeof event.unassigned === "number" ? event.unassigned : undefined,
+      result: event.result as CanonCheckResult | undefined,
+      error: typeof event.error === "string" ? event.error : undefined,
+    });
+  });
+}
