@@ -4,7 +4,7 @@
  * Spricht ausschließlich mit dem lokalen Server (`/api/*`); Keys bleiben serverseitig.
  */
 
-import type { ExtractedContinuity } from "@/data/continuity";
+import type { ExtractedContinuity, ExtractedFact, ExtractedRelation } from "@/data/continuity";
 import type { Storyboard } from "@/data/story";
 
 import { postJson } from "./http";
@@ -26,6 +26,72 @@ export async function extractContinuity(
   return {
     facts: Array.isArray(data.facts) ? data.facts : [],
     relations: Array.isArray(data.relations) ? data.relations : [],
+  };
+}
+
+/**
+ * Gestreamte Extraktion (JSONL): Der Server schickt jeden Vorschlag, sobald das Modell ihn
+ * fertig hat, und am Ende die **validierte** Fassung. Die Live-Objekte sind absichtlich nur
+ * grob gemappt — verbindlich ist das Ergebnis aus `onDone`.
+ */
+export async function streamContinuityExtract(
+  input: ContinuityExtractRequest,
+  handlers: {
+    onItem?: (type: "fact" | "relation", item: ExtractedFact | ExtractedRelation) => void;
+  } = {},
+): Promise<ExtractedContinuity> {
+  let result: ExtractedContinuity | null = null;
+
+  await streamEvents("/api/continuity/extract/stream", input, (event) => {
+    if (event.type === "item" && event.item && typeof event.raw === "object" && event.raw) {
+      const raw = event.raw as Record<string, unknown>;
+      if (event.item === "fact") {
+        const fact = mapRawFact(raw);
+        if (fact) handlers.onItem?.("fact", fact);
+      } else if (event.item === "relation") {
+        const relation = mapRawRelation(raw);
+        if (relation) handlers.onItem?.("relation", relation);
+      }
+      return;
+    }
+    if (event.type === "done") {
+      result = {
+        facts: Array.isArray(event.facts) ? (event.facts as ExtractedFact[]) : [],
+        relations: Array.isArray(event.relations) ? (event.relations as ExtractedRelation[]) : [],
+      };
+    }
+  });
+
+  if (!result) throw new Error("Der Server hat kein Ergebnis geliefert.");
+  return result;
+}
+
+function mapRawFact(raw: Record<string, unknown>): ExtractedFact | null {
+  const entityName = typeof raw.entity === "string" ? raw.entity.trim() : "";
+  const statement = typeof raw.statement === "string" ? raw.statement.trim() : "";
+  if (!entityName || !statement) return null;
+  return {
+    kind: (typeof raw.kind === "string" ? raw.kind : "attribute") as ExtractedFact["kind"],
+    entityName,
+    entityType: raw.entityType === "world" ? "world" : "character",
+    statement,
+    establishedIn: typeof raw.establishedIn === "string" ? raw.establishedIn : undefined,
+    hard: raw.hard === true ? true : undefined,
+  };
+}
+
+function mapRawRelation(raw: Record<string, unknown>): ExtractedRelation | null {
+  const fromName = typeof raw.from === "string" ? raw.from.trim() : "";
+  const toName = typeof raw.to === "string" ? raw.to.trim() : "";
+  if (!fromName || !toName) return null;
+  return {
+    fromName,
+    toName,
+    kind: (typeof raw.kind === "string" ? raw.kind : "loyalty") as ExtractedRelation["kind"],
+    intensity: typeof raw.intensity === "number" ? raw.intensity : 0,
+    note: typeof raw.note === "string" ? raw.note : undefined,
+    secret: raw.secret === true ? true : undefined,
+    establishedIn: typeof raw.establishedIn === "string" ? raw.establishedIn : undefined,
   };
 }
 

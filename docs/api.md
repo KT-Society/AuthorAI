@@ -120,6 +120,23 @@ Schneidet das Token-Limit die Antwort ab, antwortet die Route mit **HTTP 502** u
 Fakten/Beziehungen gehen als `canon`-Block zusätzlich an `chapter/draft`, `chapter/expand`,
 `chapter/consistency`, `chapter/style` und `timeline/check`.
 
+### `POST /api/continuity/extract/stream`
+
+Gestreamte Variante der Extraktion: Das Modell wird auf **JSONL** (ein Objekt pro Zeile)
+angewiesen, sodass der Server jeden Vorschlag **sofort** weitergeben kann, sobald er fertig ist.
+Am Ende kommt die **validierte und deduplizierte** Fassung — sie ersetzt die Live-Liste.
+
+```
+data: {"type":"item","item":"fact","raw":{ … }}
+data: {"type":"item","item":"relation","raw":{ … }}
+data: {"type":"done","facts":[ … ],"relations":[ … ]}
+data: {"type":"error","error":"…"}
+```
+
+Zwei Absicherungen: Zeilen werden auch über **Chunk-Grenzen** hinweg zusammengesetzt, und wenn
+das Modell JSONL ignoriert (kein einziges Objekt erkannt), fällt der Server auf normales JSON
+zurück — es geht also nichts verloren. Fehlendes Model/Storyboard → **HTTP 400 vor dem Stream**.
+
 ### `POST /api/continuity/check`
 
 **Fakten-Check**: prüft ein Kapitel **nur gegen den Kanon** — getrennt von der Kohärenz.

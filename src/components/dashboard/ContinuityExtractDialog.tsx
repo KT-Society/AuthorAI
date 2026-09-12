@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Link2, ShieldCheck, Sparkles, X } from "lucide-react";
+import { Check, Link2, Loader2, ShieldCheck, Sparkles, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ export function ContinuityExtractDialog({
   open,
   facts,
   relations,
+  running = false,
   bookTitle,
   onClose,
   onAccept,
@@ -24,6 +25,8 @@ export function ContinuityExtractDialog({
   open: boolean;
   facts: ExtractedFact[];
   relations: ExtractedRelation[];
+  /** Läuft die Ableitung noch? Dann wachsen die Vorschläge live hinein. */
+  running?: boolean;
   bookTitle: string;
   onClose: () => void;
   onAccept: (facts: ExtractedFact[], relations: ExtractedRelation[]) => void;
@@ -31,11 +34,13 @@ export function ContinuityExtractDialog({
   const [rejectedFacts, setRejectedFacts] = useState<Set<number>>(new Set());
   const [rejectedRelations, setRejectedRelations] = useState<Set<number>>(new Set());
 
+  // Nur beim Öffnen zurücksetzen — sonst würde jeder neu eintreffende Live-Vorschlag
+  // die Auswahl des Nutzers verwerfen.
   useEffect(() => {
     if (!open) return;
     setRejectedFacts(new Set());
     setRejectedRelations(new Set());
-  }, [open, facts, relations]);
+  }, [open]);
 
   const selectedFacts = useMemo(
     () => facts.filter((_, index) => !rejectedFacts.has(index)),
@@ -81,6 +86,7 @@ export function ContinuityExtractDialog({
               <p className="text-xs text-muted-foreground">
                 {facts.length} Fakten · {relations.length} Beziehungen
                 {bookTitle ? ` · ${bookTitle}` : ""}
+                {running ? " · sammelt…" : ""}
               </p>
             </div>
           </div>
@@ -95,8 +101,9 @@ export function ContinuityExtractDialog({
         </div>
 
         <p className="mt-4 text-xs text-muted-foreground">
-          Nur übernehmen, was wirklich im Material steht. Alles ist vorausgewählt — Abwählen, was
-          nicht ins Kanon gehört.
+          {running
+            ? "Die Vorschläge treffen live ein — am Ende wird validiert und dedupliziert."
+            : "Nur übernehmen, was wirklich im Material steht. Alles ist vorausgewählt — Abwählen, was nicht ins Kanon gehört."}
         </p>
 
         <div className="mt-3 flex-1 space-y-4 overflow-y-auto pr-1">
@@ -213,8 +220,15 @@ export function ContinuityExtractDialog({
           ) : null}
 
           {total === 0 ? (
-            <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted-foreground">
-              Keine neuen Vorschläge — alles bereits erfasst.
+            <p className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted-foreground">
+              {running ? (
+                <>
+                  <Loader2 className="size-4 animate-spin text-brand-cyan" />
+                  Sammelt Vorschläge…
+                </>
+              ) : (
+                "Keine neuen Vorschläge — alles bereits erfasst."
+              )}
             </p>
           ) : null}
         </div>
@@ -233,7 +247,7 @@ export function ContinuityExtractDialog({
             </Button>
             <Button
               onClick={() => onAccept(selectedFacts, selectedRelations)}
-              disabled={selectedCount === 0}
+              disabled={selectedCount === 0 || running}
               className="rounded-xl bg-gradient-to-r from-brand-emerald to-brand-cyan px-5 font-semibold text-white disabled:opacity-50"
             >
               {selectedCount} übernehmen

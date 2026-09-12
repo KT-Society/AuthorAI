@@ -11,6 +11,7 @@ import type { SceneConstraint, Storyboard } from "./data/story";
 import { coversDir, generateCover, saveCoverImage } from "./server/cover";
 import {
   extractContinuity,
+  extractContinuityStream,
   checkCanon,
   checkCanonChapters,
   repairCanon,
@@ -724,6 +725,35 @@ const server = serve({
             language,
           });
           return Response.json(result);
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Streaming extraction (JSONL): each finished suggestion is emitted as it arrives.
+    "/api/continuity/extract/stream": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const input = {
+            storyboard,
+            characters: asCharacterRefs(body.characters),
+            worldNames: asStringList(body.worldNames),
+            knownStatements: asStringList(body.knownStatements),
+            knownRelations: asStringList(body.knownRelations),
+            model,
+            language,
+          };
+          return sseResponse(async (emit) => {
+            const result = await extractContinuityStream(input, {
+              onItem: (item) => emit({ type: "item", item: item.type, raw: item.raw }),
+            });
+            emit({ type: "done", ...result });
+          });
         } catch (err) {
           return errorResponse(err);
         }

@@ -22,7 +22,8 @@ import type {
 import type { Storyboard } from "../data/story";
 import { countWords } from "../data/story";
 import { extractProse } from "../lib/prose";
-import { chatCompletionDetailed, cleanJsonBlock } from "./llm";
+import { relationsMatch, statementsMatch } from "../lib/factMatch";
+import { chatCompletionDetailed, chatCompletionStream, cleanJsonBlock } from "./llm";
 import { languageLock, splitIntoChunks } from "./story";
 
 export interface ContinuityExtractInput {
@@ -200,9 +201,8 @@ export function normalizeContinuity(
   const { characters, world } = knownEntityNames(input);
   const obj = asRecord(value);
 
-  const seenStatements = new Set(
-    (input.knownStatements ?? []).map((entry) => nameKey(entry)),
-  );
+  // Bekanntes **unscharf** vergleichen: dieselbe Aussage wird gern umformuliert.
+  const knownStatements = [...(input.knownStatements ?? [])];
   const facts: ExtractedFact[] = [];
   for (const entry of Array.isArray(obj.facts) ? obj.facts : []) {
     if (facts.length >= MAX_FACTS) break;
@@ -221,9 +221,10 @@ export function normalizeContinuity(
       ? (str(item.kind) as FactKind)
       : "attribute";
 
-    const key = nameKey(statement);
-    if (seenStatements.has(key)) continue;
-    seenStatements.add(key);
+    // Schon getrackt (auch umformuliert) oder innerhalb dieses Laufs doppelt → verwerfen.
+    if (knownStatements.some((known) => statementsMatch(known, statement))) continue;
+    if (facts.some((existing) => statementsMatch(existing.statement, statement))) continue;
+    knownStatements.push(statement);
 
     facts.push({
       kind,
@@ -289,6 +290,103 @@ Extract the facts and relationships now as JSON, statements in ${input.language}
   }
 
   return normalizeContinuity(parseJson(content), input);
+}
+
+/* ─────────────────── Gestreamte Extraktion (JSONL, live) ─────────────────── */
+
+export interface ContinuityItemEvent {
+  type: "fact" | "relation";
+  /** Rohobjekt des Modells (noch nicht normalisiert). */
+  raw: Record<string, unknown>;
+}
+
+/** Streift Aufzählungs-/Array-Reste ab, damit auch halb-JSONL noch lesbar ist. */
+function parseStreamLine(raw: string): Record<string, unknown> | null {
+  const line = raw
+    .trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/^[,[\]]+/, "")
+    .replace(/[,\]]+$/, "")
+    .trim();
+  if (!line.startsWith("{")) return null;
+  try {
+    return JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/** Ordnet eine Zeile als Fakt oder Beziehung ein. */
+function classifyItem(obj: Record<string, unknown>): ContinuityItemEvent | null {
+  const tag = typeof obj.t === "string" ? obj.t : typeof obj.kind === "string" ? "" : "";
+  if (typeof obj.entity === "string" || typeof obj.statement === "string") {
+    return { type: "fact", raw: obj };
+  }
+  if (typeof obj.from === "string" || typeof obj.to === "string") {
+    return { type: "relation", raw: obj };
+  }
+  if (tag === "fact" || tag === "relation") return { type: tag, raw: obj };
+  return null;
+}
+
+function continuityStreamSystem(language: string): string {
+  return `${continuitySystem(language)}
+
+STREAMING FORMAT — CRITICAL:
+Instead of one JSON document, output **one JSON object per line** (JSONL, newline-delimited):
+{"t":"fact","entity":"…","entityType":"character","kind":"history","statement":"…","establishedIn":"Kapitel 2","hard":false}
+{"t":"relation","from":"…","to":"…","kind":"distrust","intensity":-0.6,"note":"…","secret":false,"establishedIn":"Kapitel 5"}
+Rules: no array brackets, no commas between lines, one object per line, nothing else on the line.
+Write each object as soon as you are sure about it, then continue with the next line.`;
+}
+
+/** Extrahiert live: jedes fertige JSONL-Objekt wird sofort gemeldet und am Ende gemeinsam validiert. */
+export async function extractContinuityStream(
+  input: ContinuityExtractInput,
+  handlers: { onItem?: (item: ContinuityItemEvent) => void },
+): Promise<ExtractedContinuity> {
+  const facts: unknown[] = [];
+  const relations: unknown[] = [];
+  let buffer = "";
+
+  const consumeLine = (line: string) => {
+    const parsed = parseStreamLine(line);
+    if (!parsed) return;
+    const item = classifyItem(parsed);
+    if (!item) return;
+    if (item.type === "fact") facts.push(parsed);
+    else relations.push(parsed);
+    handlers.onItem?.(item);
+  };
+
+  const { content } = await chatCompletionStream(
+    {
+      model: input.model,
+      system: continuityStreamSystem(input.language),
+      user: `${material(input)}
+
+Extract the facts and relationships now as JSONL (one object per line), entirely in ${input.language}.`,
+      maxTokens: 4000,
+      temperature: 0.3,
+    },
+    (delta) => {
+      buffer += delta;
+      let newline = buffer.indexOf("\n");
+      while (newline !== -1) {
+        consumeLine(buffer.slice(0, newline));
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf("\n");
+      }
+    },
+  );
+  if (buffer.trim().length > 0) consumeLine(buffer);
+
+  // Nichts als JSONL erkannt? Dann hat das Modell normales JSON geliefert → damit arbeiten.
+  if (facts.length === 0 && relations.length === 0) {
+    return normalizeContinuity(parseJson(content), input);
+  }
+
+  return normalizeContinuity({ facts, relations }, input);
 }
 
 /* ─────────────────────────── Fakten-Check (Kanon) ─────────────────────────── */

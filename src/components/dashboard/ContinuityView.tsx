@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Loader2, Search, ShieldCheck, Sparkles, Trash2, Users } from "lucide-react";
+import { Loader2, Search, ShieldCheck, Sparkles, Trash2, Users, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,8 +42,9 @@ import { canonVolumeIds } from "@/data/series";
 import { readLanguage, readStageModel } from "@/lib/generationSettings";
 import { edgeOpacity, edgePath, edgeWidth, layoutCircle, sortByDegree } from "@/lib/graph";
 import type { GraphNode } from "@/lib/graph";
+import { dedupeFacts, dedupeRelations } from "@/lib/factMatch";
 import { showToast } from "@/lib/toast";
-import { extractContinuity } from "@/services/continuity";
+import { streamContinuityExtract } from "@/services/continuity";
 
 import { Badge, EmptyState, ViewHeader } from "./primitives";
 import type { Tone } from "./primitives";
@@ -105,6 +106,8 @@ export function ContinuityView({
     () => books.find((book) => book.storyboard)?.id ?? books[0]?.id ?? "",
   );
   const [extractBusy, setExtractBusy] = useState(false);
+  /** Läuft die gestreamte Ableitung gerade? (Dialog ist dann bereits offen.) */
+  const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<{
     facts: ExtractedFact[];
@@ -225,6 +228,10 @@ export function ContinuityView({
     }
     setExtractError(null);
     setExtractBusy(true);
+    setExtracting(true);
+    // Dialog sofort öffnen — die Vorschläge wachsen dann live hinein.
+    setCandidates({ facts: [], relations: [] });
+
     try {
       const scoped = bookCharacters(book.id);
       const bookWorlds = worlds.filter((entry) => entry.bookId === book.id);
@@ -241,38 +248,78 @@ export function ContinuityView({
         worlds.filter((entry) => canonBooks.has(entry.bookId ?? "")).map((entry) => entry.id),
       );
 
-      const result = await extractContinuity({
-        storyboard: book.storyboard,
-        characters: scoped.map((character) => ({ name: character.name, role: character.role })),
-        worldNames: bookWorlds.map((entry) => entry.title),
-        knownStatements: facts
-          .filter((fact) =>
-            fact.entityType === "character"
-              ? knownCharacterIds.has(fact.entityId)
-              : knownWorldIds.has(fact.entityId),
-          )
-          .map((fact) => fact.statement),
-        knownRelations: relations
-          .filter(
-            (relation) =>
-              knownCharacterIds.has(relation.fromId) && knownCharacterIds.has(relation.toId),
-          )
-          .map((relation) => `${nameOf(relation.fromId)}→${nameOf(relation.toId)}:${relation.kind}`),
-        model,
-        language: readLanguage() ?? "German",
-      });
+      const result = await streamContinuityExtract(
+        {
+          storyboard: book.storyboard,
+          characters: scoped.map((character) => ({ name: character.name, role: character.role })),
+          worldNames: bookWorlds.map((entry) => entry.title),
+          knownStatements: facts
+            .filter((fact) =>
+              fact.entityType === "character"
+                ? knownCharacterIds.has(fact.entityId)
+                : knownWorldIds.has(fact.entityId),
+            )
+            .map((fact) => fact.statement),
+          knownRelations: relations
+            .filter(
+              (relation) =>
+                knownCharacterIds.has(relation.fromId) && knownCharacterIds.has(relation.toId),
+            )
+            .map((relation) => `${nameOf(relation.fromId)}→${nameOf(relation.toId)}:${relation.kind}`),
+          model,
+          language: readLanguage() ?? "German",
+        },
+        {
+          onItem: (type, item) =>
+            setCandidates((prev) => {
+              const base = prev ?? { facts: [], relations: [] };
+              return type === "fact"
+                ? { ...base, facts: [...base.facts, item as ExtractedFact] }
+                : { ...base, relations: [...base.relations, item as ExtractedRelation] };
+            }),
+        },
+      );
 
+      // Endfassung ist validiert und dedupliziert — sie ersetzt die Live-Liste.
       if (result.facts.length === 0 && result.relations.length === 0) {
+        setCandidates(null);
         setExtractError("Keine neuen Vorschläge gefunden (alles bereits erfasst).");
         return;
       }
       setCandidates(result);
     } catch (err) {
+      setCandidates(null);
       setExtractError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
+      setExtracting(false);
       setExtractBusy(false);
     }
   };
+
+  /** Bestehende Dubletten in Fakten und Beziehungen aufräumen. */
+  const removeDuplicateCanon = () => {
+    const factResult = dedupeFacts(facts);
+    const relationResult = dedupeRelations(relations);
+    const total = factResult.removed.length + relationResult.removed.length;
+    if (total === 0) {
+      showToast("Keine Dubletten gefunden", "info");
+      return;
+    }
+    const confirmed = window.confirm(
+      `${total} Dublette${total === 1 ? "" : "n"} entfernen?` +
+        `\n\n${factResult.removed.length} Fakten · ${relationResult.removed.length} Beziehungen.` +
+        `\nBehalten wird jeweils der erste Eintrag.`,
+    );
+    if (!confirmed) return;
+    if (factResult.removed.length > 0) onFactsChange(factResult.kept);
+    if (relationResult.removed.length > 0) onRelationsChange(relationResult.kept);
+    showToast(total === 1 ? "1 Dublette entfernt" : `${total} Dubletten entfernt`);
+  };
+
+  const duplicateCanonCount = useMemo(
+    () => dedupeFacts(facts).removed.length + dedupeRelations(relations).removed.length,
+    [facts, relations],
+  );
 
   const acceptExtraction = (acceptedFacts: ExtractedFact[], acceptedRelations: ExtractedRelation[]) => {
     const book = books.find((item) => item.id === extractBookId);
@@ -384,7 +431,7 @@ export function ContinuityView({
               className="glass rounded-lg border-white/10"
               onClick={() => void runExtract()}
               disabled={extractBusy || books.length === 0}
-              title="Fakten und Beziehungen aus Storyboard und Register ableiten"
+              title="Fakten und Beziehungen aus Storyboard und Register ableiten — Vorschläge erscheinen live"
             >
               {extractBusy ? (
                 <Loader2 className="size-3.5 animate-spin" />
@@ -392,6 +439,22 @@ export function ContinuityView({
                 <Sparkles className="size-3.5" />
               )}
               Vorschläge ableiten
+            </Button>
+            <Button
+              size="sm"
+              variant={duplicateCanonCount > 0 ? "default" : "outline"}
+              className={cn(
+                "rounded-lg",
+                duplicateCanonCount > 0
+                  ? "bg-gradient-to-r from-brand-amber to-brand-rose font-semibold text-white"
+                  : "glass border-white/10",
+              )}
+              onClick={removeDuplicateCanon}
+              disabled={facts.length + relations.length < 2}
+              title="Fakten und Beziehungen mit gleicher Aussage zusammenfassen"
+            >
+              <Wand2 className="size-3.5" />
+              {duplicateCanonCount > 0 ? `Dubletten entfernen (${duplicateCanonCount})` : "Dubletten entfernen"}
             </Button>
           </>
         }
@@ -700,6 +763,7 @@ export function ContinuityView({
         open={candidates !== null}
         facts={candidates?.facts ?? []}
         relations={candidates?.relations ?? []}
+        running={extracting}
         bookTitle={books.find((book) => book.id === extractBookId)?.title ?? ""}
         onClose={() => setCandidates(null)}
         onAccept={acceptExtraction}

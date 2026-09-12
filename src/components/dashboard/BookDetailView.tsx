@@ -63,7 +63,8 @@ import type { ChapterContent, ChapterPlan, SceneConstraint, SceneMeta } from "@/
 import { MODEL_STAGE_LABELS, readLanguage, readStageModel, readStyleProfileHint } from "@/lib/generationSettings";
 import { manuscriptOf } from "@/lib/bookManuscript";
 import { copyText } from "@/lib/clipboard";
-import { looksTruncated } from "@/lib/prose";
+import { extractProse, looksTruncated } from "@/lib/prose";
+import { characterNamesMatch } from "@/lib/characterMatch";
 import { createJob, finishJob, isCancelled, updateJob } from "@/lib/jobs";
 import { streamJson } from "@/services/stream";
 import { showToast } from "@/lib/toast";
@@ -446,6 +447,36 @@ export function BookDetailView({
       : [...current, characterId];
     updateChapter(index, { characterIds: next });
   };
+
+  /**
+   * Schaltet eine **ganze Figurengruppe** (gleicher Name, z. B. Dubletten) gemeinsam.
+   * Ist irgendeine davon gesetzt, gelten alle als ausgewählt und werden zusammen entfernt.
+   */
+  const toggleChapterCharacterGroup = (index: number, ids: string[]) => {
+    const chapter = manuscript[index];
+    if (!chapter) return;
+    const current = chapter.characterIds ?? [];
+    const allSelected = ids.every((id) => current.includes(id));
+    const next = allSelected
+      ? current.filter((id) => !ids.includes(id))
+      : [...new Set([...current, ...ids])];
+    updateChapter(index, { characterIds: next });
+  };
+
+  /**
+   * Figuren-Chips: **eine** Schaltfläche je Figur. Im Register liegen leicht unterschiedliche
+   * Namen („Lysara" / „Prinzessin Lysara", „Morwen" / „Schattenkönigin Morwen") — die Chips
+   * fassen sie über den Namensabgleich zusammen und schalten alle zugehörigen IDs gemeinsam.
+   */
+  const sceneCharacters = useMemo(() => {
+    const groups: { ids: string[]; name: string }[] = [];
+    for (const character of characters) {
+      const existing = groups.find((group) => characterNamesMatch(group.name, character.name));
+      if (existing) existing.ids.push(character.id);
+      else groups.push({ ids: [character.id], name: character.name });
+    }
+    return groups;
+  }, [characters]);
 
   /* ── Szenen (Beats als editierbare Untereinheiten) ───────────────────── */
 
@@ -1969,15 +2000,22 @@ export function BookDetailView({
                     <Users className="size-3.5" />
                     Figuren in diesem Kapitel
                   </label>
-                  {characters.length > 0 ? (
+                  {sceneCharacters.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
-                      {characters.map((character) => {
-                        const active = (selected.characterIds ?? []).includes(character.id);
+                      {sceneCharacters.map((group) => {
+                        const active = group.ids.some((id) =>
+                          (selected.characterIds ?? []).includes(id),
+                        );
                         return (
                           <button
-                            key={character.id}
+                            key={group.ids[0] ?? group.name}
                             type="button"
-                            onClick={() => toggleChapterCharacter(safeIndex, character.id)}
+                            onClick={() => toggleChapterCharacterGroup(safeIndex, group.ids)}
+                            title={
+                              group.ids.length > 1
+                                ? `${group.ids.length} gleichnamige Einträge im Register werden gemeinsam geschaltet`
+                                : undefined
+                            }
                             className={cn(
                               "rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
                               active
@@ -1985,7 +2023,7 @@ export function BookDetailView({
                                 : "border-white/10 bg-white/5 text-muted-foreground hover:text-foreground",
                             )}
                           >
-                            {character.name}
+                            {group.name}
                           </button>
                         );
                       })}
@@ -2001,10 +2039,11 @@ export function BookDetailView({
                   <div className="mt-3 rounded-xl border border-brand-cyan/30 bg-brand-cyan/5 p-3">
                     <p className="mb-1 inline-flex items-center gap-2 text-[11px] font-semibold text-brand-cyan">
                       <Loader2 className="size-3.5 animate-spin" />
-                      {streamLabel ?? "Live-Vorschau"} · {countWords(streamText).toLocaleString("de-DE")} Wörter
+                      {streamLabel ?? "Live-Vorschau"} ·{" "}
+                      {countWords(extractProse(streamText)).toLocaleString("de-DE")} Wörter
                     </p>
                     <div className="max-h-52 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-foreground/85">
-                      {streamText || "…"}
+                      {extractProse(streamText) || "…"}
                     </div>
                   </div>
                 ) : null}

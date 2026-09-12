@@ -223,6 +223,15 @@ RELATIONS (binding — keep these dynamics consistent):
 - **Leer = kein Block**: ohne Fakten/Beziehungen taucht der Block nicht auf (kein toter Header).
 - **Quelle**: manuell (Charakter-Editor → Panels „Fakten“/„Beziehungen“) oder
   `POST /api/continuity/extract` mit Review-Dialog.
+- **Ableitung live**: `POST /api/continuity/extract/stream` lässt das Modell **JSONL** schreiben
+  (ein Objekt pro Zeile); der Review-Dialog öffnet sofort und die Vorschläge wachsen hinein.
+  Am Ende ersetzt die validierte Fassung die Live-Liste (Erkennung auch über Chunk-Grenzen,
+  Fallback auf normales JSON, falls das Modell JSONL ignoriert).
+- **Dubletten**: Bekanntes wird **unscharf** verglichen (`lib/factMatch.ts`) — dieselbe Aussage
+  in neuer Formulierung wird nicht erneut vorgeschlagen. Für den Bestand gibt es in der Ansicht
+  **„Dubletten entfernen"** (Fakten nach Aussage, Beziehungen nach Richtung + Typ). Absicht:
+  eine gleiche Aussage bei **anderer** Figur gilt **nicht** als Dublette — sie wird nicht still
+  gelöscht, weil sie auch eine Fehlzuordnung sein kann.
 
 **Fakten-Check & Quick Fix**
 

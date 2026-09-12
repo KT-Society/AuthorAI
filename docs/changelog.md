@@ -8,6 +8,23 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Kontinuität: Ableitung live + Dubletten
+
+- **Added** **Ableitung streamt live** (`POST /api/continuity/extract/stream`): Das Modell
+  schreibt **JSONL** (ein Objekt pro Zeile), der Review-Dialog öffnet **sofort** und die
+  Vorschläge treffen einzeln ein („sammelt…"). Am Ende ersetzt die validierte Fassung die
+  Live-Liste. Zeilen werden auch über Chunk-Grenzen korrekt zusammengesetzt; ignoriert das
+  Modell JSONL, fällt der Server auf normales JSON zurück — es geht nichts verloren.
+  Der Übernehmen-Knopf ist während des Sammelns gesperrt.
+- **Added** **Dubletten vermeiden und aufräumen**: Der Vergleich von Bekanntem läuft jetzt
+  **unscharf** (`lib/factMatch.ts`, Token-Überlappung) — dieselbe Aussage in neuer Formulierung
+  wird nicht erneut vorgeschlagen. Für den Bestand gibt es in der Kontinuitäts-Ansicht
+  **„Dubletten entfernen"** mit Anzahl, Rückfrage und Bericht (Fakten nach Aussage,
+  Beziehungen nach Richtung + Typ).
+  - **Absichtliche Grenze**: eine identische Aussage bei **anderer** Figur gilt **nicht** als
+    Dublette und wird nicht gelöscht — sie kann eine Fehlzuordnung sein, und stiller
+    Datenverlust wäre schlimmer als eine sichtbare Dopplung.
+
 ### Kohärenz & Stil streamen
 
 - **Added** **Live-Vorschau für Kohärenz und Stil** (`POST /api/chapter/consistency/stream`,
@@ -23,6 +40,17 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ### Fixed
 
+- **Live-Vorschau zeigte die Pipeline-Marker**: In der Vorschau stand die Rohausgabe des Modells
+  inklusive `<TEXT>`/`</TEXT>` und etwaiger Notes. Die Vorschau läuft jetzt durch `extractProse`
+  (dieselbe Bereinigung wie beim Speichern) — Marker und Notes sind raus, auch bei noch
+  **offenem** Block mitten im Stream; die Wortzahl zählt ebenfalls nur echte Prosa.
+- **Figuren-Chips doppelt**: Die Auswahl „Figuren in diesem Kapitel" listete jeden
+  Registereintrag einzeln, also `Elias Thorne`, `Olivia`, `Elena`, `Sylar` und `Kael` mehrfach
+  und leicht variiert (`Kael`/`Kaelen`, `Imperator Valerius`/`Lord Valerius`/`Valerius`,
+  `Morwen`/`Schattenkönigin Morwen`). Die Chips fassen Namen jetzt über denselben Abgleich wie
+  die Dublettenerkennung zusammen — **34 Chips → 19** im Beispiel — und schalten alle
+  zugehörigen Einträge **gemeinsam** (Tooltip nennt die Anzahl). Bewusst getrennt bleiben
+  unterschiedliche Namen wie `Kael` und `Kaelen`.
 - **Stufen-Modelle waren in den Einstellungen unsichtbar** — die App nutzte ein anderes Modell,
   als die Oberfläche anzeigte. Ursache: `stageModels` wurde nur mit `storyboard`, `draft` und
   `expand` befüllt; für **Kohärenz** und **Stil** war der Wert `undefined`, das Feld zeigte

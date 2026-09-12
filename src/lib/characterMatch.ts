@@ -20,7 +20,8 @@ const TITLES = new Set([
   "der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem", "eines",
   "the", "a", "an", "le", "la", "les",
   // Adel
-  "prinz", "prinzessin", "konig", "konigin", "kaiser", "kaiserin", "erzherzog", "erzherzogin",
+  "prinz", "prinzessin", "konig", "konigin", "kaiser", "kaiserin", "imperator", "imperatrix",
+  "erzherzog", "erzherzogin",
   "herzog", "herzogin", "graf", "grafin", "freiherr", "baron", "baronin", "furst", "furstin",
   "zar", "zarin", "sultan", "sultanin", "emir", "scheich", "wesir", "lady", "lord", "sir",
   "ser", "dame", "madam", "mister", "mrs", "ms",
