@@ -16,6 +16,7 @@ import type { ResearchNote } from "@/data/research";
 import type { Series } from "@/data/series";
 import type { WorldEntry } from "@/data/world";
 import type { AppNotification } from "@/lib/notifications";
+import { clearState, fetchState, putState, putStateBulk } from "@/services/state";
 
 export type DataName =
   | "books"
@@ -57,8 +58,94 @@ function safeParse<T>(raw: string | null): T | null {
   }
 }
 
+/* ───────────────── Server-Speicher (SQLite) mit In-Memory-Cache ─────────────────
+ *
+ * Die App liest **synchron** aus diesem Cache (unveränderte Signaturen für alle Aufrufer),
+ * geschrieben wird gebündelt per PUT an `/api/state`. Beim Start (bzw. Profilwechsel) lädt
+ * `hydrateState()` einmal alle Sammlungen und übernimmt vorhandene localStorage-Daten.
+ *
+ * Warum nicht mehr direkt localStorage: dessen Limit (~5 MB) war zu klein — ein großes Projekt
+ * mit Versionshistorie sprengte es, danach schlug jedes Speichern fehl (stiller Datenverlust).
+ */
+const cache = new Map<string, Map<DataName, unknown>>();
+const hydratedProfiles = new Set<string>();
+const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const WRITE_DELAY_MS = 400;
+
+function bucket(profileId: string): Map<DataName, unknown> {
+  const existing = cache.get(profileId);
+  if (existing) return existing;
+  const created = new Map<DataName, unknown>();
+  cache.set(profileId, created);
+  return created;
+}
+
+export function isHydrated(profileId: string): boolean {
+  return hydratedProfiles.has(profileId);
+}
+
+/**
+ * Lädt alle Sammlungen des Profils in den Cache. **Muss vor dem Rendern der App laufen**
+ * (siehe `App.tsx`), damit die synchronen Lese-Aufrufe echte Daten sehen.
+ */
+export async function hydrateState(profileId: string): Promise<{ migrated: boolean }> {
+  const remote = await fetchState(profileId);
+  const target = bucket(profileId);
+  target.clear();
+  for (const [name, value] of Object.entries(remote)) {
+    if ((ALL_NAMES as string[]).includes(name)) target.set(name as DataName, value);
+  }
+  hydratedProfiles.add(profileId);
+  return { migrated: await migrateFromLocalStorage(profileId, target) };
+}
+
+/**
+ * Einmalige Übernahme: Ist die Datenbank leer und liegen noch Daten im `localStorage`, werden
+ * sie hochgeladen — sonst wären alle bisherigen Projekte nach dem Umbau „weg".
+ */
+async function migrateFromLocalStorage(
+  profileId: string,
+  target: Map<DataName, unknown>,
+): Promise<boolean> {
+  const flag = `authorai.${profileId}.migrated`;
+  if (localStorage.getItem(flag)) return false;
+  // Die Datenbank hat schon Inhalt → nichts übernehmen.
+  if (target.size > 0) {
+    localStorage.setItem(flag, "1");
+    return false;
+  }
+
+  const entries: Record<string, unknown> = {};
+  for (const name of ALL_NAMES) {
+    const raw = localStorage.getItem(scopedKey(profileId, name));
+    if (raw === null) continue;
+    const parsed = safeParse<unknown>(raw);
+    if (parsed === null) continue;
+    entries[name] = parsed;
+    target.set(name, parsed);
+  }
+
+  if (Object.keys(entries).length === 0) {
+    localStorage.setItem(flag, "1");
+    return false;
+  }
+
+  try {
+    await putStateBulk(profileId, entries);
+  } catch (error) {
+    // Nicht markieren — beim nächsten Start erneut versuchen.
+    console.error("[storage] Übernahme in die Datenbank fehlgeschlagen:", error);
+    return false;
+  }
+  localStorage.setItem(flag, "1");
+  return true;
+}
+
 /** null = never stored (fresh profile) · [] = explicitly emptied. */
 function load<T>(profileId: string, name: DataName): T[] | null {
+  const value = bucket(profileId).get(name);
+  if (value !== undefined) return Array.isArray(value) ? (value as T[]) : null;
+  // Vor der Hydration (oder ohne Server): alter localStorage-Stand, nur lesend.
   const raw = localStorage.getItem(scopedKey(profileId, name));
   if (raw === null) return null;
   const data = safeParse<T[]>(raw);
@@ -66,11 +153,8 @@ function load<T>(profileId: string, name: DataName): T[] | null {
 }
 
 /**
- * Fehler beim Speichern dürfen **nie still** verschwinden.
- *
- * Ist der `localStorage` voll (Quota ≈ 5 MB pro Origin), wirft `setItem` — und bisher wurde
- * das verschluckt: die App zeigte die Änderung, nach dem Reload war sie weg. Wer einen Handler
- * registriert (siehe `App.tsx`), bekommt den Fehler gemeldet.
+ * Fehler beim Speichern dürfen **nie still** verschwinden — sonst zeigt die App Änderungen,
+ * die nach einem Reload fehlen. Wer einen Handler registriert (siehe `App.tsx`), bekommt sie.
  */
 let storageErrorHandler: ((info: { name: DataName; bytes: number; message: string }) => void) | null =
   null;
@@ -81,36 +165,37 @@ export function setStorageErrorHandler(
   storageErrorHandler = handler;
 }
 
+function schedule(profileId: string, name: DataName): void {
+  const key = `${profileId}|${name}`;
+  const existing = writeTimers.get(key);
+  if (existing) clearTimeout(existing);
+  writeTimers.set(
+    key,
+    setTimeout(() => {
+      writeTimers.delete(key);
+      const value = bucket(profileId).get(name);
+      void putState(profileId, name, value ?? null).catch((error) => {
+        const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
+        console.error(`[storage] Speichern von „${name}" fehlgeschlagen:`, message);
+        storageErrorHandler?.({ name, bytes: 0, message });
+      });
+    }, WRITE_DELAY_MS),
+  );
+}
+
 function save<T>(profileId: string, name: DataName, value: T[]): void {
-  const key = scopedKey(profileId, name);
-  let payload = "";
-  try {
-    payload = JSON.stringify(value);
-    localStorage.setItem(key, payload);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
-    // Ohne Handler wenigstens laut werden — kein stiller Datenverlust.
-    console.error(`[storage] Speichern von „${name}" fehlgeschlagen:`, message);
-    storageErrorHandler?.({ name, bytes: payload.length, message });
-  }
+  bucket(profileId).set(name, value);
+  // Vor der Hydration nicht schreiben — der Cache würde sonst die geladenen Daten überschreiben.
+  if (hydratedProfiles.has(profileId)) schedule(profileId, name);
 }
 
-export interface StorageUsage {
-  name: DataName;
-  /** Zeichen (≈ 2 Bytes pro Zeichen in UTF-16). */
-  chars: number;
-  bytes: number;
-}
-
-/** Belegung des Profilspeichers (für die Anzeige in den Einstellungen). */
-export function storageUsage(profileId: string): { entries: StorageUsage[]; totalBytes: number } {
-  const entries: StorageUsage[] = [];
-  for (const name of ALL_NAMES) {
-    const raw = localStorage.getItem(scopedKey(profileId, name));
-    const chars = raw?.length ?? 0;
-    entries.push({ name, chars, bytes: chars * 2 });
+/** Sofort speichern (ohne Verzögerung) — z. B. beim Backup-Export. */
+export function flushPendingWrites(): void {
+  for (const [key] of writeTimers) {
+    const timer = writeTimers.get(key);
+    if (timer) clearTimeout(timer);
+    writeTimers.delete(key);
   }
-  return { entries, totalBytes: entries.reduce((sum, entry) => sum + entry.bytes, 0) };
 }
 
 /**
@@ -173,7 +258,9 @@ export const saveNotifications = (profileId: string, value: AppNotification[]) =
 
 /** Object store for dashboard metrics (not an array). */
 export function loadMeta(profileId: string): DashboardMeta | null {
-  const raw = localStorage.getItem(`authorai.${profileId}.meta`);
+  const cached = bucket(profileId).get("meta");
+  const raw =
+    cached !== undefined ? JSON.stringify(cached) : localStorage.getItem(`authorai.${profileId}.meta`);
   if (raw === null) return null;
   const data = safeParse<DashboardMeta>(raw);
   if (!data || typeof data !== "object") return null;
@@ -192,17 +279,20 @@ export function loadMeta(profileId: string): DashboardMeta | null {
 }
 
 export function saveMeta(profileId: string, value: DashboardMeta): void {
-  try {
-    localStorage.setItem(`authorai.${profileId}.meta`, JSON.stringify(value));
-  } catch {
-    // ignore
-  }
+  bucket(profileId).set("meta", value);
+  if (hydratedProfiles.has(profileId)) schedule(profileId, "meta");
 }
 
-/** Removes every scoped collection for a profile. */
+/** Removes every collection for a profile — in der Datenbank **und** im Cache. */
 export function clearProfileData(profileId: string): void {
+  cache.delete(profileId);
+  hydratedProfiles.delete(profileId);
   for (const name of ALL_NAMES) {
     localStorage.removeItem(scopedKey(profileId, name));
   }
   localStorage.removeItem(`authorai.${profileId}.meta`);
+  localStorage.removeItem(`authorai.${profileId}.migrated`);
+  void clearState(profileId).catch((error) => {
+    console.error("[storage] Profil-Daten konnten nicht gelöscht werden:", error);
+  });
 }

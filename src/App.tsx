@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import { ProfileGate } from "@/components/dashboard/ProfileGate";
@@ -7,6 +7,7 @@ import { releaseCoverImage } from "@/lib/coverStore";
 import type { ProfileBackup } from "@/lib/backup";
 import {
   loadBooks,
+  hydrateState,
   saveBooks,
   saveCharacters,
   saveCoverPresets,
@@ -48,8 +49,40 @@ setStorageErrorHandler(({ name, bytes, message }) => {
 export function App() {
   const [profiles, setProfiles] = useState<Profile[]>(() => ensureProfiles());
   const [currentId, setCurrentId] = useState<string | null>(() => loadCurrentProfileId());
+  /** Erst wenn die Datenbank geladen ist, darf die App rendern (synchrone Lese-Aufrufe). */
+  const [ready, setReady] = useState(false);
 
   const current = currentId ? profiles.find((profile) => profile.id === currentId) ?? null : null;
+
+  useEffect(() => {
+    if (!current) {
+      setReady(false);
+      return;
+    }
+    let alive = true;
+    setReady(false);
+    hydrateState(current.id)
+      .then(({ migrated }) => {
+        if (!alive) return;
+        setReady(true);
+        if (migrated) {
+          showToast(
+            "Deine bisherigen Daten wurden in die Datenbank übernommen (kein localStorage-Limit mehr).",
+            "ok",
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        if (!alive) return;
+        const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
+        showToast(`Daten konnten nicht geladen werden: ${message}`, "error");
+        // Trotzdem rendern — Seeds/localStorage dienen als Notnagel.
+        setReady(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [current?.id]);
 
   const select = (id: string) => {
     setCurrentId(id);
@@ -114,6 +147,14 @@ export function App() {
         onCreate={create}
         onDelete={remove}
       />
+    );
+  }
+
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+        Lade Datenbank…
+      </div>
     );
   }
 

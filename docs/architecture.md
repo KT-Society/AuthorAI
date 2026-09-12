@@ -100,6 +100,7 @@ Ports: Root **3000**, promptgen **3001** (eigener `Bun.serve`, überschreibbar p
 | `server/cache.ts` | Antwort-Cache (LRU + TTL) für wiederholbare Analysen; `AUTHORAI_CACHE=0` schaltet ab |
 | `server/cover.ts` | Pollinations-Bilderzeugung, Dateiablage, Löschen |
 | `server/research.ts` | Tavily-Suche |
+| `server/store.ts` | SQLite-Speicher (`bun:sqlite`, `<runtimeRoot>/data/authorai.db`) für alle Fachdaten |
 
 Der Server lädt beim Start die Root-`.env` über die promptgen-`env`-Funktionen
 (Eltern-Suche nach `.env`, robust gegenüber verschachtelten Paketen).

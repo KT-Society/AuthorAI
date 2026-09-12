@@ -56,11 +56,11 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   im Fakten-Check als eigener Fall gemeldet
 
 ### Technik & Performance
-- **Historie als Diff statt Volltext**: Versionen komprimiert ablegen — kostet heute das
-  6-Fache der Prosa und ist der größte Posten im Browserspeicher
-- **Speicher-Wächter**: Warnung und Aufräum-Vorschläge (alte Versionen, leere Projekte),
-  bevor das 5-MB-Limit erreicht ist
-- **Backup-Erinnerung**: bei langer Sitzung ohne Export automatisch erinnern
+- **Historie als Diff statt Volltext**: Versionen komprimiert ablegen — spart weiter Platz,
+  auch wenn das Browser-Limit jetzt keine Rolle mehr spielt
+- **Datenbank-Backup und -Kompaktierung**: `VACUUM`/WAL-Checkpoint aus den Einstellungen,
+  Sicherung der `.db`-Datei im laufenden Betrieb
+- **Mehrere Datenbank-Profile (Dateien)**: Projekte als eigene `.db` öffnen/wechseln
 - **Streaming für die Ausbau-Schleife**: Kohärenz, Stil und der Fakten-Check streamen live —
   „Alles ausbauen" läuft noch als stille Schleife ohne Live-Text
 - **Stream-Vorschau übernehmen oder verwerfen**: „Text in den Editor übernehmen" und

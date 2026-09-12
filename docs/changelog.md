@@ -38,6 +38,32 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   „Alle prüfen"-Schleife (Vorschau je Kapitel). Der Buch-Assistent nutzt weiter die
   nicht-streamenden Routen.
 
+### Changed
+
+- **Fachdaten liegen jetzt in einer SQLite-Datenbank statt im Browser-Speicher.** Das
+  `localStorage`-Limit (~5 MB) war zu klein: Ein Projekt mit 13 Kapiteln × 8.000 Wörtern und
+  Versionshistorie braucht allein 8,8 MB — danach schlug **jedes** Speichern fehl und Änderungen
+  waren nach einem Reload weg (stiller Datenverlust).
+  - **Speicherort**: `<runtimeRoot>/data/authorai.db` (neben `covers/`, gitignored), Zugriff nur
+    über `src/server/store.ts` + `/api/state`. **`bun:sqlite`** statt `better-sqlite3`: gleiche
+    API, aber **kein nativer Build** — `bun install` bleibt unverändert.
+  - **Kein Size-Limit mehr**: 1,08 MB in einem einzigen Schreibvorgang sind im Test ein normaler
+    Request (vorher: Quota-Fehler).
+  - **Ablauf**: Die App lädt beim Start (bzw. Profilwechsel) einmal alle Sammlungen
+    (`hydrateState`) und liest danach synchron aus dem Cache; geschrieben wird gebündelt
+    (400 ms) über `PUT /api/state`. Sammlungsnamen sind in `src/data/state.ts` als Whitelist
+    hinterlegt — Client und Server teilen sie.
+  - **Übernahme**: Vorhandene `localStorage`-Daten wandern beim ersten Start **einmalig** in die
+    Datenbank (nichts geht verloren); danach dienen sie nur noch als lesender Notnagel, falls der
+    Server fehlt.
+  - **Profile und geräteweite Einstellungen** (Modelle, Sprache, Stil-Profil) bleiben bewusst im
+    Browser — sie sind winzig.
+  - **Einstellungen** zeigen jetzt die **Datenbank** statt des Browserspeichers: Datei, Größe
+    (inkl. WAL), Anzahl Profile/Einträge und die größten Sammlungen.
+  - **Historie bleibt budgetiert** (~1,2 MB je Buch, älteste zuerst) — jetzt Haushaltsregel
+    statt Überlebensnotwendigkeit.
+  - Neue Routen: `GET|PUT|DELETE /api/state`, `GET /api/store/info` (siehe `docs/api.md`).
+
 ### Fixed
 
 - **Stil-/Kohärenz-Marker waren nach einem Reload weg** — die eigentliche Ursache war

@@ -18,6 +18,8 @@ import {
   repairCanonChapters,
 } from "./server/continuity";
 import type { CanonRepairTarget, CanonViolation } from "./server/continuity";
+import { clearState, readState, storeInfo, writeState, writeStateBulk } from "./server/store";
+import { isStateCollection } from "./data/state";
 import { isStandaloneBinary, runtimePort } from "./server/paths";
 import { runResearch } from "./server/research";
 import {
@@ -872,6 +874,65 @@ const server = serve({
           }
           await rm(path.join(coversDir(), file), { force: true });
           return Response.json({ ok: true });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Fachdaten aus der SQLite-Datenbank (ersetzt den localStorage-Store).
+    "/api/state": {
+      async GET(req) {
+        try {
+          const profileId = requiredString(
+            new URL(req.url).searchParams.get("profile"),
+            "Bitte eine Profil-ID angeben.",
+          );
+          return Response.json({ collections: readState(profileId) });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+      async PUT(req) {
+        try {
+          const body = await readJson(req);
+          const profileId = requiredString(body.profileId, "Bitte eine Profil-ID angeben.");
+
+          // Bulk (Migration/Backup) oder einzelne Sammlung.
+          const entries = body.entries;
+          if (entries && typeof entries === "object") {
+            const { written } = writeStateBulk(profileId, entries as Record<string, unknown>);
+            return Response.json({ ok: true, written });
+          }
+
+          const collection = requiredString(body.collection, "Bitte eine Sammlung angeben.");
+          if (!isStateCollection(collection)) {
+            throw new ApiError(`Unbekannte Sammlung „${collection}".`, 400);
+          }
+          const { bytes, updatedAt } = writeState(profileId, collection, body.value ?? null);
+          return Response.json({ ok: true, bytes, updatedAt });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+      async DELETE(req) {
+        try {
+          const profileId = requiredString(
+            new URL(req.url).searchParams.get("profile"),
+            "Bitte eine Profil-ID angeben.",
+          );
+          return Response.json({ ok: true, ...clearState(profileId) });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Belegung der Datenbank (Anzeige in den Einstellungen).
+    "/api/store/info": {
+      async GET() {
+        try {
+          return Response.json(storeInfo());
         } catch (err) {
           return errorResponse(err);
         }

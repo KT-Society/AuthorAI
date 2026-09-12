@@ -37,7 +37,11 @@ Ports: Root **3000**, promptgen **3001** (`PORT` überschreibbar).
   Die **Engine** (Environment, Config, Soul-Synthese) wird von der Root-App über den
   TS-Alias **`@promptgen/*`** genutzt.
 - **Task-Runner**: `scripts/all.ts` führt `dev`/`build`/`start` für Root **und** Workspaces aus.
-- **Kein Backend-Store**: Fachdaten liegen im Browser, gescoped **pro Profil**.
+- **Server-Speicher**: Alle Fachdaten liegen in **SQLite** (`bun:sqlite`) unter
+  `<runtimeRoot>/data/authorai.db` (gitignored) — kein `localStorage`-Limit mehr. Die App lädt
+  sie beim Start einmal (`hydrateState`) und arbeitet im Speicher; geschrieben wird gebündelt
+  über `/api/state`. Nur **Profile** und **geräteweite Einstellungen** (Modelle, Sprache,
+  Stil-Profil) bleiben im `localStorage`.
 
 ```
 src/
@@ -58,11 +62,15 @@ src/
    `src/services/*` ruft **ausschließlich** lokale `/api/*`-Routen auf.
 2. **Secrets:** nur serverseitig aus der Root-`.env` lesen. Keys nie an den Client geben,
    nie loggen, nie in Fehlermeldungen aufnehmen.
-3. **Persistenz:** `localStorage` **nur** in `src/lib/*` verwenden. Pro Profil:
-   `authorai.<profilId>.<sammlung>` (`books`, `characters`, `world`, `plot`, `research`,
-   `ideas`, `notifications`, `meta`).
-   - **fehlender Key** = frisches Profil → Seeds greifen
+3. **Persistenz:** Fachdaten gehören in die **SQLite-Datenbank** (`<runtimeRoot>/data/authorai.db`,
+   Zugriff **nur** über `src/server/store.ts` + `/api/state`). Der Client liest synchron aus dem
+   Cache in `src/lib/persistence.ts`; `localStorage` ist **nur** für Profile, geräteweite
+   Einstellungen (Modelle, Sprache, Stil-Profil) und die Migrations-Flags erlaubt.
+   - Sammlungsnamen stehen in `src/data/state.ts` (Whitelist für Client **und** Server).
+   - **fehlende** Sammlung = frisches Profil → Seeds greifen
    - **`[]`** = bewusst geleert → Beispiele kommen nicht zurück
+   - Alte `localStorage`-Daten werden beim ersten Start **automatisch übernommen**
+     (`hydrateState` → `migrateFromLocalStorage`), solange die Datenbank leer ist.
 4. **Modelle pro Stufe:** `authorai.model` (Standard) +
    `authorai.model.{storyboard|draft|expand|consistency|style}`. Freie OpenRouter-ID,
    kein Dropdown, kein Default — leer = erbt Standard.

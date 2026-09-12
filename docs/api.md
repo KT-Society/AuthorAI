@@ -290,6 +290,28 @@ data: {"type":"error","error":"…"}          ← z. B. „Teil 2 von 4 wurde st
 Fehlender Kapiteltext oder Model → **HTTP 400 vor dem Stream**. Die nicht-streamenden Routen
 (`/api/chapter/consistency`, `/api/chapter/style`) bleiben unverändert bestehen.
 
+### `GET | PUT | DELETE /api/state`
+
+Fachdaten-Speicher (SQLite). **Der einzige Weg** an die Datenbank — der Client liest beim Start
+einmal alles und schreibt gebündelt zurück.
+
+| Methode | Request | Antwort |
+| --- | --- | --- |
+| `GET` | `?profile=<id>` | `{ "collections": { "books": […], … } }` |
+| `PUT` | `{ profileId, collection, value }` | `{ ok, bytes, updatedAt }` |
+| `PUT` | `{ profileId, entries: { books: […], … } }` | `{ ok, written }` (Bulk, für Migration/Backup) |
+| `DELETE` | `?profile=<id>` | `{ ok, deleted }` |
+
+Unbekannte Sammlungen → **HTTP 400**; im Bulk werden sie still übersprungen (Whitelist in
+`src/data/state.ts`). Es gibt **kein Size-Limit** — ein 1-MB-Buch ist ein normaler Schreibvorgang
+(vorher scheiterte genau das am ~5-MB-`localStorage`).
+
+### `GET /api/store/info`
+
+Belegung der Datenbank für die Einstellungen: `{ file, sizeBytes, profiles, totalRows, rows[] }`.
+`sizeBytes` enthält **auch** `-wal`/`-shm` (WAL schreibt verzögert — sonst wäre die Anzeige zu
+klein).
+
 ---
 
 ## Buch-Pipeline

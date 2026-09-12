@@ -6,6 +6,7 @@ out
 dist
 release
 covers
+data
 *.tgz
 
 # code coverage

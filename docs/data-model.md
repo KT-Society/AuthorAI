@@ -222,11 +222,23 @@ interface AppNotification {
 
 ---
 
-## Persistenz-Keys
+## Persistenz
 
-### Pro Profil — `authorai.<profilId>.<sammlung>`
+### Fachdaten — SQLite (`<runtimeRoot>/data/authorai.db`)
 
-| Key | Inhalt |
+Alle Sammlungen liegen **serverseitig** in SQLite (`bun:sqlite`), Tabelle `state`:
+
+```sql
+CREATE TABLE state (
+  profile_id TEXT NOT NULL,
+  collection TEXT NOT NULL,
+  json       TEXT NOT NULL,   -- die Sammlung als JSON
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (profile_id, collection)
+);
+```
+
+| Sammlung | Inhalt |
 | --- | --- |
 | `books` | `Book[]` (inkl. Storyboard + Manuskript) |
 | `characters` | `Character[]` |
@@ -240,8 +252,18 @@ interface AppNotification {
 | `series` | `Series[]` (Reihen / Mehrbänder) |
 | `meta` | `DashboardMeta` (Objekt, kein Array) |
 
-### Profile & Einstellungen (geräteweit)
+Ablauf: `App.tsx` ruft beim Profilwechsel `hydrateState(profileId)` → `GET /api/state` füllt den
+Cache in `lib/persistence.ts`; die App liest danach **synchron** daraus. Geschrieben wird
+gebündelt (`schedule`, 400 ms) über `PUT /api/state`. Sammlungsnamen sind in
+`src/data/state.ts` als Whitelist hinterlegt (Client **und** Server).
 
+- **fehlende** Sammlung = frisches Profil → Seeds greifen
+- **`[]`** = bewusst geleert → Beispiele kommen nicht zurück
+- Ohne Server läuft die App weiter und liest den alten `localStorage`-Stand (nur lesend).
+- Frühere `localStorage`-Daten werden beim ersten Start **einmalig** in die Datenbank
+  übernommen (`migrateFromLocalStorage`, Flag `authorai.<profilId>.migrated`).
+
+### Profile & Einstellungen (weiterhin `localStorage`)
 | Key | Inhalt |
 | --- | --- |
 | `authorai.profiles` | `Profile[]` (`{ id, name, createdAt }`) |
@@ -250,8 +272,11 @@ interface AppNotification {
 | `authorai.model.storyboard` \| `draft` \| `expand` \| `consistency` \| `style` | Model je Stufe |
 | `authorai.language` | Ausgabesprache |
 | `authorai.styleProfile` | Zielstimme: `{ presetId, custom }` (Stil-Pass) |
+| `authorai.<profilId>.migrated` | Flag der einmaligen Datenübernahme |
 
-> Generierungs-Einstellungen sind bewusst **geräteweit**, nicht pro Profil.
+> Profile und Generierungs-Einstellungen sind bewusst **geräteweit** und winzig — sie bleiben im
+> Browser. Alles Große (Manuskripte, Historie) liegt in der Datenbank.
+
 
 ---
 
