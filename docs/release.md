@@ -32,12 +32,16 @@ Alles landet im (gitignorierten) Ordner **`release/`**.
 
 ## 1 · Version bumpen
 
-Vier Stellen konsistent halten:
+Fünf Stellen konsistent halten:
 
 1. `package.json` → `version`
-2. `installer/authorai.iss` → `#define MyAppVersion`
-3. `installer/authorai.nsi` → `!define APP_VERSION` **und** `VIProductVersion` (`x.y.z.0`)
-4. `docs/changelog.md` → neuer Eintrag
+2. `packages/promptgen/package.json` → `version` (Workspace-Paket, gleiche Version)
+3. `installer/authorai.iss` → `#define MyAppVersion`
+4. `installer/authorai.nsi` → `!define APP_VERSION` **und** `VIProductVersion` (`x.y.z.0`)
+5. `docs/changelog.md` → neuer Eintrag (+ `README.md` / `docs/README.md` Versionszeile)
+
+> Nicht verwechseln: `META_VERSION` (`data/author.ts`) und `BACKUP_VERSION` (`lib/backup.ts`)
+> sind **Datenformat-Versionen** und haben mit der App-Version nichts zu tun.
 
 Repository: <https://github.com/KT-Society/AuthorAI>
 

@@ -155,8 +155,24 @@ Der Aufruf ist **cachebar** (identische Prüfung = keine neuen Kosten).
 
 ---
 
-## Buch-Pipeline
+### `POST /api/chapter/draft/stream` und `POST /api/chapter/expand/stream`
 
+Streaming-Varianten von `chapter/draft` und `chapter/expand` (Server-Sent Events). Gleiche
+Validierung und gleicher Body; die Antwort ist `text/event-stream` mit:
+
+```
+data: {"type":"delta","text":"…"}      ← Textstück für die Live-Vorschau
+data: {"type":"done","text":"…"}       ← fertiger (nachbearbeiteter) Text
+data: {"type":"error","error":"…"}     ← Fehler nach dem Start (HTTP bleibt 200)
+```
+
+**Fehler vor dem Start** (fehlendes Model, ungültiges Storyboard) kommen weiterhin als
+**HTTP 400 + JSON**. Liefert der Provider kein SSE, fällt der Server intern auf den normalen
+Aufruf zurück — der Client bekommt dann nur das `done`-Ereignis.
+
+---
+
+## Buch-Pipeline
 ### `POST /api/storyboard`
 
 Zweiphasige Storyboard-Erzeugung (Outline + gechunkte Details). Mit `seriesContext` entsteht ein

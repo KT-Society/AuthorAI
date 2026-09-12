@@ -94,7 +94,7 @@ Ports: Root **3000**, promptgen **3001** (eigener `Bun.serve`, überschreibbar p
 | Modul | Aufgabe |
 | --- | --- |
 | `index.ts` | `Bun.serve` mit allen Routen, Fehler-Handling, HMR in Dev |
-| `server/llm.ts` | OpenRouter-Chat-Helper (`chatCompletion`, `chatCompletionDetailed`, `cleanJsonBlock`) |
+| `server/llm.ts` | OpenRouter-Chat-Helper (`chatCompletion`, `chatCompletionDetailed`, `chatCompletionStream`, `cleanJsonBlock`) |
 | `server/story.ts` | Storyboard, Rohentwurf, Ausbau, Kohärenz, Stil, Weltenbau-Extraktion, Figuren-Extraktion, Chunking |
 | `server/continuity.ts` | Fakten-/Beziehungs-Extraktion + Normalisierung, Fakten-Check gegen den Kanon |
 | `server/cache.ts` | Antwort-Cache (LRU + TTL) für wiederholbare Analysen; `AUTHORAI_CACHE=0` schaltet ab |
@@ -109,7 +109,7 @@ Der Server lädt beim Start die Root-`.env` über die promptgen-`env`-Funktionen
 Dünne Wrapper auf die lokalen Routen:
 
 - `http.ts` — gemeinsamer `postJson`-Helper inkl. Fehler-Normalisierung
-- `story.ts`, `generate.ts`, `cover.ts`, `research.ts`, `continuity.ts`
+- `story.ts`, `generate.ts`, `cover.ts`, `research.ts`, `continuity.ts`, `stream.ts` (SSE)
 
 ### 3. Daten (`src/data/*`)
 
@@ -140,7 +140,8 @@ Typen + Seed-Daten, frei von UI-Logik:
 | `docx.ts` | DOCX-Erzeugung (OOXML) für Lektorats-Workflows |
 | `markdown.ts` | Markdown-Export eines Buchs |
 | `backup.ts` | Projekt-Backup (JSON) erzeugen/validieren |
-| `graph.ts` | Deterministisches Kreis-Layout + Kanten-Helfer für den Beziehungsgraphen |
+| `graph.ts` | Deterministisches Kreis-Layout + Kanten-Helfer (+ Sparkline) für den Beziehungsgraphen |
+| `jobs.ts` | Job-Store (Modul-Singleton) für Hintergrund-Queues + `useJobs()` |
 | `seriesOverview.ts` | Bände einer Reihe mit Fortschritt, Lücken und Status (pur, getestet) |
 | `seriesContext.ts` | Vorbände-Kontext + Vorbände-Kanon für einen neuen Band (`buildSeriesContext`) |
 | `worldMatch.ts` | Normalisierter Titelvergleich (Dublettenschutz Weltenbau) |

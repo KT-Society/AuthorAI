@@ -1,7 +1,7 @@
 # AuthorAI — Dein KI-Buchautor
 
 > **Repository:** [github.com/KT-Society/AuthorAI](https://github.com/KT-Society/AuthorAI)
-> · **Version:** 0.2.0 · **Lizenz:** MIT · **Entwickler:** KT-Society & Echo
+> · **Version:** 0.4.0 · **Lizenz:** MIT · **Entwickler:** KT-Society & Echo
 
 Eine vollständige, lokal laufende **Autoren-Werkbank**: von der Buchidee über Storyboard,
 Rohentwurf und Ausbau bis zu Kohärenz- und Stilprüfung, mit Charakteren, Weltenbau,

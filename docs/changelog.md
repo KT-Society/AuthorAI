@@ -8,8 +8,31 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
-### Mittelfristig-Paket (Ziel: 0.4.0) — Batch 3
+_Nichts offen — nächste Themen siehe [`roadmap.md`](roadmap.md)._
 
+---
+
+## [0.4.0] — 2026-09-12
+
+### Kontinuität, Reihen & Hintergrund-Jobs
+
+Diese Version bündelt drei Lieferungen, die intern als eigene Meilensteine geplant wurden:
+
+1. **0.3.0** — Kontinuitäts-Datenbank & Beziehungsgraph
+2. **0.3.1** — Serien-Modus (Mehrbänder mit geteiltem Kanon)
+3. **0.4.0** — Mittelfristig-Paket: Fakten-Check, Stil-Profil, Reihen-Übersicht, Antwort-Cache,
+   Beziehungs-Arc, Job-Center und Streaming
+
+### Mittelfristig-Paket — Batch 3
+
+- **Added** **Streaming mit Live-Vorschau** (`POST /api/chapter/draft/stream`,
+  `POST /api/chapter/expand/stream`): Rohentwurf und Ausbau — die beiden langen
+  Einzelantworten — kommen jetzt als **SSE** und wachsen im Kapitel-Editor live mit
+  („Live-Vorschau · n Wörter"). Der Server nutzt `chatCompletionStream()`; liefert der
+  Provider kein SSE oder bleibt der Stream leer, fällt er automatisch auf den normalen
+  Aufruf zurück. Validierungsfehler kommen weiterhin als **HTTP 400 + JSON**, Fehler nach
+  dem Start als `{ type: "error" }`-Ereignis (HTTP 200). Geprüft: 12/12 (Deltas,
+  Rahmen über Chunk-Grenzen, Fallback, Client-Parser, Fehlerpfade).
 - **Added** **Job-Center — Fortschritt im Hintergrund** (`src/lib/jobs.ts`): Queue-Läufe
   (Kohärenz/Stil über alle Kapitel, Ausbau, Fakten-Check) legen jetzt einen Job im Store an.
   Der Store lebt **außerhalb von React** (Modul-Singleton + `useSyncExternalStore`), damit der
@@ -23,7 +46,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   - Deterministische Reihenfolge (Zeitstempel + Sequenz), Abschluss-Erkennung ohne doppelte
     Toasts, unbekannte IDs sind wirkungslos. Geprüft: 22/22.
 
-### Mittelfristig-Paket (Ziel: 0.4.0) — Batch 2
+### Mittelfristig-Paket — Batch 2
 
 - **Added** **Beziehungs-Arc — Figuren-Entwicklung über die Zeit**: Eine Beziehung kann jetzt
   einen Verlauf über die Kapitel tragen (`arc: [{ chapter, intensity }]`). Ab **zwei** Punkten
@@ -36,7 +59,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   - Helfer in `data/continuity.ts` (`hasArc`, `arcAt`, `formatArc`, `arcDelta`, `sortArc`) und
     `lib/graph.ts` (`sparklinePath`) — alle pur und geprüft (25/25).
 
-### Mittelfristig-Paket (Ziel: 0.4.0) — Batch 1
+### Mittelfristig-Paket — Batch 1
 
 - **Added** **Fakten-Check als eigener Report** (`POST /api/continuity/check`): prüft ein Kapitel
   **nur gegen den Kanon** (Fakten + Beziehungen) — getrennt von der Kohärenz. Antwort
@@ -59,7 +82,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   Kohärenz, Stil) werden **nie** gecacht, damit „erneut generieren" wirklich neu generiert.
   Abschaltbar über `AUTHORAI_CACHE=0`; Treffer werden geloggt. Nichts wird auf Platte geschrieben.
 
-### Kontinuitäts-Datenbank & Beziehungsgraph (Ziel: 0.3.0)
+### Kontinuitäts-Datenbank & Beziehungsgraph
 
 - **Added** **Kanon: Fakten & Beziehungen** (`src/data/continuity.ts`): `CanonFact`
   (Kategorie, prüfbare Aussage, Quelle, `hard`-Flag für Weltregeln) und `CharacterRelation`
