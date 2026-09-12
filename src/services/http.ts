@@ -1,10 +1,14 @@
-/** Shared client-side JSON POST helper. */
+/** Shared client-side JSON request helper (POST oder PUT). */
 
-export async function postJson<T>(path: string, body: unknown): Promise<T> {
+export async function postJson<T>(
+  path: string,
+  body: unknown,
+  method: "POST" | "PUT" = "POST",
+): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, {
-      method: "POST",
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });

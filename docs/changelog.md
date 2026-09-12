@@ -66,6 +66,14 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ### Fixed
 
+- **`502` bei der Timeline-Prüfung wird jetzt erklärbar (und seltener)**: Der Aufruf lief auf
+  `maxTokens: 2500` und ein Token-Abbruch endete als nichtssagendes „Timeline-JSON war ungültig".
+  Jetzt: **4000 Tokens**, `finish_reason: "length"` wird ausdrücklich gemeldet („…vom Token-Limit
+  abgeschnitten…"), und `parseJson` schneidet JSON auch dann heraus, wenn das Modell Prosa
+  drumherum schreibt (äußerster `{…}`-Block). Gilt für **alle** JSON-Aufrufe (Storyboard,
+  Weltenbau, Extraktion, Timeline).
+  - Fehlermeldungen nennen jetzt den Grund: ein ungültiges Stufen-Modell antwortet z. B. mit
+    „OpenRouter-Aufruf fehlgeschlagen (HTTP 400)" statt eines anonymen 502.
 - **Stil-/Kohärenz-Marker waren nach einem Reload weg** — die eigentliche Ursache war
   **stiller Datenverlust**: `lib/persistence.ts` verschluckte Fehler beim Speichern
   (`catch { /* storage full */ }`). Gemessen: 13 Kapitel × 8.000 Wörter mit **fünf**

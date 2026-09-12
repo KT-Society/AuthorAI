@@ -75,9 +75,21 @@ function clampChapters(value: unknown): number {
   return Math.max(MIN_CHAPTERS, Math.min(MAX_CHAPTERS, Math.round(parsed)));
 }
 
+/**
+ * Räumt Modellantworten auf, die JSON in Prosa einbetten: erst Fences entfernen, dann den
+ * äußersten `{…}`-Block herausschneiden („Hier ist das JSON: {…} Hinweis: …").
+ */
+function jsonCandidate(content: string): string {
+  const cleaned = cleanJsonBlock(content).trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start !== -1 && end > start) return cleaned.slice(start, end + 1);
+  return cleaned;
+}
+
 function parseJson(content: string, label: string): Record<string, unknown> {
   try {
-    return JSON.parse(cleanJsonBlock(content)) as Record<string, unknown>;
+    return JSON.parse(jsonCandidate(content)) as Record<string, unknown>;
   } catch {
     console.error(`[story] invalid JSON (${label}):`, content.slice(0, 400));
     throw new ApiError(
@@ -1117,15 +1129,23 @@ export async function checkTimeline(input: TimelineInput): Promise<TimelineResul
     })
     .join("\n\n");
 
-  const content = await chatCompletion({
+  const { content, finishReason } = await chatCompletionDetailed({
     model: input.model,
     system: timelineSystem(input.language),
     user: `TIMELINE:\n${listing}${input.canon?.trim() ? `\n\n${input.canon.trim()}` : ""}\n\nCheck the chronology now and return the JSON, entirely in ${input.language}.`,
     json: true,
-    maxTokens: 2500,
+    maxTokens: 4000,
     temperature: 0.3,
     cache: true,
   });
+
+  // Token-Limit: klar benennen statt als „ungültiges JSON" zu enden.
+  if (finishReason === "length") {
+    throw new ApiError(
+      "Die Timeline-Prüfung wurde vom Token-Limit abgeschnitten. Bitte erneut versuchen oder ein Modell mit größerem Ausgabelimit wählen.",
+      502,
+    );
+  }
 
   const parsed = parseJson(content, "Timeline");
   return {
