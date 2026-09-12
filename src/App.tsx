@@ -29,7 +29,21 @@ import {
   saveProfiles,
 } from "@/lib/profile";
 import type { Profile } from "@/lib/profile";
+import { setStorageErrorHandler } from "@/lib/persistence";
+import { showToast } from "@/lib/toast";
 import "./index.css";
+
+/**
+ * Ein voller Browserspeicher darf nicht still bleiben: Die App zeigt die Änderung, nach dem
+ * Reload wäre sie weg. Deshalb hier einmalig einen Melder registrieren (mit Handlungsanweisung).
+ */
+setStorageErrorHandler(({ name, bytes, message }) => {
+  showToast(
+    `⚠️ Speichern fehlgeschlagen („${name}", ${Math.round(bytes / 1024)} KB): ${message} — ` +
+      `Bitte Backup exportieren und alte Projekte löschen.`,
+    "error",
+  );
+});
 
 export function App() {
   const [profiles, setProfiles] = useState<Profile[]>(() => ensureProfiles());

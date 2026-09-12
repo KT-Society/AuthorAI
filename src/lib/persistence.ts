@@ -65,12 +65,52 @@ function load<T>(profileId: string, name: DataName): T[] | null {
   return Array.isArray(data) ? data : null;
 }
 
+/**
+ * Fehler beim Speichern dürfen **nie still** verschwinden.
+ *
+ * Ist der `localStorage` voll (Quota ≈ 5 MB pro Origin), wirft `setItem` — und bisher wurde
+ * das verschluckt: die App zeigte die Änderung, nach dem Reload war sie weg. Wer einen Handler
+ * registriert (siehe `App.tsx`), bekommt den Fehler gemeldet.
+ */
+let storageErrorHandler: ((info: { name: DataName; bytes: number; message: string }) => void) | null =
+  null;
+
+export function setStorageErrorHandler(
+  handler: (info: { name: DataName; bytes: number; message: string }) => void,
+): void {
+  storageErrorHandler = handler;
+}
+
 function save<T>(profileId: string, name: DataName, value: T[]): void {
+  const key = scopedKey(profileId, name);
+  let payload = "";
   try {
-    localStorage.setItem(scopedKey(profileId, name), JSON.stringify(value));
-  } catch {
-    // storage full / unavailable — ignore
+    payload = JSON.stringify(value);
+    localStorage.setItem(key, payload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
+    // Ohne Handler wenigstens laut werden — kein stiller Datenverlust.
+    console.error(`[storage] Speichern von „${name}" fehlgeschlagen:`, message);
+    storageErrorHandler?.({ name, bytes: payload.length, message });
   }
+}
+
+export interface StorageUsage {
+  name: DataName;
+  /** Zeichen (≈ 2 Bytes pro Zeichen in UTF-16). */
+  chars: number;
+  bytes: number;
+}
+
+/** Belegung des Profilspeichers (für die Anzeige in den Einstellungen). */
+export function storageUsage(profileId: string): { entries: StorageUsage[]; totalBytes: number } {
+  const entries: StorageUsage[] = [];
+  for (const name of ALL_NAMES) {
+    const raw = localStorage.getItem(scopedKey(profileId, name));
+    const chars = raw?.length ?? 0;
+    entries.push({ name, chars, bytes: chars * 2 });
+  }
+  return { entries, totalBytes: entries.reduce((sum, entry) => sum + entry.bytes, 0) };
 }
 
 /**

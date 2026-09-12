@@ -716,6 +716,7 @@ export function Dashboard({
 
         <SettingsDialog
         open={settingsOpen}
+        profileId={profileId}
         onClose={() => setSettingsOpen(false)}
         onExportBackup={handleExportBackup}
         onImportBackup={(file) => void handleImportBackup(file)}

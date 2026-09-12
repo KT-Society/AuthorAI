@@ -27,6 +27,8 @@ import {
   writeStyleProfile,
 } from "@/lib/generationSettings";
 import type { ModelStage } from "@/lib/generationSettings";
+import { storageUsage } from "@/lib/persistence";
+import type { StorageUsage } from "@/lib/persistence";
 import {
   DEFAULT_STYLE_PROFILE,
   STYLE_PRESETS,
@@ -39,14 +41,32 @@ import type { AppConfig } from "@/services/generate";
 const STATUS_OK = "#4caf50";
 const STATUS_FAIL = "#ff5252";
 
+/** Anzeigenamen der gespeicherten Sammlungen. */
+const STORAGE_LABELS: Record<string, string> = {
+  books: "Bücher",
+  characters: "Figuren",
+  world: "Welt",
+  plot: "Plot",
+  research: "Recherche",
+  ideas: "Ideen",
+  coverPresets: "Cover-Presets",
+  notifications: "Mitteilungen",
+  facts: "Fakten",
+  relations: "Beziehungen",
+  series: "Reihen",
+};
+
 export function SettingsDialog({
   open,
+  profileId,
   onClose,
   onExportBackup,
   onImportBackup,
   onImportBackupAsProfile,
 }: {
   open: boolean;
+  /** Für die Speicherbelegung (kann fehlen, dann wird sie nicht gezeigt). */
+  profileId?: string;
   onClose: () => void;
   onExportBackup: () => void;
   onImportBackup: (file: File) => void;
@@ -59,9 +79,12 @@ export function SettingsDialog({
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [styleProfile, setStyleProfile] = useState<StyleProfile>(DEFAULT_STYLE_PROFILE);
   const [config, setConfig] = useState<AppConfig | null>(null);
+  /** Speicherbelegung des Profils — zeigt, wie nah der localStorage am Limit ist. */
+  const [usage, setUsage] = useState<{ entries: StorageUsage[]; totalBytes: number } | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    if (profileId) setUsage(storageUsage(profileId));
     setModel(readModel());
     setStageModels(readStageModelsRaw());
     setLanguage(readLanguage() ?? DEFAULT_LANGUAGE);

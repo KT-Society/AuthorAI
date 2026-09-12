@@ -40,6 +40,20 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ### Fixed
 
+- **Stil-/Kohärenz-Marker waren nach einem Reload weg** — die eigentliche Ursache war
+  **stiller Datenverlust**: `lib/persistence.ts` verschluckte Fehler beim Speichern
+  (`catch { /* storage full */ }`). Gemessen: 13 Kapitel × 8.000 Wörter mit **fünf**
+  Volltext-Versionen je Kapitel sind **8,8 MB** — allein ein Buch sprengt damit das
+  **~5-MB-Limit** von `localStorage`. Sobald das Limit erreicht ist, schlägt `setItem` fehl:
+  Die App zeigt die Änderung (Text + Marker), nach dem Reload ist der alte Stand zurück.
+  Drei Maßnahmen:
+  - **Speicherfehler sind sichtbar**: `setStorageErrorHandler` meldet Sammlung, Größe und
+    Grund als Toast mit Handlungsanweisung (Backup exportieren, alte Projekte löschen).
+  - **Versionshistorie budgetiert**: höchstens 5 Einträge je Kapitel **und** ~1,2 MB je Buch
+    (`trimHistoryToBudget`, älteste Versionen fallen zuerst). Ohne Deckel kostete die Historie
+    das **6-Fache** der reinen Prosa.
+  - **Speicherbelegung in den Einstellungen**: Aufschlüsselung je Sammlung (KB) mit Warnung
+    ab 4 MB — man sieht jetzt, was den Speicher frisst, bevor es zu spät ist.
 - **Live-Vorschau zeigte die Pipeline-Marker**: In der Vorschau stand die Rohausgabe des Modells
   inklusive `<TEXT>`/`</TEXT>` und etwaiger Notes. Die Vorschau läuft jetzt durch `extractProse`
   (dieselbe Bereinigung wie beim Speichern) — Marker und Notes sind raus, auch bei noch

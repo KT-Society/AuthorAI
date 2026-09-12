@@ -116,6 +116,48 @@ function chapterStatus(chapter: ChapterContent): { label: string; className: str
   };
 }
 
+/**
+ * Grenzen der Versionshistorie.
+ *
+ * Gemessen: 13 Kapitel × 8.000 Wörter mit **fünf** Volltext-Versionen je Kapitel sind ~8,8 MB —
+ * allein ein Buch sprengt damit das ~5-MB-Limit von `localStorage`. Dann schlägt das Speichern
+ * fehl und Änderungen sind nach einem Reload weg (siehe `lib/persistence.ts`). Deshalb ist die
+ * Historie je Buch **budgetiert**: höchstens 5 Einträge je Kapitel **und** ~1,2 MB je Buch,
+ * wobei zuerst die ältesten Versionen fallen.
+ */
+const HISTORY_MAX_ENTRIES = 5;
+const HISTORY_MAX_CHARS = 600_000;
+
+/** Kürzt die Historie eines Buchs auf das Zeichen-Budget (älteste Versionen zuerst). */
+function trimHistoryToBudget(chapters: ChapterContent[]): ChapterContent[] {
+  const total = () =>
+    chapters.reduce(
+      (sum, chapter) =>
+        sum + (chapter.history ?? []).reduce((inner, version) => inner + version.expanded.length, 0),
+      0,
+    );
+  if (total() <= HISTORY_MAX_CHARS) return chapters;
+
+  let next = chapters.map((chapter) => ({ ...chapter, history: [...(chapter.history ?? [])] }));
+  while (total() > HISTORY_MAX_CHARS) {
+    // Älteste Version im ganzen Buch finden und entfernen.
+    let target: { chapter: number; at: string } | null = null;
+    next.forEach((chapter, chapterIndex) => {
+      for (const version of chapter.history ?? []) {
+        if (!target || version.at < target.at) target = { chapter: chapterIndex, at: version.at };
+      }
+    });
+    if (!target) break;
+    const { chapter: chapterIndex, at } = target;
+    next = next.map((chapter, index) =>
+      index === chapterIndex
+        ? { ...chapter, history: (chapter.history ?? []).filter((version) => version.at !== at) }
+        : chapter,
+    );
+  }
+  return next;
+}
+
 export function BookDetailView({
   book,
   characters,
@@ -1025,9 +1067,11 @@ export function BookDetailView({
       expanded: chapter.expanded,
       note,
     };
-    const history = [snapshot, ...(chapter.history ?? [])].slice(0, 5);
+    const history = [snapshot, ...(chapter.history ?? [])].slice(0, HISTORY_MAX_ENTRIES);
     commit(
-      manuscript.map((item, i) => (i === index ? { ...item, history } : item)),
+      trimHistoryToBudget(
+        manuscript.map((item, i) => (i === index ? { ...item, history } : item)),
+      ),
       plans,
     );
   };
@@ -1045,19 +1089,21 @@ export function BookDetailView({
         note: "vor Wiederherstellung",
       },
       ...(chapter.history ?? []),
-    ].slice(0, 5);
+    ].slice(0, HISTORY_MAX_ENTRIES);
 
     commit(
-      manuscript.map((item, i) =>
-        i === index
-          ? {
-              ...item,
-              title: version.title,
-              draft: version.draft,
-              expanded: version.expanded,
-              history,
-            }
-          : item,
+      trimHistoryToBudget(
+        manuscript.map((item, i) =>
+          i === index
+            ? {
+                ...item,
+                title: version.title,
+                draft: version.draft,
+                expanded: version.expanded,
+                history,
+              }
+            : item,
+        ),
       ),
       plans,
     );
