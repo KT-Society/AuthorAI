@@ -64,6 +64,7 @@ import { MODEL_STAGE_LABELS, readLanguage, readStageModel, readStyleProfileHint 
 import { manuscriptOf } from "@/lib/bookManuscript";
 import { copyText } from "@/lib/clipboard";
 import { looksTruncated } from "@/lib/prose";
+import { createJob, finishJob, isCancelled, updateJob } from "@/lib/jobs";
 import { showToast } from "@/lib/toast";
 import { buildDocx } from "@/lib/docx";
 import { buildEpub } from "@/lib/epub";
@@ -515,9 +516,21 @@ export function BookDetailView({
 
     setError(null);
     let current = manuscript;
+    let failure: string | null = null;
+    let aborted = false;
+    const jobId = createJob({
+      title: `${MODEL_STAGE_LABELS[kind]}-Prüfung · ${book.title}`,
+      kind: "pass",
+      total: pending.length,
+    });
 
     for (let position = 0; position < pending.length; position += 1) {
       const chapterIndex = pending[position] ?? 0;
+      if (isCancelled(jobId)) {
+        aborted = true;
+        break;
+      }
+      updateJob(jobId, { done: position, label: `Kapitel ${chapterIndex + 1}` });
       setBusy(
         `${MODEL_STAGE_LABELS[kind]}-Prüfung ${position + 1}/${pending.length} · Kapitel ${chapterIndex + 1}…`,
       );
@@ -548,15 +561,20 @@ export function BookDetailView({
         // Persist after every chapter so the queue survives a reload/interruption.
         commit(current, plans);
       } catch (err) {
-        setError(
-          err instanceof Error
-            ? `${err.message} (abgebrochen bei Kapitel ${chapterIndex + 1})`
-            : "Unbekannter Fehler.",
-        );
+        failure = err instanceof Error ? err.message : "Unbekannter Fehler.";
+        setError(`${failure} (abgebrochen bei Kapitel ${chapterIndex + 1})`);
         break;
       }
     }
 
+    if (aborted) {
+      finishJob(jobId, "cancelled", `${book.title}: Prüfung abgebrochen`);
+    } else if (failure) {
+      finishJob(jobId, "error", failure);
+    } else {
+      updateJob(jobId, { done: pending.length });
+      finishJob(jobId, "done", `${pending.length} Kapitel · ${MODEL_STAGE_LABELS[kind]}`);
+    }
     setBusy(null);
   };
 
@@ -694,9 +712,21 @@ export function BookDetailView({
 
     setError(null);
     let current = manuscript;
+    let failure: string | null = null;
+    let aborted = false;
+    const jobId = createJob({
+      title: `Ausbau · ${book.title}`,
+      kind: "expand",
+      total: pending.length,
+    });
 
     for (let position = 0; position < pending.length; position += 1) {
       const chapterIndex = pending[position] ?? 0;
+      if (isCancelled(jobId)) {
+        aborted = true;
+        break;
+      }
+      updateJob(jobId, { done: position, label: `Kapitel ${chapterIndex + 1}` });
       setBusy(`Ausbau ${position + 1}/${pending.length} · Kapitel ${chapterIndex + 1}…`);
       try {
         const expanded = await expandChapter({
@@ -716,15 +746,20 @@ export function BookDetailView({
         commit(current, plans);
         onWordsWritten(countWords(expanded));
       } catch (err) {
-        setError(
-          err instanceof Error
-            ? `${err.message} (abgebrochen bei Kapitel ${chapterIndex + 1})`
-            : "Unbekannter Fehler.",
-        );
+        failure = err instanceof Error ? err.message : "Unbekannter Fehler.";
+        setError(`${failure} (abgebrochen bei Kapitel ${chapterIndex + 1})`);
         break;
       }
     }
 
+    if (aborted) {
+      finishJob(jobId, "cancelled", `${book.title}: Ausbau abgebrochen`);
+    } else if (failure) {
+      finishJob(jobId, "error", failure);
+    } else {
+      updateJob(jobId, { done: pending.length });
+      finishJob(jobId, "done", `${pending.length} Kapitel ausgebaut`);
+    }
     setBusy(null);
   };
 

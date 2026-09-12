@@ -8,6 +8,19 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Mittelfristig-Paket (Ziel: 0.4.0) — Batch 2
+
+- **Added** **Beziehungs-Arc — Figuren-Entwicklung über die Zeit**: Eine Beziehung kann jetzt
+  einen Verlauf über die Kapitel tragen (`arc: [{ chapter, intensity }]`). Ab **zwei** Punkten
+  hat der Verlauf Vorrang vor der Einzel-Intensität; der Kanon zeigt dann nicht mehr einen Wert,
+  sondern die Entwicklung („distrust arc: −0,6 (Kap. 1) → 0,2 (Kap. 12)"), sodass Ausbau und
+  Prüfungen den Werdegang kennen statt nur den Endzustand.
+  - **Charakter-Editor**: pro Beziehung ein aufklappbarer **Verlaufs-Editor** (Kapitel +
+    Intensitäts-Slider je Punkt, hinzufügen/löschen) mit Sparkline und Δ-Anzeige.
+  - **Kontinuitäts-Ansicht**: Beziehungen mit Verlauf zeigen eine Sparkline in der Liste.
+  - Helfer in `data/continuity.ts` (`hasArc`, `arcAt`, `formatArc`, `arcDelta`, `sortArc`) und
+    `lib/graph.ts` (`sparklinePath`) — alle pur und geprüft (25/25).
+
 ### Mittelfristig-Paket (Ziel: 0.4.0) — Batch 1
 
 - **Added** **Fakten-Check als eigener Report** (`POST /api/continuity/check`): prüft ein Kapitel
@@ -25,8 +38,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   Status, Kapitelstand, Wortsumme und Fortschrittsbalken; **Lücken** (gelöschte Bände) und Bände
   **ohne Storyboard** werden markiert. Klick auf einen Band öffnet ihn. Helfer:
   `lib/seriesOverview.ts` (pur, getestet).
-- **Added** **Antwort-Cache** für wiederholbare Analysen (`src/server/cache.ts`): LRU mit
-  200 Einträgen und 30 Min TTL über einen SHA-256-Schlüssel aus Modell, Prompt, Temperatur und
+- **Added** **Antwort-Cache** für wiederholbare Analysen (`src/server/cache.ts`): LRU mit  200 Einträgen und 30 Min TTL über einen SHA-256-Schlüssel aus Modell, Prompt, Temperatur und
   Limit. **Opt-in pro Aufruf** — nur Welt-Extraktion, Figuren-Extraktion, Kontinuitäts-Extraktion,
   Fakten-Check und Timeline-Prüfung. Kreative Generierungen (Storyboard, Rohentwurf, Ausbau,
   Kohärenz, Stil) werden **nie** gecacht, damit „erneut generieren" wirklich neu generiert.

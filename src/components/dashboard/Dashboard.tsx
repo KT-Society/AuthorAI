@@ -59,6 +59,7 @@ import { ChaptersView } from "./ChaptersView";
 import { CharactersView } from "./CharactersView";
 import { ContinuityView } from "./ContinuityView";
 import { DashboardView } from "./DashboardView";
+import { JobCenter } from "./JobCenter";
 import { LibraryView } from "./LibraryView";
 import { PlotBoardView } from "./PlotBoardView";
 import { ResearchView } from "./ResearchView";
@@ -538,6 +539,11 @@ export function Dashboard({
       }}
     >
       <div className="relative min-h-screen">
+        {/* Hintergrund-Jobs: sichtbar, auch wenn der auslösende Dialog zu ist. */}
+        <div className="pointer-events-none fixed bottom-6 right-6 z-[65] w-80 print:hidden">
+          <JobCenter />
+        </div>
+
         <div className="mx-auto flex max-w-[1600px] gap-6 px-3 py-4 lg:px-6 lg:py-6">
           <Sidebar
             active={openedBook ? "library" : activeNav}

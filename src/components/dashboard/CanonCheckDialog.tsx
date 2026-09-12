@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, ShieldCheck, X } from 
 
 import { Button } from "@/components/ui/button";
 
+import { createJob, finishJob, isCancelled, updateJob } from "@/lib/jobs";
 import type { CanonCheckResult } from "@/services/continuity";
 
 export interface CanonCheckChapter {
@@ -47,21 +48,47 @@ export function CanonCheckDialog({
     setOutcomes([]);
     setProgress({ done: 0, total: chapters.length });
 
+    const jobId = createJob({
+      title: `Fakten-Check · ${chapters.length} Kapitel`,
+      kind: "canon-check",
+      total: chapters.length,
+    });
+
     const collected: ChapterOutcome[] = [];
+    let aborted = false;
+    let failure: string | null = null;
+
     for (let position = 0; position < chapters.length; position += 1) {
       const chapter = chapters[position];
       if (!chapter) continue;
+      if (isCancelled(jobId)) {
+        aborted = true;
+        break;
+      }
+      updateJob(jobId, { done: position, label: `Kapitel ${chapter.index + 1}` });
       try {
         const result = await onCheck(chapter.index);
         collected.push({ chapter, result });
       } catch (err) {
-        collected.push({
-          chapter,
-          error: err instanceof Error ? err.message : "Unbekannter Fehler.",
-        });
+        const message = err instanceof Error ? err.message : "Unbekannter Fehler.";
+        failure = message;
+        collected.push({ chapter, error: message });
       }
       setOutcomes([...collected]);
       setProgress({ done: position + 1, total: chapters.length });
+    }
+
+    const violations = collected.reduce(
+      (sum, outcome) => sum + (outcome.result?.violations.length ?? 0),
+      0,
+    );
+    if (aborted) {
+      finishJob(jobId, "cancelled", "Fakten-Check abgebrochen");
+    } else if (failure && collected.every((outcome) => outcome.error)) {
+      finishJob(jobId, "error", failure);
+    } else {
+      updateJob(jobId, { done: chapters.length });
+      finishJob(jobId, "done", `${violations} Widerspruch/Widersprüche`);
     }
 
     setBusy(false);

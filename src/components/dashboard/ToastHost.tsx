@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { subscribeToasts } from "@/lib/toast";
@@ -15,22 +15,28 @@ export function ToastHost() {
 
   return (
     <div className="pointer-events-none fixed bottom-6 left-1/2 z-[70] flex -translate-x-1/2 flex-col items-center gap-2 print:hidden">
-      {items.map((item) => (
-        <div
-          key={item.id}
-          className={cn(
-            "glass-strong float-in flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium shadow-lg",
-            item.tone === "ok" ? "text-brand-emerald" : "text-brand-rose",
-          )}
-        >
-          {item.tone === "ok" ? (
-            <CheckCircle2 className="size-4 shrink-0" />
-          ) : (
-            <AlertTriangle className="size-4 shrink-0" />
-          )}
-          {item.message}
-        </div>
-      ))}
+      {items.map((item) => {
+        const tone =
+          item.tone === "ok"
+            ? "text-brand-emerald"
+            : item.tone === "info"
+              ? "text-brand-cyan"
+              : "text-brand-rose";
+        const Icon =
+          item.tone === "ok" ? CheckCircle2 : item.tone === "info" ? Info : AlertTriangle;
+        return (
+          <div
+            key={item.id}
+            className={cn(
+              "glass-strong float-in flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium shadow-lg",
+              tone,
+            )}
+          >
+            <Icon className="size-4 shrink-0" />
+            {item.message}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 /** Minimaler Toast-Store (global, ohne Abhängigkeit). */
 
-export type ToastTone = "ok" | "error";
+export type ToastTone = "ok" | "error" | "info";
 
 export interface ToastItem {
   id: number;
