@@ -36,7 +36,6 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   damit die Ansicht beim ersten Start nicht leer ist.
 
 ### Serien-Modus (Mehrbänder)
-
 - **Added** **Reihen** (`src/data/series.ts`): `Series { id, name, description?, volumeIds[] }`.
   Die Reihe hält die Band-IDs in **Lesereihenfolge** — `Book` bekommt bewusst kein `seriesId`
   (eine Quelle der Wahrheit, kein Auseinanderlaufen). Pro Profil gespeichert
@@ -65,6 +64,29 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
     (`CanonFact`) und Beziehungen aus dem Beziehungsgraph (`CharacterRelation`).
   - Beim Anlegen wird das Buch automatisch als letzter Band an die Reihe gehängt;
     ohne Vorbände eröffnet es die Reihe.
+
+### Fixed
+
+- **Kapitel wuchsen nach Kohärenz/Stil auf das 2–3-Fache** (4.000 → 12.253 Wörter): Die
+  Fortsetzung (`completeProse`) hing Prosa an, sobald der Text „abgebrochen aussah" — und
+  `looksTruncated` hielt **jeden auf ein deutsches Schlusszeichen endenden Text** für
+  abgebrochen, weil `“` (U+201C) in der Schlusszeichen-Klasse fehlte. Jede Stufe schrieb
+  „mindestens 150 Wörter" weiter, bis zu dreimal. Jetzt:
+  - `looksTruncated` akzeptiert **alle** Schlusszeichen (inkl. `“”‘’»›`, tolerant gegenüber
+    typografischem Abstand) — Dialogenden gelten nicht mehr als Abbruch.
+  - `completeProse` läuft **nur noch bei hartem Signal** (`finish_reason: "length"`), höchstens
+    zwei Schritte, max. 600 Wörter Ergänzung und ein kleineres Ausgabelimit.
+  - Das **Ausgabelimit pro Chunk** wird am Chunk ausgerichtet (`~2,4 Tokens/Wort`, max. 4.000)
+    — vorher standen pauschal 4.000 Tokens für einen 1.000-Wörter-Chunk zur Verfügung.
+  - **Wachstumsgrenze**: Überarbeitung darf max. ~⅓ länger werden. Antwortet das Modell länger,
+    wird einmal mit klarer Ansage nachgefasst; danach bleibt der **Original-Teil** stehen und der
+    Bericht nennt es („Teil 3/5 unverändert übernommen"). Ein Wachstum über 40 % über das ganze
+    Kapitel wird im Bericht gemeldet.
+  - Betrifft `POST /api/chapter/consistency` und `POST /api/chapter/style` (Ausbau darf weiter
+    wachsen — das ist seine Aufgabe).
+
+_Bereits aufgeblähte Kapitel_: Im **Versionen**-Panel liegt je Kapitel eine Momentaufnahme
+„vor Kohärenz-Prüfung" / „vor Stil-Prüfung" — darüber wiederherstellbar.
 
 _Nächste Themen siehe [`roadmap.md`](roadmap.md)._
 

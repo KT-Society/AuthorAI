@@ -403,7 +403,7 @@ export async function draftChapter(input: ChapterInput): Promise<string> {
 OUTPUT LANGUAGE: ${input.language}
 Write the ~500 word rough draft of this chapter now.`;
 
-  const content = await chatCompletion({
+  const { content: draftContent, finishReason: draftFinish } = await chatCompletionDetailed({
     model: input.model,
     system: roughDraftSystem(input.language),
     user,
@@ -415,8 +415,9 @@ Write the ~500 word rough draft of this chapter now.`;
     model: input.model,
     system: roughDraftSystem(input.language),
     language: input.language,
-    text: stripLeadingHeadings(extractProse(content)),
+    text: stripLeadingHeadings(extractProse(draftContent)),
     label: "rough draft",
+    truncated: draftFinish === "length",
   });
 }
 
@@ -467,44 +468,61 @@ function stripLeadingHeadings(text: string): string {
  * Modelle brechen trotz Auftrag mitten im Satz ab (Token-Limit oder "lite"-Modell).
  * Diese Funktion setzt die Prosa fort, bis sie auf einem Satzende steht.
  */
-async function completeProse(params: {
-  model: string;
-  system: string;
-  language: string;
-  text: string;
-  label: string;
-}): Promise<string> {
-  let text = params.text;
+/** Obergrenze einer einzelnen Fortsetzung — eine Ergänzung, keine neue Szene. */
+const CONTINUATION_MAX_WORDS = 600;
+/** Maximal zwei Fortsetzungs-Schritte (jeder davon nur bei hartem Token-Limit). */
+const CONTINUATION_MAX_DEPTH = 2;
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (!looksTruncated(text)) break;
+/**
+ * Schreibt eine **wirklich** am Token-Limit abgebrochene Prosa zu Ende.
+ *
+ * Wichtig: nur bei hartem Signal (`finish_reason: "length"`) — ein normal beendeter Text
+ * wird nie verlängert. Sonst hängt die Pipeline unbemerkt Prosa an (Kapitel wachsen
+ * von 4.000 auf 12.000 Wörter). Die Länge der Ergänzung ist zusätzlich gedeckelt.
+ */
+async function completeProse(
+  params: {
+    model: string;
+    system: string;
+    language: string;
+    text: string;
+    label: string;
+    /** Vom Modell gemeldet: die Antwort lief ins Ausgabelimit. */
+    truncated: boolean;
+  },
+  depth = 0,
+): Promise<string> {
+  if (!params.truncated || depth >= CONTINUATION_MAX_DEPTH) return params.text;
 
-    const tail = text.slice(-2000);
-    const { content, finishReason } = await chatCompletionDetailed({
-      model: params.model,
-      system: params.system,
-      user: `${languageLock(params.language)}
-CONTINUATION REQUEST: the ${params.label} below breaks off mid-sentence.
-Continue the prose seamlessly from where it stops — same voice, same tense, same scene.
+  const tail = params.text.slice(-2000);
+  const { content, finishReason } = await chatCompletionDetailed({
+    model: params.model,
+    system: params.system,
+    user: `${languageLock(params.language)}
+CONTINUATION REQUEST: the ${params.label} below was cut off by the output limit.
+Finish ONLY the current sentence and the current paragraph — same voice, same tense, same scene.
 Do NOT repeat anything, do NOT restart, do NOT add headings, titles, notes or markers, do NOT summarise.
-Write at least 150 more words and finish on a complete sentence or a deliberate hook.
+Do NOT open a new scene and do NOT introduce new plot. One short bridge at most.
 
 END OF THE ${params.label.toUpperCase()} SO FAR (for continuity):
 ...${tail}
 
-Continue now, entirely in ${params.language}.`,
-      maxTokens: 2500,
-      temperature: 0.85,
-    });
+Finish the paragraph now, entirely in ${params.language}.`,
+    maxTokens: 900,
+    temperature: 0.7,
+  });
 
-    const appended = extractProse(stripLeadingHeadings(content.trim()));
-    if (!appended) break;
-    text = `${text}\n\n${appended}`;
+  const appended = extractProse(stripLeadingHeadings(content.trim()));
+  if (!appended) return params.text;
+  // Sicherung: eine Fortsetzung darf den Text nicht aufblähen.
+  if (countWords(appended) > CONTINUATION_MAX_WORDS) return params.text;
 
-    // Auch die Fortsetzung kann ins Limit laufen — dann erneut versuchen.
-    if (finishReason !== "length" && !looksTruncated(text)) break;
+  const text = `${params.text}\n\n${appended}`;
+
+  // Auch die Fortsetzung kann erneut ins Limit laufen — dann genau ein weiterer Versuch.
+  if (finishReason === "length") {
+    return completeProse({ ...params, text, truncated: true }, depth + 1);
   }
-
   return text;
 }
 
@@ -550,6 +568,7 @@ Write the complete ${target}-word chapter now, entirely in ${input.language}.`;
   // Continuation loop: models (especially "lite" ones) often stop short of the target.
   let words = countWords(text);
   let attempts = 0;
+  let lastFinish: string | undefined;
   while (words < target * 0.9 && attempts < 3) {
     attempts += 1;
     const remaining = Math.max(300, target - words);
@@ -574,6 +593,7 @@ Continue now, entirely in ${input.language}.`,
     if (!appended) break;
     text = `${text}\n\n${appended}`;
     words = countWords(text);
+    lastFinish = finishReason;
 
     // Genug Wörter, aber mitten im Satz abgebrochen: unten wird vervollständigt.
     if (finishReason !== "length" && words >= target * 0.9) break;
@@ -585,6 +605,8 @@ Continue now, entirely in ${input.language}.`,
     language: input.language,
     text,
     label: "chapter",
+    // Nur bei hartem Token-Limit verlängern (siehe completeProse).
+    truncated: lastFinish === "length",
   });
 }
 
@@ -596,6 +618,11 @@ const PASS_CHUNK_WORDS = 1000;
 const PASS_CHUNK_MAX_WORDS = 1400;
 /** Ausgabelimit pro Chunk — bewusst unter typischen Modell-Limits (2048–4096). */
 const PASS_CHUNK_MAX_TOKENS = 4000;
+/**
+ * Überarbeitung darf **nicht** wachsen. Kohärenz/Stil sind Politur: mehr als ~⅓ länger
+ * heißt, das Modell ergänzt statt zu überarbeiten (Kapitel wuchsen so von 4.000 auf 12.000).
+ */
+const PASS_CHUNK_MAX_GROWTH = 1.35;
 
 /** Zerlegt einen Absatz an Satzgrenzen, wenn er allein schon zu lang ist. */
 function splitLongParagraph(paragraph: string, maxWords: number): string[] {
@@ -841,51 +868,71 @@ Rewrite ONLY this part (~${chunkWords} words) — never the neighbouring parts, 
         }\n\nPART ${index + 1} TEXT:\n${chunk}`;
 
     let parsed: PassResult | null = null;
+    let truncatedByLimit = false;
+    let retryHint = "";
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const reminder =
-        attempt === 0
-          ? ""
-          : `\n\nIMPORTANT: the previous attempt returned the wrong span. Return ONLY part ${index + 1} of ${chunks.length} — about ${chunkWords} words, starting at its first sentence and ending at its last.`;
-
-      const content = await chatCompletion({
+      const { content, finishReason } = await chatCompletionDetailed({
         model: input.model,
         system,
-        user: `${context}\n\n${partIntro}\n\n${instruction}${reminder}`,
-        maxTokens: PASS_CHUNK_MAX_TOKENS,
+        user: `${context}\n\n${partIntro}\n\n${instruction}${retryHint}`,
+        // Ausgabelimit am Chunk ausrichten: kein Platz für 3× so viel Text.
+        maxTokens: Math.min(
+          PASS_CHUNK_MAX_TOKENS,
+          Math.max(800, Math.round(chunkWords * 2.4)),
+        ),
         temperature: kind === "consistency" ? 0.35 : 0.6,
       });
 
       const candidate = parsePassOutput(content);
       const text = candidate.text.trim();
-      if (!text) continue;
-      // Modell hat das ganze Kapitel statt des Teils zurückgegeben → einmal nachfassen.
-      if (!isOnly && text.length > chunk.length * 1.6) continue;
+
+      if (!text) {
+        retryHint = `\n\nIMPORTANT: the previous attempt returned no text. Return ONLY part ${index + 1} of ${chunks.length} — about ${chunkWords} words.`;
+        continue;
+      }
+
+      // Zu lang: Modell hat ergänzt oder das ganze Kapitel zurückgegeben → einmal nachfassen.
+      if (text.length > chunk.length * PASS_CHUNK_MAX_GROWTH) {
+        retryHint = `\n\nIMPORTANT: the previous attempt was about ${Math.round(text.length / Math.max(1, chunk.length) * 10) / 10}× LONGER than part ${index + 1}. That is wrong.${
+          isOnly
+            ? " Return the same text, polished — do not expand, do not add scenes or sentences."
+            : ` Return ONLY part ${index + 1} (~${chunkWords} words) — never the other parts.`
+        } Keep the length.`;
+        continue;
+      }
 
       parsed = { ...candidate, text };
+      truncatedByLimit = finishReason === "length";
       break;
     }
 
     if (!parsed) {
-      throw new ApiError(
-        isOnly
-          ? "Das Modell hat keinen überarbeiteten Text geliefert. Bitte ein anderes/größeres Modell wählen."
-          : `Teil ${index + 1}/${chunks.length} lieferte keinen brauchbaren Text (das Modell gab den falschen Abschnitt zurück). Bitte ein anderes Modell wählen.`,
-        502,
+      // Kein brauchbarer Teil: Original behalten, statt das Kapitel aufzublähen.
+      parts.push(chunk);
+      notes.push(
+        `⚠️ Teil ${index + 1}/${chunks.length} unverändert übernommen — das Modell hat deutlich zu lang geantwortet (${kind === "consistency" ? "Kohärenz" : "Stil"} dort nicht angewendet).`,
       );
+      continue;
     }
 
     let nextText = parsed.text;
 
-    // Am Token-Limit abgebrochenen Teil zu Ende schreiben.
-    if (looksTruncated(nextText)) {
+    // Nur bei hartem Token-Limit fortsetzen (siehe completeProse) — nie „auf Verdacht".
+    if (truncatedByLimit) {
       nextText = await completeProse({
         model: input.model,
         system,
         language: input.language,
         text: nextText,
         label: isOnly ? "chapter" : `chapter part ${index + 1}`,
+        truncated: true,
       });
+      if (nextText.length > chunk.length * PASS_CHUNK_MAX_GROWTH) {
+        // Auch die Fortsetzung hat aufgebläht → Original behalten.
+        parts.push(chunk);
+        continue;
+      }
     }
 
     if (chunk.length > 200 && nextText.length < chunk.length * 0.4) {
@@ -911,6 +958,15 @@ Rewrite ONLY this part (~${chunkWords} words) — never the neighbouring parts, 
     throw new ApiError(
       "Die Antwort war unvollständig (der Text wurde stark gekürzt). Bitte erneut versuchen oder ein anderes Modell wählen.",
       502,
+    );
+  }
+
+  // Überarbeitung ist Politur: deutlich länger heißt „ergänzt statt überarbeitet".
+  const previousWords = countWords(previousText);
+  const nextWords = countWords(nextText);
+  if (previousWords > 50 && nextWords > previousWords * 1.4) {
+    notes.push(
+      `⚠️ Der Text ist von ${previousWords.toLocaleString("de-DE")} auf ${nextWords.toLocaleString("de-DE")} Wörter gewachsen (+${Math.round((nextWords / previousWords - 1) * 100)} %). Bitte prüfen, ob das Modell ergänzt statt überarbeitet hat.`,
     );
   }
 

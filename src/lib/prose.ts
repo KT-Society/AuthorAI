@@ -44,8 +44,14 @@ export function extractProse(raw: string): string {
   return stripMarkers(dropNotes(text));
 }
 
-/** Endet der Text auf einem Satzzeichen (statt mitten im Satz/Wort)? */
-const SENTENCE_END = /[.!?…]["'»”‘’)\]}]*$/;
+/**
+ * Endet der Text auf einem Satzzeichen (statt mitten im Satz/Wort)?
+ *
+ * Wichtig: **alle** Schlusszeichen einschließen. Fehlt eines (z. B. das deutsche
+ * schließende Anführungszeichen „…“), gilt guter Text als abgebrochen — und die
+ * Fortsetzung hängt dann Prosa an, die niemand wollte.
+ */
+const SENTENCE_END = /[.!?…][»›“”‘’"')\]}\s]*$/;
 
 export function looksTruncated(text: string): boolean {
   const trimmed = text.trim().replace(/[*_`]+$/, "").trim();
