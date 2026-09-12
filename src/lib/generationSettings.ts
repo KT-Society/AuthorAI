@@ -73,6 +73,31 @@ export function writeStageModel(stage: ModelStage, value: string): void {
   }
 }
 
+/**
+ * Vollständiger Record über **alle** Stufen (leer).
+ *
+ * Pflicht: `Record<ModelStage, string>` mit nur drei Schlüsseln ist typkompatibel, aber
+ * `models.consistency` ist dann `undefined` — genau so blieben Stufen-Modelle unsichtbar und
+ * `models[stage].trim()` stürzte ab. Immer diesen Helfer benutzen.
+ */
+export function emptyStageModels(): Record<ModelStage, string> {
+  return Object.fromEntries(MODEL_STAGES.map((stage) => [stage, ""])) as Record<ModelStage, string>;
+}
+
+/** **Alle** Stufen roh aus dem Speicher (leer = erbt das Standard-Model). */
+export function readStageModelsRaw(): Record<ModelStage, string> {
+  return Object.fromEntries(
+    MODEL_STAGES.map((stage) => [stage, readStageModelRaw(stage)]),
+  ) as Record<ModelStage, string>;
+}
+
+/** **Alle** Stufen aufgelöst (eigene ID oder geerbtes Standard-Model). */
+export function readStageModels(): Record<ModelStage, string> {
+  return Object.fromEntries(
+    MODEL_STAGES.map((stage) => [stage, readStageModel(stage)]),
+  ) as Record<ModelStage, string>;
+}
+
 export function readLanguage(): string | null {
   return localStorage.getItem(LANGUAGE_STORAGE_KEY);
 }

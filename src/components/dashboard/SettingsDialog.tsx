@@ -16,9 +16,10 @@ import {
   FALLBACK_LANGUAGES,
   MODEL_STAGE_LABELS,
   MODEL_STAGES,
+  emptyStageModels,
   readLanguage,
   readModel,
-  readStageModelRaw,
+  readStageModelsRaw,
   readStyleProfile,
   writeLanguage,
   writeModel,
@@ -54,11 +55,7 @@ export function SettingsDialog({
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const backupProfileInputRef = useRef<HTMLInputElement | null>(null);
   const [model, setModel] = useState("");
-  const [stageModels, setStageModels] = useState<Record<ModelStage, string>>({
-    storyboard: "",
-    draft: "",
-    expand: "",
-  });
+  const [stageModels, setStageModels] = useState<Record<ModelStage, string>>(emptyStageModels);
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [styleProfile, setStyleProfile] = useState<StyleProfile>(DEFAULT_STYLE_PROFILE);
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -66,11 +63,7 @@ export function SettingsDialog({
   useEffect(() => {
     if (!open) return;
     setModel(readModel());
-    setStageModels({
-      storyboard: readStageModelRaw("storyboard"),
-      draft: readStageModelRaw("draft"),
-      expand: readStageModelRaw("expand"),
-    });
+    setStageModels(readStageModelsRaw());
     setLanguage(readLanguage() ?? DEFAULT_LANGUAGE);
     setStyleProfile(readStyleProfile());
     fetchConfig().then((data) => {
@@ -149,23 +142,55 @@ export function SettingsDialog({
                 Model pro Schritt
               </p>
               <div className="space-y-3">
-                {MODEL_STAGES.map((stage) => (
-                  <div key={stage}>
-                    <label className="mb-1.5 block text-[11px] font-medium text-muted-foreground">
-                      {MODEL_STAGE_LABELS[stage]}
-                    </label>
-                    <Input
-                      value={stageModels[stage]}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setStageModels((prev) => ({ ...prev, [stage]: value }));
-                        writeStageModel(stage, value);
-                      }}
-                      placeholder={model.trim() || "OpenRouter Model-ID"}
-                      className="glass h-9 rounded-lg border-white/10 text-sm"
-                    />
-                  </div>
-                ))}
+                {MODEL_STAGES.map((stage) => {
+                  const own = stageModels[stage].trim().length > 0;
+                  return (
+                    <div key={stage}>
+                      <label className="mb-1.5 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                        {MODEL_STAGE_LABELS[stage]}
+                        {own ? (
+                          <span className="rounded-full border border-brand-violet/40 bg-brand-violet/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand-violet">
+                            eigene Model-ID
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px]">
+                            erbt Standard
+                          </span>
+                        )}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={stageModels[stage]}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setStageModels((prev) => ({ ...prev, [stage]: value }));
+                            writeStageModel(stage, value);
+                          }}
+                          placeholder={model.trim() || "OpenRouter Model-ID"}
+                          className="glass h-9 rounded-lg border-white/10 text-sm"
+                        />
+                        {own ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStageModels((prev) => ({ ...prev, [stage]: "" }));
+                              writeStageModel(stage, "");
+                            }}
+                            className="shrink-0 rounded-lg border border-white/10 px-2 py-1.5 text-[10px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                            title="Eigene Model-ID entfernen — die Stufe erbt wieder das Standard-Model"
+                          >
+                            zurücksetzen
+                          </button>
+                        ) : null}
+                      </div>
+                      {own ? (
+                        <p className="mt-1 text-[10px] text-brand-violet">
+                          Nutzt <strong>{stageModels[stage]}</strong> statt des Standard-Models.
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
               <p className="mt-3 text-[11px] text-muted-foreground">
                 Leer = erbt das Standard-Model. Für jeden Schritt kannst du eine eigene OpenRouter

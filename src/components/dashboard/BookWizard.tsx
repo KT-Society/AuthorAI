@@ -30,8 +30,9 @@ import { cn } from "@/lib/utils";
 import {
   FALLBACK_LANGUAGES,
   MODEL_STAGE_LABELS,
+  emptyStageModels,
   readLanguage,
-  readStageModel,
+  readStageModels,
   readStyleProfileHint,
   writeLanguage,
   writeStageModel,
@@ -64,8 +65,7 @@ import { checkConsistency, refineStyle } from "@/services/story";
 import { ProgressBar } from "./primitives";
 import { CoverEditorDialog } from "./CoverEditorDialog";
 
-const COVER_PALETTE: [string, string][] = [
-  ["hsl(258 90% 62%)", "hsl(342 90% 58%)"],
+const COVER_PALETTE: [string, string][] = [  ["hsl(258 90% 62%)", "hsl(342 90% 58%)"],
   ["hsl(186 100% 52%)", "hsl(232 85% 60%)"],
   ["hsl(38 95% 58%)", "hsl(342 90% 58%)"],
   ["hsl(158 84% 42%)", "hsl(186 100% 50%)"],
@@ -122,11 +122,7 @@ export function BookWizard({
   const [idea, setIdea] = useState("");
   const [seriesId, setSeriesId] = useState("");
   const [chapterCount, setChapterCount] = useState("12");
-  const [models, setModels] = useState<Record<ModelStage, string>>({
-    storyboard: "",
-    draft: "",
-    expand: "",
-  });
+  const [models, setModels] = useState<Record<ModelStage, string>>(emptyStageModels);
   const [language, setLanguage] = useState("German");
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [storyboard, setStoryboard] = useState<Storyboard | null>(null);
@@ -164,11 +160,8 @@ export function BookWizard({
     setBusy(null);
     setProgress(null);
     setError(null);
-    setModels({
-      storyboard: readStageModel("storyboard"),
-      draft: readStageModel("draft"),
-      expand: readStageModel("expand"),
-    });
+    // **Alle** Stufen lesen — sonst wäre `models.consistency`/`models.style` undefined.
+    setModels(readStageModels());
 
     fetchConfig().then((data) => {
       if (!data) return;
@@ -236,7 +229,7 @@ export function BookWizard({
   };
 
   const ensureModel = (stageId: ModelStage): string | null => {
-    const id = models[stageId].trim();
+    const id = (models[stageId] ?? "").trim();
     if (!id) {
       setError(`Bitte eine Model-ID für „${MODEL_STAGE_LABELS[stageId]}“ eintragen.`);
       return null;

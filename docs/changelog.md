@@ -8,6 +8,22 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Fixed
+
+- **Stufen-Modelle waren in den Einstellungen unsichtbar** — die App nutzte ein anderes Modell,
+  als die Oberfläche anzeigte. Ursache: `stageModels` wurde nur mit `storyboard`, `draft` und
+  `expand` befüllt; für **Kohärenz** und **Stil** war der Wert `undefined`, das Feld zeigte
+  deshalb nur den *Platzhalter* (das Standard-Model). Eine dort gespeicherte eigene Model-ID
+  blieb aktiv, war aber nicht sichtbar.
+  - `lib/generationSettings.ts` hat jetzt `emptyStageModels()`, `readStageModelsRaw()` und
+    `readStageModels()` — sie erzeugen **immer** alle fünf Stufen.
+  - Die Einstellungen zeigen je Stufe **„eigene Model-ID"** oder **„erbt Standard"**, nennen bei
+    eigener ID ausdrücklich das wirksame Modell und bieten **„zurücksetzen"** (entfernt die
+    Überschreibung, die Stufe erbt wieder).
+  - **Derselbe Fehler im Buch-Wizard, dort mit Absturz**: `models.consistency`/`models.style`
+    waren `undefined`, `ensureModel` rief `undefined.trim()` auf — die Kohärenz- und Stil-Schritte
+    des Wizards konnten dadurch gar nicht sauber starten. Gleiche Ursache, gleicher Fix.
+
 ### Figuren-Dubletten
 
 - **Added** **Dublettenerkennung für Figuren** (`src/lib/characterMatch.ts`): Anreden, Ränge und
