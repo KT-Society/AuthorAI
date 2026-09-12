@@ -65,6 +65,7 @@ import { manuscriptOf } from "@/lib/bookManuscript";
 import { copyText } from "@/lib/clipboard";
 import { looksTruncated } from "@/lib/prose";
 import { createJob, finishJob, isCancelled, updateJob } from "@/lib/jobs";
+import { streamJson } from "@/services/stream";
 import { showToast } from "@/lib/toast";
 import { buildDocx } from "@/lib/docx";
 import { buildEpub } from "@/lib/epub";
@@ -156,6 +157,8 @@ export function BookDetailView({
   const [coverVariantsOpen, setCoverVariantsOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [canonCheckOpen, setCanonCheckOpen] = useState(false);
+  /** Live-Vorschau während eines gestreamten Laufs (null = keine Vorschau). */
+  const [streamText, setStreamText] = useState<string | null>(null);
   const [seriesOpen, setSeriesOpen] = useState(false);
   const [epubCover, setEpubCover] = useState<"front" | "back" | "none">("front");
   const [exportScope, setExportScope] = useState("all");
@@ -590,20 +593,27 @@ export function BookDetailView({
     }
     setError(null);
     setBusy(`Rohentwurf Kapitel ${index + 1}…`);
+    setStreamText("");
     try {
-      const draft = await draftChapter({
-        storyboard: book.storyboard,
-        chapterIndex: index,
-        model,
-        language,
-        scenes: scenesFor(index),
-        canon,
-      });
+      // Streaming: Der Text wächst live mit (Fallback im Server, falls kein SSE).
+      const draft = await streamJson(
+        "/api/chapter/draft/stream",
+        {
+          storyboard: book.storyboard,
+          chapterIndex: index,
+          model,
+          language,
+          scenes: scenesFor(index),
+          canon,
+        },
+        { onDelta: (delta) => setStreamText((prev) => `${prev ?? ""}${delta}`) },
+      );
       updateChapter(index, { draft });
       onWordsWritten(countWords(draft));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
+      setStreamText(null);
       setBusy(null);
     }
   };
@@ -668,23 +678,30 @@ export function BookDetailView({
     }
     setError(null);
     setBusy(`Ausbau Kapitel ${index + 1}…`);
+    setStreamText("");
     if ((manuscript[index]?.expanded ?? "").trim()) pushSnapshot(index, "vor Ausbau");
     try {
-      const expanded = await expandChapter({
-        storyboard: book.storyboard,
-        chapterIndex: index,
-        model,
-        language,
-        draft: manuscript[index]?.draft ?? "",
-        targetWords: targetFor(manuscript[index]),
-        scenes: scenesFor(index),
-        canon,
-      });
+      // Streaming: Der Ausbau ist die längste Einzelantwort — hier lohnt die Live-Vorschau.
+      const expanded = await streamJson(
+        "/api/chapter/expand/stream",
+        {
+          storyboard: book.storyboard,
+          chapterIndex: index,
+          model,
+          language,
+          draft: manuscript[index]?.draft ?? "",
+          targetWords: targetFor(manuscript[index]),
+          scenes: scenesFor(index),
+          canon,
+        },
+        { onDelta: (delta) => setStreamText((prev) => `${prev ?? ""}${delta}`) },
+      );
       updateChapter(index, { expanded });
       onWordsWritten(countWords(expanded));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
+      setStreamText(null);
       setBusy(null);
     }
   };
@@ -1873,6 +1890,18 @@ export function BookDetailView({
                     </p>
                   )}
                 </div>
+
+                {streamText !== null ? (
+                  <div className="mt-3 rounded-xl border border-brand-cyan/30 bg-brand-cyan/5 p-3">
+                    <p className="mb-1 inline-flex items-center gap-2 text-[11px] font-semibold text-brand-cyan">
+                      <Loader2 className="size-3.5 animate-spin" />
+                      Live-Vorschau · {countWords(streamText).toLocaleString("de-DE")} Wörter
+                    </p>
+                    <div className="max-h-52 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-foreground/85">
+                      {streamText || "…"}
+                    </div>
+                  </div>
+                ) : null}
 
                 <details open className="mt-1 rounded-xl border border-white/10 bg-white/5 p-3">
                   <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">

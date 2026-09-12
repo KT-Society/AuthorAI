@@ -32,7 +32,12 @@ import type {
   WorldItem,
 } from "../data/story";
 import { EMPTY_WORLD } from "../data/story";
-import { chatCompletion, chatCompletionDetailed, cleanJsonBlock } from "./llm";
+import {
+  chatCompletion,
+  chatCompletionDetailed,
+  chatCompletionStream,
+  cleanJsonBlock,
+} from "./llm";
 import { extractProse, looksTruncated } from "../lib/prose";
 import { filterNoOpNotes } from "../lib/passNotes";
 import { normalizeWorldTitle } from "../lib/worldMatch";
@@ -392,7 +397,10 @@ End on a hook that makes the next chapter inevitable.
 Write ALL prose in ${language}.`;
 }
 
-export async function draftChapter(input: ChapterInput): Promise<string> {
+export async function draftChapter(
+  input: ChapterInput,
+  onDelta?: (text: string) => void,
+): Promise<string> {
   const chapter = input.storyboard.chapters[input.chapterIndex];
   if (!chapter) {
     throw new ApiError("Kapitel nicht gefunden.", 400);
@@ -403,17 +411,22 @@ export async function draftChapter(input: ChapterInput): Promise<string> {
 OUTPUT LANGUAGE: ${input.language}
 Write the ~500 word rough draft of this chapter now.`;
 
-  const { content: draftContent, finishReason: draftFinish } = await chatCompletionDetailed({
+  const draftParams = {
     model: input.model,
     system: roughDraftSystem(input.language),
     user,
     maxTokens: 2000,
     temperature: 0.9,
-  });
+  };
+  // Mit Callback streamen (Live-Vorschau), sonst normal anfragen.
+  const { content: draftContent, finishReason: draftFinish } = onDelta
+    ? await chatCompletionStream(draftParams, onDelta)
+    : await chatCompletionDetailed(draftParams);
+  const draftSystem = roughDraftSystem(input.language);
 
   return completeProse({
     model: input.model,
-    system: roughDraftSystem(input.language),
+    system: draftSystem,
     language: input.language,
     text: stripLeadingHeadings(extractProse(draftContent)),
     label: "rough draft",
@@ -531,7 +544,10 @@ export interface ExpandInput extends ChapterInput {
   targetWords: number;
 }
 
-export async function expandChapter(input: ExpandInput): Promise<string> {
+export async function expandChapter(
+  input: ExpandInput,
+  onDelta?: (text: string) => void,
+): Promise<string> {
   const chapter = input.storyboard.chapters[input.chapterIndex];
   if (!chapter) {
     throw new ApiError("Kapitel nicht gefunden.", 400);
@@ -553,17 +569,19 @@ ${input.draft.trim() || "(none provided — write the full chapter from the plan
 
 Write the complete ${target}-word chapter now, entirely in ${input.language}.`;
 
-  let text = stripLeadingHeadings(
-    (
-      await chatCompletion({
-        model: input.model,
-        system,
-        user,
-        maxTokens: 8000,
-        temperature: 0.85,
-      })
-    ).trim(),
-  );
+  const expandParams = {
+    model: input.model,
+    system,
+    user,
+    maxTokens: 8000,
+    temperature: 0.85,
+  };
+  // Erster (großer) Aufruf: mit Callback streamen (Live-Vorschau), sonst normal.
+  const firstContent = onDelta
+    ? (await chatCompletionStream(expandParams, onDelta)).content
+    : await chatCompletion(expandParams);
+
+  let text = stripLeadingHeadings(firstContent.trim());
 
   // Continuation loop: models (especially "lite" ones) often stop short of the target.
   let words = countWords(text);

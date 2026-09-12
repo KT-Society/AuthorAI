@@ -8,6 +8,21 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Mittelfristig-Paket (Ziel: 0.4.0) — Batch 3
+
+- **Added** **Job-Center — Fortschritt im Hintergrund** (`src/lib/jobs.ts`): Queue-Läufe
+  (Kohärenz/Stil über alle Kapitel, Ausbau, Fakten-Check) legen jetzt einen Job im Store an.
+  Der Store lebt **außerhalb von React** (Modul-Singleton + `useSyncExternalStore`), damit der
+  Fortschritt das Schließen des Dialogs überlebt — die Ergebnisse werden ohnehin pro Kapitel
+  ins Buch geschrieben.
+  - **Anzeige** (`JobCenter`, fest unten rechts): laufende Jobs mit Fortschrittsbalken,
+    aktuellem Kapitel und **Abbrechen**-Knopf; beendete Jobs mit Status, Meldung, Ausblenden
+    und „Aufräumen". Abschlüsse kommen als Toast (neuer Ton `info` für Abbrüche).
+  - **Abbruch** ist kooperativ: die Schleife prüft vor jedem Kapitel `isCancelled()` und beendet
+    sauber — das laufende Kapitel wird noch fertiggeschrieben, nichts halb gespeichert.
+  - Deterministische Reihenfolge (Zeitstempel + Sequenz), Abschluss-Erkennung ohne doppelte
+    Toasts, unbekannte IDs sind wirkungslos. Geprüft: 22/22.
+
 ### Mittelfristig-Paket (Ziel: 0.4.0) — Batch 2
 
 - **Added** **Beziehungs-Arc — Figuren-Entwicklung über die Zeit**: Eine Beziehung kann jetzt

@@ -49,6 +49,36 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+/**
+ * SSE-Antwort: `run` bekommt `emit` und schickt Ereignisse als `data: {...}`.
+ * Fehler nach dem Start werden als `{ type: "error" }` gesendet (der Status ist dann 200).
+ */
+function sseResponse(run: (emit: (event: Record<string, unknown>) => void) => Promise<void>): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const emit = (event: Record<string, unknown>) =>
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      try {
+        await run(emit);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unbekannter Fehler.";
+        emit({ type: "error", error: message });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
 function optionalInt(value: unknown, fallback: number): number {
   const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -219,6 +249,64 @@ const server = serve({
             seriesContext: optionalString(body.seriesContext),
           });
           return Response.json({ storyboard });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Streaming-Variante des Rohentwurfs: Textstücke kommen als SSE-Ereignisse.
+    "/api/chapter/draft/stream": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const chapterIndex = asChapterIndex(body.chapterIndex, storyboard.chapters.length);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const input = {
+            storyboard,
+            chapterIndex,
+            model,
+            language,
+            scenes: asScenes(body.scenes),
+            canon: optionalString(body.canon),
+          };
+          return sseResponse(async (emit) => {
+            const draft = await draftChapter(input, (delta) => emit({ type: "delta", text: delta }));
+            emit({ type: "done", text: draft });
+          });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Streaming-Variante des Ausbaus.
+    "/api/chapter/expand/stream": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const chapterIndex = asChapterIndex(body.chapterIndex, storyboard.chapters.length);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const input = {
+            storyboard,
+            chapterIndex,
+            model,
+            language,
+            scenes: asScenes(body.scenes),
+            canon: optionalString(body.canon),
+            draft: typeof body.draft === "string" ? body.draft : "",
+            targetWords: optionalInt(body.targetWords, 1200),
+          };
+          return sseResponse(async (emit) => {
+            const expanded = await expandChapter(input, (delta) =>
+              emit({ type: "delta", text: delta }),
+            );
+            emit({ type: "done", text: expanded });
+          });
         } catch (err) {
           return errorResponse(err);
         }
