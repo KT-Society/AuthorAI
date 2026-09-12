@@ -6,6 +6,7 @@
 import type { SceneConstraint, Storyboard, StoryCharacter, StoryWorld } from "@/data/story";
 
 import { postJson } from "./http";
+import { streamEvents } from "./stream";
 
 export interface StoryboardRequest {
   idea: string;
@@ -85,6 +86,60 @@ export async function refineStyle(input: PassRequest): Promise<PassResult> {
   );
   if (typeof data.text !== "string") throw new Error("Leerer Prüfbericht vom Server.");
   return { text: data.text, notes: Array.isArray(data.notes) ? data.notes : [], changed: data.changed };
+}
+
+export interface PassStreamHandlers {
+  /** Ein neuer Teil der Überarbeitung beginnt (Kapitel werden gechunkt). */
+  onPartStart?: (part: number, parts: number) => void;
+  /** Textstück des laufenden Teils. */
+  onPartDelta?: (text: string) => void;
+  /** Fertig bearbeiteter Teil. */
+  onPartDone?: (part: number, text: string) => void;
+}
+
+/**
+ * Gestreamte Überarbeitung (Kohärenz oder Stil): Der Server chunkt das Kapitel und schickt
+ * Teil-Ereignisse, damit der Text live mitwächst. Am Ende kommt das vollständige Ergebnis
+ * samt gesammelter Notizen.
+ */
+export async function streamPass(
+  kind: "consistency" | "style",
+  input: PassRequest,
+  handlers: PassStreamHandlers = {},
+): Promise<PassResult> {
+  let result: PassResult | null = null;
+
+  await streamEvents(
+    `/api/chapter/${kind === "consistency" ? "consistency" : "style"}/stream`,
+    input,
+    (event) => {
+      if (event.type === "part-start") {
+        handlers.onPartStart?.(Number(event.part ?? 1), Number(event.parts ?? 1));
+        return;
+      }
+      if (event.type === "part-delta" && typeof event.text === "string") {
+        handlers.onPartDelta?.(event.text);
+        return;
+      }
+      if (event.type === "part-done") {
+        handlers.onPartDone?.(
+          Number(event.part ?? 1),
+          typeof event.text === "string" ? event.text : "",
+        );
+        return;
+      }
+      if (event.type === "done") {
+        result = {
+          text: typeof event.text === "string" ? event.text : "",
+          notes: Array.isArray(event.notes) ? (event.notes as string[]) : [],
+          changed: event.changed === true,
+        };
+      }
+    },
+  );
+
+  if (!result) throw new Error("Der Server hat kein Ergebnis geliefert.");
+  return result;
 }
 
 export interface TimelineRequest {

@@ -854,7 +854,21 @@ You MUST return the COMPLETE chapter text inside <TEXT> — apply every improvem
 Everything in ${language}.`;
 }
 
-async function runPass(kind: "consistency" | "style", input: PassInput): Promise<PassResult> {
+/** Callbacks für eine gestreamte Überarbeitung (Live-Vorschau je Teil). */
+export interface PassStreamHandlers {
+  /** Ein neuer Teil beginnt. */
+  onPartStart?: (part: number, parts: number) => void;
+  /** Textstück des laufenden Teils. */
+  onPartDelta?: (text: string) => void;
+  /** Fertig bearbeiteter Teil (nach allen Sicherungen). */
+  onPartDone?: (part: number, text: string) => void;
+}
+
+async function runPass(
+  kind: "consistency" | "style",
+  input: PassInput,
+  handlers?: PassStreamHandlers,
+): Promise<PassResult> {
   const chapter = input.storyboard.chapters[input.chapterIndex];
   if (!chapter) {
     throw new ApiError("Kapitel nicht gefunden.", 400);
@@ -900,9 +914,10 @@ Rewrite ONLY this part (~${chunkWords} words) — never the neighbouring parts, 
     let parsed: PassResult | null = null;
     let truncatedByLimit = false;
     let retryHint = "";
+    handlers?.onPartStart?.(index + 1, chunks.length);
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const { content, finishReason } = await chatCompletionDetailed({
+      const passParams = {
         model: input.model,
         system,
         user: `${context}\n\n${partIntro}\n\n${instruction}${retryHint}`,
@@ -912,7 +927,12 @@ Rewrite ONLY this part (~${chunkWords} words) — never the neighbouring parts, 
           Math.max(800, Math.round(chunkWords * 2.4)),
         ),
         temperature: kind === "consistency" ? 0.35 : 0.6,
-      });
+      };
+
+      // Mit Callback streamen (Live-Vorschau), sonst normal anfragen.
+      const { content, finishReason } = handlers?.onPartDelta
+        ? await chatCompletionStream(passParams, (delta) => handlers.onPartDelta?.(delta))
+        : await chatCompletionDetailed(passParams);
 
       const candidate = parsePassOutput(content);
       const text = candidate.text.trim();
@@ -975,6 +995,7 @@ Rewrite ONLY this part (~${chunkWords} words) — never the neighbouring parts, 
     }
 
     parts.push(nextText);
+    handlers?.onPartDone?.(index + 1, nextText);
     for (const note of parsed.notes) {
       if (!notes.some((existing) => existing.toLowerCase() === note.toLowerCase())) {
         notes.push(note);
@@ -1024,6 +1045,21 @@ export function checkConsistency(input: PassInput): Promise<PassResult> {
 
 export function refineStyle(input: PassInput): Promise<PassResult> {
   return runPass("style", input);
+}
+
+/** Gestreamte Varianten: identische Logik, aber mit Live-Vorschau je Teil. */
+export function checkConsistencyStream(
+  input: PassInput,
+  handlers: PassStreamHandlers,
+): Promise<PassResult> {
+  return runPass("consistency", input, handlers);
+}
+
+export function refineStyleStream(
+  input: PassInput,
+  handlers: PassStreamHandlers,
+): Promise<PassResult> {
+  return runPass("style", input, handlers);
 }
 
 /* ───────────────────────── timeline validation ───────────────────────── */

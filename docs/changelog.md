@@ -8,6 +8,19 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Kohärenz & Stil streamen
+
+- **Added** **Live-Vorschau für Kohärenz und Stil** (`POST /api/chapter/consistency/stream`,
+  `POST /api/chapter/style/stream`): Die beiden Überarbeitungen laufen jetzt als SSE. Da sie
+  **gechunkt** sind, schickt der Server Teil-Ereignisse (`part-start`, `part-delta`,
+  `part-done`) und am Ende das vollständige Ergebnis mit den Notizen — die Vorschau im
+  Kapitel-Editor wächst mit und nennt den Fortschritt („Kohärenz · Teil 2/5 · 812 Wörter").
+  Es ist **derselbe** Code-Pfad wie ohne Streaming (nur mit Callback), deshalb gelten alle
+  Sicherungen unverändert: Wachstumsgrenze ~⅓, Fortsetzung nur bei `finish_reason: "length"`,
+  klarer Fehler bei starker Kürzung. Gilt für die Einzel-Prüfung **und** für die
+  „Alle prüfen"-Schleife (Vorschau je Kapitel). Der Buch-Assistent nutzt weiter die
+  nicht-streamenden Routen.
+
 ### Fixed
 
 - **Stufen-Modelle waren in den Einstellungen unsichtbar** — die App nutzte ein anderes Modell,

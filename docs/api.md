@@ -255,6 +255,24 @@ data: {"type":"error","error":"…"}     ← Fehler nach dem Start (HTTP bleibt 
 **HTTP 400 + JSON**. Liefert der Provider kein SSE, fällt der Server intern auf den normalen
 Aufruf zurück — der Client bekommt dann nur das `done`-Ereignis.
 
+### `POST /api/chapter/consistency/stream` und `POST /api/chapter/style/stream`
+
+Streaming-Varianten der beiden Überarbeitungen. Der Server **chunkt** das Kapitel wie bisher
+(~1.000 Wörter je Teil) und schickt Teil-Ereignisse, damit die Vorschau mitwächst; am Ende kommt
+das vollständige Ergebnis samt Notizen. Gleiche Sicherungen wie ohne Streaming (Wachstumsgrenze,
+Fortsetzung nur bei hartem Token-Limit) — es gibt deshalb **keine** stillen Änderungen.
+
+```
+data: {"type":"part-start","part":1,"parts":4}
+data: {"type":"part-delta","text":"…"}      ← Textstück des laufenden Teils
+data: {"type":"part-done","part":1,"text":"…"}   ← fertiger (geprüfter) Teil
+data: {"type":"done","text":"…","notes":["…"],"changed":true}
+data: {"type":"error","error":"…"}          ← z. B. „Teil 2 von 4 wurde stark gekürzt"
+```
+
+Fehlender Kapiteltext oder Model → **HTTP 400 vor dem Stream**. Die nicht-streamenden Routen
+(`/api/chapter/consistency`, `/api/chapter/style`) bleiben unverändert bestehen.
+
 ---
 
 ## Buch-Pipeline

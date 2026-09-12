@@ -72,7 +72,8 @@ import { buildEpub } from "@/lib/epub";
 import { buildMarkdown } from "@/lib/markdown";
 import { buildPdf } from "@/lib/pdf";
 import { buildCoverPrompt, deleteCover, generateCover } from "@/services/cover";
-import { checkConsistency, checkTimeline, draftChapter, expandChapter, refineStyle } from "@/services/story";
+import { checkTimeline, expandChapter, streamPass } from "@/services/story";
+import type { PassResult } from "@/services/story";
 import { streamCanonCheck, streamCanonRepair } from "@/services/continuity";
 import type {
   CanonRepairResultEvent,
@@ -163,6 +164,29 @@ export function BookDetailView({
   const [canonCheckOpen, setCanonCheckOpen] = useState(false);
   /** Live-Vorschau während eines gestreamten Laufs (null = keine Vorschau). */
   const [streamText, setStreamText] = useState<string | null>(null);
+  /** Zusatzinfo in der Vorschau (z. B. „Teil 2/5"). */
+  const [streamLabel, setStreamLabel] = useState<string | null>(null);
+
+  /**
+   * Überarbeitung (Kohärenz/Stil) mit Live-Vorschau: Der Server chunkt das Kapitel und schickt
+   * Teil-Ereignisse — die Vorschau wächst mit, die Teile werden mit Leerzeile verbunden.
+   */
+  const runPassStreamed = async (
+    kind: "consistency" | "style",
+    chapterIndex: number,
+    request: Parameters<typeof streamPass>[1],
+  ): Promise<PassResult> => {
+    setStreamText("");
+    setStreamLabel(`${MODEL_STAGE_LABELS[kind]}-Prüfung · Kapitel ${chapterIndex + 1}`);
+    return streamPass(kind, request, {
+      onPartStart: (part, parts) => {
+        setStreamLabel(`${MODEL_STAGE_LABELS[kind]} · Teil ${part}/${parts}`);
+        // Teile werden serverseitig mit Leerzeile verbunden — in der Vorschau genauso.
+        if (part > 1) setStreamText((prev) => `${prev ?? ""}\n\n`);
+      },
+      onPartDelta: (delta) => setStreamText((prev) => `${prev ?? ""}${delta}`),
+    });
+  };
   const [seriesOpen, setSeriesOpen] = useState(false);
   const [epubCover, setEpubCover] = useState<"front" | "back" | "none">("front");
   const [exportScope, setExportScope] = useState("all");
@@ -552,8 +576,8 @@ export function BookDetailView({
           canon,
           styleProfile: readStyleProfileHint(),
         };
-        const result =
-          kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
+        // Gestreamt: der Text wächst live mit (Teil für Teil).
+        const result = await runPassStreamed(kind, chapterIndex, request);
         current = current.map((chapter, i) =>
           i === chapterIndex
             ? {
@@ -582,6 +606,8 @@ export function BookDetailView({
       updateJob(jobId, { done: pending.length });
       finishJob(jobId, "done", `${pending.length} Kapitel · ${MODEL_STAGE_LABELS[kind]}`);
     }
+    setStreamText(null);
+    setStreamLabel(null);
     setBusy(null);
   };
 
@@ -644,6 +670,8 @@ export function BookDetailView({
     }
     setError(null);
     setBusy(`${MODEL_STAGE_LABELS[kind]}-Prüfung Kapitel ${index + 1}…`);
+    setStreamText("");
+    setStreamLabel(`${MODEL_STAGE_LABELS[kind]}-Prüfung · Kapitel ${index + 1}`);
     if ((manuscript[index]?.expanded ?? "").trim()) pushSnapshot(index, `vor ${MODEL_STAGE_LABELS[kind]}-Prüfung`);
     try {
       const request = {
@@ -656,7 +684,8 @@ export function BookDetailView({
         canon,
         styleProfile: readStyleProfileHint(),
       };
-      const result = kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
+      // Gestreamt: der Text wächst live mit (Teil für Teil).
+      const result = await runPassStreamed(kind, index, request);
       updateChapter(index, {
         expanded: result.text,
         ...(kind === "consistency"
@@ -666,6 +695,8 @@ export function BookDetailView({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
+      setStreamText(null);
+      setStreamLabel(null);
       setBusy(null);
     }
   };
@@ -1970,7 +2001,7 @@ export function BookDetailView({
                   <div className="mt-3 rounded-xl border border-brand-cyan/30 bg-brand-cyan/5 p-3">
                     <p className="mb-1 inline-flex items-center gap-2 text-[11px] font-semibold text-brand-cyan">
                       <Loader2 className="size-3.5 animate-spin" />
-                      Live-Vorschau · {countWords(streamText).toLocaleString("de-DE")} Wörter
+                      {streamLabel ?? "Live-Vorschau"} · {countWords(streamText).toLocaleString("de-DE")} Wörter
                     </p>
                     <div className="max-h-52 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-foreground/85">
                       {streamText || "…"}

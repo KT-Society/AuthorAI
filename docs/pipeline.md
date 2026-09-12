@@ -124,8 +124,7 @@ schließende Tag vergisst. Führende Markdown-Überschriften fliegen ebenfalls r
 
 **Chunking (Pflicht bei langen Kapiteln):** Der Pass muss die **vollständige** Prosa
 zurückgeben. Bei 3.000–5.000 Wörtern sprengt das das Ausgabelimit vieler Modelle und die
-Antwort bricht mitten im Kapitel ab (`finish_reason: length`). Deshalb zerlegt
-`splitIntoChunks()` das Kapitel an Absatzgrenzen in Teile von **~1.000 Wörtern**
+Antwort bricht mitten im Kapitel ab (`finish_reason: length`). Deshalb zerlegt`splitIntoChunks()` das Kapitel an Absatzgrenzen in Teile von **~1.000 Wörtern**
 (harte Obergrenze 1.400; überlange Absätze werden an Satzgrenzen geteilt). Jeder Teil wird
 einzeln überarbeitet — mit vollem Storyboard-Kontext plus den Nachbartexten als reinem
 Kontext-Anker (*„do not rewrite, do not repeat"*) — und anschließend wieder zusammengesetzt.
@@ -133,6 +132,12 @@ Das Ausgabelimit pro Teil liegt bei **4.000 Tokens**, also unter dem typischen M
 Gibt ein Modell trotzdem das ganze Kapitel statt des Teils zurück, wird einmal nachgefasst;
 danach bricht der Pass mit klarer Meldung ab (statt Text zu duplizieren). Die `<NOTES>` aller
 Teile werden gesammelt und dedupliziert.
+
+**Live-Vorschau (Streaming):** Dieselben Pässe gibt es als SSE-Variante
+(`POST /api/chapter/consistency/stream`, `…/style/stream`): je Teil kommen `part-start`,
+`part-delta` und `part-done`, am Ende das vollständige Ergebnis mit den Notizen. Die Oberfläche
+zeigt den Text damit beim Entstehen (inkl. „Teil 2/5"). Es ist **derselbe** Code-Pfad — nur mit
+Callback statt ohne — also gelten alle Sicherungen unverändert.
 
 **Schutzmechanismen** (pro Teil **und** über das Gesamtkapitel)
 

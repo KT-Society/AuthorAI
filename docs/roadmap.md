@@ -56,10 +56,12 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   im Fakten-Check als eigener Fall gemeldet
 
 ### Technik & Performance
-- **Streaming für die Prüf-Pass-Queues**: der Fakten-Check streamt live und parallel — Kohärenz,
-  Stil und Ausbau laufen noch als stille Schleife ohne Live-Text
+- **Streaming für die Ausbau-Schleife**: Kohärenz, Stil und der Fakten-Check streamen live —
+  „Alles ausbauen" läuft noch als stille Schleife ohne Live-Text
 - **Stream-Vorschau übernehmen oder verwerfen**: „Text in den Editor übernehmen" und
   „abbrechen" direkt aus der Vorschau
+- **Streaming für den Assistenten**: Kohärenz/Stil-Schritte dort nutzen noch die
+  nicht-streamenden Routen
 - **Live-Token-/Kostenzähler** während des Streams (verzahnt mit dem Tracking unten)
 - **Jobs über Neustart hinweg**: laufende Queues nach einem Reload wiederaufnehmen
 - **Job-Historie**: Dauer, Ergebnis und „Wiederholen" für abgeschlossene Läufe

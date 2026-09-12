@@ -28,7 +28,10 @@ import {
   extractWorld,
   generateStoryboard,
   refineStyle,
+  checkConsistencyStream,
+  refineStyleStream,
 } from "./server/story";
+import type { PassInput, PassStreamHandlers } from "./server/story";
 
 // Load API keys from the repository root `.env` (server-side only).
 loadRootEnv();
@@ -148,6 +151,34 @@ function asCharacterRefs(value: unknown): { name: string; role?: string }[] {
     list.push({ name, role });
   }
   return list;
+}
+
+/** Gemeinsamer Request-Kopf der beiden Pass-Routen (Kohärenz/Stil). */
+async function readPassInput(req: Request): Promise<PassInput> {
+  const body = await readJson(req);
+  const storyboard = asStoryboard(body.storyboard);
+  const chapterIndex = asChapterIndex(body.chapterIndex, storyboard.chapters.length);
+  const text = typeof body.text === "string" ? body.text : "";
+  if (!text.trim()) throw new ApiError("Kein Kapiteltext für die Prüfung.", 400);
+  return {
+    storyboard,
+    chapterIndex,
+    model: requiredString(body.model, "Bitte eine Model-ID angeben."),
+    language: optionalLanguage(body.language),
+    text,
+    scenes: asScenes(body.scenes),
+    canon: optionalString(body.canon),
+    styleProfile: optionalString(body.styleProfile),
+  };
+}
+
+/** Übersetzt die Pass-Callbacks in SSE-Ereignisse (Live-Vorschau je Teil). */
+function passStreamHandlers(emit: (event: Record<string, unknown>) => void): PassStreamHandlers {
+  return {
+    onPartStart: (part, parts) => emit({ type: "part-start", part, parts }),
+    onPartDelta: (text) => emit({ type: "part-delta", text }),
+    onPartDone: (part, text) => emit({ type: "part-done", part, text }),
+  };
 }
 
 /** Kapitel-Texte für den gestreamten Fakten-Check. */
@@ -364,6 +395,35 @@ const server = serve({
               emit({ type: "delta", text: delta }),
             );
             emit({ type: "done", text: expanded });
+          });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Streaming variants of the coherence and style passes (live preview per part).
+    "/api/chapter/consistency/stream": {
+      async POST(req) {
+        try {
+          const input = await readPassInput(req);
+          return sseResponse(async (emit) => {
+            const result = await checkConsistencyStream(input, passStreamHandlers(emit));
+            emit({ type: "done", text: result.text, notes: result.notes, changed: result.changed });
+          });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    "/api/chapter/style/stream": {
+      async POST(req) {
+        try {
+          const input = await readPassInput(req);
+          return sseResponse(async (emit) => {
+            const result = await refineStyleStream(input, passStreamHandlers(emit));
+            emit({ type: "done", text: result.text, notes: result.notes, changed: result.changed });
           });
         } catch (err) {
           return errorResponse(err);
