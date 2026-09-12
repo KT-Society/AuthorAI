@@ -74,6 +74,10 @@ src/
    geschützt.
 8. **UI:** Primitives nutzen (`components/dashboard/primitives.tsx`), Design-Tokens statt
    Inline-Hexfarben, keine Platzhalter-Inhalte, klare Leerzustände.
+9. **Doku-Pflicht:** Jede Änderung zieht die betroffenen Dokumente nach — siehe
+   [Dokumentations-Update](#dokumentations-update). Besonders gilt: **Die Roadmap beschreibt
+   nur Zukunft.** Wird ein Roadmap-Thema geliefert, wandert es ins Changelog und
+   **verschwindet aus der Roadmap** — dabei mindestens eine **Anschluss-Idee** ergänzen.
 
 ---
 
@@ -84,13 +88,15 @@ src/
 | Stufe | Route |
 | --- | --- |
 | Storyboard | `POST /api/storyboard` |
-| Rohentwurf | `POST /api/chapter/draft` |
-| Ausbau | `POST /api/chapter/expand` |
+| Rohentwurf | `POST /api/chapter/draft` · Stream: `POST /api/chapter/draft/stream` |
+| Ausbau | `POST /api/chapter/expand` · Stream: `POST /api/chapter/expand/stream` |
 | Kohärenz | `POST /api/chapter/consistency` |
 | Stil | `POST /api/chapter/style` |
 | Timeline-Prüfung | `POST /api/timeline/check` |
 | Weltenbau-Extraktion | `POST /api/world/extract` |
 | Figuren-Extraktion (Manuskript) | `POST /api/characters/extract` |
+| Kontinuität: Extraktion | `POST /api/continuity/extract` |
+| Kontinuität: Fakten-Check | `POST /api/continuity/check` |
 | Soul-Synthese | `POST /api/generate` |
 | Recherche | `POST /api/research` |
 | Cover | `POST /api/cover`, `POST /api/cover/save`, `DELETE /api/cover/:file` |
@@ -106,6 +112,38 @@ Plot-Karten aus dem Storyboard ab (dedupliziert). Details: [`docs/pipeline.md`](
 4. Service in `src/services/story.ts` (`postJson`)
 5. `WizardStep` + `STEPS` + Stage-Mapping + Schritt-UI im `BookWizard`
 6. Anzeige im `BookDetailView` (Plates/Buttons), Persistenz der Flags
+
+---
+
+## Dokumentations-Update
+
+Doku ist Teil der Lieferung, nicht Nacharbeit. **Vor jedem „fertig"** prüfen, was die
+Änderung berührt, und alle zutreffenden Stellen nachziehen:
+
+| Änderung | Muss aktualisiert werden |
+| --- | --- |
+| Nutzbares Verhalten (Feature, Fix, UI, Prompt) | **`docs/changelog.md`** — unter `[Unreleased]`, Abschnitt `### Added` / `### Changed` / `### Fixed`, deutsch, Ursache + Wirkung |
+| **Roadmap-Thema geliefert** | Es aus **`docs/roadmap.md`** **entfernen** (die Roadmap ist kein Release-Archiv) **und** mindestens eine **Anschluss-Idee** ergänzen |
+| Neue/geänderte HTTP-Route | `docs/api.md` (Request/Response, Fehlerfälle) **+** Pipeline-Tabelle in `AGENTS.md` |
+| Neue/geänderte Typen, Persistenz-Keys, Backup-Felder | `docs/data-model.md` |
+| Pipeline-Verhalten, Prompts, Chunking, Kanon | `docs/pipeline.md` |
+| Neue Module, Views, Dialoge, Schichten | `docs/architecture.md` (Modul-/View-Tabellen) |
+| Env-Variablen, Settings-Keys, Modelle | `docs/configuration.md` |
+| Filtern/Suchen/Sortieren, neue Einstellungen | `docs/development.md` bzw. die betroffene Feature-Doku |
+| **Version** | `bun run version:bump <x.y.z>` — schreibt `package.json`, promptgen, Installer, README-Versionszeile und den Changelog-Abschnitt |
+| Release, Signierung, Installer | `docs/release.md` |
+| Commands, Checklisten, harte Regeln | **diese Datei** (`AGENTS.md`) |
+
+**Faustregeln**
+
+- **Changelog ist Historie, Roadmap ist Zukunft.** Nie dasselbe in beiden. Geliefertes steht
+  ausschließlich im Changelog.
+- **Kein leerer Release:** erst Inhalte unter `[Unreleased]` sammeln, dann bumpen.
+- **Links prüfen:** `bun run check` validiert relative Markdown-Links mit — ein umbenanntes
+  Dokument ohne Link-Fix fällt dort auf.
+- **Nicht anfassen:** `META_VERSION` (`data/author.ts`) und `BACKUP_VERSION` (`lib/backup.ts`)
+  sind Datenformat-Versionen, keine App-Versionen.
+- **Pläne:** `.echo/plans/new_*` → nach Abschluss auf `done_*` umbenennen.
 
 ---
 
@@ -130,8 +168,8 @@ Wurzel behoben. **Bestehende** Testfehler werden nicht eigenmächtig angefasst �
   Git-Commits und Pushes.
 - **Der Agent schreibt:** Code, Fixes, Pläne, Implementierungen — und verifiziert statisch.
 - Neue Pläne unter `.echo/plans/` beginnen mit `new_`; nach Abschluss auf `done_` umbenennen.
-- Doku aktuell halten: bei Verhaltensänderungen `docs/changelog.md` ergänzen und
-  betroffene Dokumente anpassen.
+- **Doku aktuell halten** — welche Datei bei welcher Änderung nachgezogen wird, steht in
+  [Dokumentations-Update](#dokumentations-update).
 
 ---
 

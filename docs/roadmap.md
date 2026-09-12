@@ -37,7 +37,10 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 ## Mittelfristig
 
 ### Inhalt & Qualität
-- **Figuren-Entwicklung über die Zeit**: Beziehungs-Intensität pro Kapitel statt global
+- **Arc-Vorschläge aus dem Manuskript**: die Extraktion schlägt Beziehungs-Verläufe
+  (Intensität je Kapitel) vor, statt sie von Hand zu pflegen
+- **Arc-Scrubber im Graphen**: Kapitel-Regler, der Knoten und Kanten auf den Stand des
+  jeweiligen Kapitels stellt
 - **Stil-Profil pro Buch und Reihe**: heute geräteweit — pro Projekt überschreibbar, mit
   Vererbung von der Reihe an ihre Bände
 - **Stil-Eichung**: aus eigenen Kapiteln ein Profil vorschlagen („so klingt dieser Roman")
@@ -50,8 +53,14 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   im Fakten-Check als eigener Fall gemeldet
 
 ### Technik & Performance
-- **Streaming** langer Ausgaben (SSE) mit Live-Vorschau
-- **Fortschritts-Report** pro Queue im Hintergrund (auch bei geschlossenem Dialog)
+- **Streaming auch für Queues und Prüf-Pässe**: heute streamen nur Rohentwurf und Ausbau —
+  der Live-Text der Pass-Schleifen fehlt noch
+- **Stream-Vorschau übernehmen oder verwerfen**: „Text in den Editor übernehmen" und
+  „abbrechen" direkt aus der Vorschau
+- **Live-Token-/Kostenzähler** während des Streams (verzahnt mit dem Tracking unten)
+- **Jobs über Neustart hinweg**: laufende Queues nach einem Reload wiederaufnehmen
+- **Job-Historie**: Dauer, Ergebnis und „Wiederholen" für abgeschlossene Läufe
+- **Desktop-Benachrichtigung** bei Job-Abschluss (heute nur Toast)
 - **Kosten-/Token-Tracking** pro Lauf (Transparenz über API-Nutzung)
 - **Cache-Transparenz**: Trefferquote und gesparte Aufrufe in der UI anzeigen
 - **Persistenter Cache**: Antworten optional über Neustarts hinweg behalten (opt-in)
@@ -94,3 +103,5 @@ Diese Liste ist ein Ideenpool, keine Zusage.
    (Server → Route → Service → UI; neue Stufe = Checkliste).
 3. Verifikation: Syntax-, Import-Check + echter Test des kritischen Pfads.
 4. Eintrag in [`changelog.md`](changelog.md).
+5. **Thema aus dieser Liste entfernen** und mindestens eine **Anschluss-Idee** ergänzen —
+   die Roadmap ist Zukunft, nicht Release-Archiv (siehe `AGENTS.md` → Dokumentations-Update).
