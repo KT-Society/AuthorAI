@@ -32,16 +32,32 @@ Alles landet im (gitignorierten) Ordner **`release/`**.
 
 ## 1 · Version bumpen
 
-Fünf Stellen konsistent halten:
+Ein Befehl schreibt **alle** Stellen und prüft danach nach:
+
+```powershell
+bun run version:bump 0.4.1          # Zielversion
+bun run version:bump patch          # major | minor | patch
+bun run version:bump 0.4.1 --dry-run   # nur zeigen, nichts schreiben
+bun run version:bump 0.4.1 --force     # auch rückwärts (Downgrade)
+```
+
+Das Skript (`scripts/version.ts`) hält sechs Stellen konsistent:
 
 1. `package.json` → `version`
 2. `packages/promptgen/package.json` → `version` (Workspace-Paket, gleiche Version)
 3. `installer/authorai.iss` → `#define MyAppVersion`
 4. `installer/authorai.nsi` → `!define APP_VERSION` **und** `VIProductVersion` (`x.y.z.0`)
-5. `docs/changelog.md` → neuer Eintrag (+ `README.md` / `docs/README.md` Versionszeile)
+5. `README.md` / `docs/README.md` → Versionszeile
+6. `docs/changelog.md` → **[Unreleased] wird zum Release**, oben entsteht ein frischer
+   Platzhalter (enthält `[Unreleased]` nur den Platzhalter, bleibt das Changelog unberührt —
+   es entsteht kein leerer Release)
+
+Passt ein Muster nicht mehr (Define umbenannt, Zeile entfernt), **bricht das Skript ab, ohne
+etwas zu schreiben** — so kann keine Stelle stillschweigend driften.
 
 > Nicht verwechseln: `META_VERSION` (`data/author.ts`) und `BACKUP_VERSION` (`lib/backup.ts`)
-> sind **Datenformat-Versionen** und haben mit der App-Version nichts zu tun.
+> sind **Datenformat-Versionen** und haben mit der App-Version nichts zu tun. Sie werden vom
+> Skript bewusst nicht angefasst.
 
 Repository: <https://github.com/KT-Society/AuthorAI>
 

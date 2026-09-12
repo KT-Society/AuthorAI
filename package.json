@@ -21,6 +21,7 @@
     "build": "bun run scripts/all.ts build",
     "build:binary": "bun run scripts/build-binary.ts",
     "check": "bun run scripts/check.ts",
+    "version:bump": "bun run scripts/version.ts",
 
     "dev:root": "bun --hot src/index.ts",
     "start:root": "NODE_ENV=production bun src/index.ts",

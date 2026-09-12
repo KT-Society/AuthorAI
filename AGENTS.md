@@ -22,6 +22,7 @@ bun run dev:root             # nur Root-App
 bun run --cwd packages/promptgen dev   # nur promptgen
 ALL_DRY=1 bun run scripts/all.ts dev   # Tasks nur auflisten
 bun run check                # Syntax-, Import- und Markdown-Link-Checks
+bun run version:bump <x.y.z> # App-Version an allen Stellen setzen (--dry-run zum Prüfen)
 ```
 
 Ports: Root **3000**, promptgen **3001** (`PORT` überschreibbar).
