@@ -957,7 +957,7 @@ const baseUrl = server.url.toString();
 console.log("");
 console.log("  AuthorAI");
 console.log(`  → ${baseUrl}`);
-console.log("  Daten bleiben lokal im Browser · Keys aus .env oder Umgebungsvariablen");
+console.log("  Daten liegen lokal in data/authorai.db · Keys aus .env oder Umgebungsvariablen");
 console.log("");
 
 if (isStandaloneBinary() && process.env.AUTHORAI_OPEN !== "0") {

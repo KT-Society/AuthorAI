@@ -94,7 +94,7 @@ Release/
 - Startet den Server (Standard-Port **3000**, `PORT` überschreibbar).
 - Öffnet im Standalone-Betrieb automatisch den Browser (`AUTHORAI_OPEN=0` schaltet das ab).
 - Liest Keys aus `.env` **neben dem Binary** oder aus Umgebungsvariablen.
-- Legt erzeugte Cover in `covers/` beim Binary ab.
+- Legt erzeugte Cover in `covers/` und die Datenbank in `data/authorai.db` beim Binary ab.
 
 ---
 
@@ -138,7 +138,7 @@ pwsh -File scripts/build-installer.ps1
 - beim ersten Install eine **`.env`** aus `.env.example` erzeugt (Keys eintragen!)
 - die **MIT-Lizenz** im Setup anzeigt
 - beim Deinstallieren fragt, ob **Cover + `.env`** entfernt werden sollen
-  (Bücher/Charaktere liegen im Browser und bleiben erhalten)
+  (Bücher/Charaktere liegen in `data/authorai.db` und bleiben erhalten)
 
 Nach dem Installer-Bau noch einmal signieren (siehe Schritt 3).
 

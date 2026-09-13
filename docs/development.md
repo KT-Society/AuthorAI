@@ -38,6 +38,7 @@ Keys siehe [`configuration.md`](configuration.md).
 | `bun run start` | Produktions-Builds servieren |
 | `bun run dev:root` / `build:root` / `start:root` | nur die Root-App |
 | `bun run --cwd packages/promptgen dev` | nur promptgen |
+| `bun run version:bump <x.y.z>` | App-Version an allen Stellen + Changelog-Abschnitt setzen (`--dry-run`, `--force`) |
 | `bun run check` | Syntax-, Import- und Markdown-Link-Checks (`scripts/check.ts`) |
 | `ALL_DRY=1 bun run scripts/all.ts dev` | Tasks nur auflisten (Dry-Run) |
 
@@ -86,7 +87,8 @@ Für Signierung, Installer und Auslieferung: [`release.md`](release.md)
 ### Neue Domäne (z. B. „Timeline")
 
 - [ ] Typ + Seeds in `src/data/<domäne>.ts`
-- [ ] Persistenz-Name in `lib/persistence.ts` (+ `clearProfileData`)
+- [ ] Sammlung in `src/data/state.ts` (Whitelist) **und** Persistenz-Wrapper in
+      `lib/persistence.ts` (`DataName` + `load*/save*`, `clearProfileData`)
 - [ ] View in `components/dashboard/`
 - [ ] Nav-Eintrag in `Sidebar.tsx` + Routing in `Dashboard.tsx`
 - [ ] Optional: Auto-Import aus dem Storyboard
@@ -101,8 +103,11 @@ Für Signierung, Installer und Auslieferung: [`release.md`](release.md)
 
 ### Persistenz
 
-- Pro Profil: `authorai.<profilId>.<sammlung>` über `lib/persistence.ts`.
-- **Nicht** direkt `localStorage` benutzen (außer in `lib/*`).
+- Fachdaten laufen über `lib/persistence.ts` → `/api/state` → SQLite (`server/store.ts`,
+  `<runtimeRoot>/data/authorai.db`). Neue Sammlungen in `src/data/state.ts` (Whitelist)
+  **und** `lib/persistence.ts` (`DataName` + `load*/save*`) eintragen.
+- **Nicht** direkt `localStorage` benutzen (außer in `lib/*`), und dort nur für **Profile**
+  und **geräteweite Einstellungen** — Fachdaten gehören in die Datenbank.
 - „leer vs. nie gesetzt"-Semantik beachten (siehe `data-model.md`).
 - Objekt-Stores (z. B. `meta`) laufen über eigene `load*/save*`-Funktionen.
 
@@ -175,13 +180,16 @@ als XML parsen lassen.
 
 ## Daten-Inspektion & Reset
 
-Im Browser (DevTools → Application → Local Storage):
+Fachdaten liegen in der SQLite-Datei `<runtimeRoot>/data/authorai.db` (Tabelle `state`,
+JSON je Profil + Sammlung); nur **Profile** und **geräteweite Einstellungen** stehen im
+Browser (DevTools → Application → Local Storage).
 
 | Aktion | Vorgehen |
 | --- | --- |
-| Profil-Daten ansehen | `authorai.<profilId>.books` usw. |
-| Profil zurücksetzen | Profil löschen (UI) oder Keys entfernen |
-| Alles zurücksetzen | alle `authorai.*`-Keys löschen, neu laden |
+| Fachdaten ansehen | `data/authorai.db` öffnen (z. B. DB-Browser/`bun:sqlite`) → `SELECT profile_id, collection, length(json) AS bytes FROM state` |
+| Belegung prüfen | Einstellungen → Datenbank, oder `GET /api/store/info` |
+| Profil zurücksetzen | Profil löschen (UI) oder `DELETE /api/state?profile=<id>` |
+| Alles zurücksetzen | `data/authorai.db` (inkl. `-wal`/`-shm`) entfernen und neu laden |
 | Cover aufräumen | `covers/` prüfen; verwaiste Dateien manuell entfernen |
 
 ---

@@ -1,8 +1,9 @@
 # Datenmodell & Persistenz
 
 Alle Fachtypen liegen in `src/data/*`, alle Persistenz-Logik in `src/lib/*`.
-Es gibt **keine Datenbank** — die Quelle der Wahrheit ist der Browser-Speicher, gescoped
-**pro Profil**.
+Fachdaten liegen **serverseitig in SQLite** (`<runtimeRoot>/data/authorai.db`), gescoped
+**pro Profil**; nur **Profile** und **geräteweite Einstellungen** (Modelle, Sprache,
+Stil-Profil) bleiben im Browser.
 
 ---
 
@@ -246,6 +247,7 @@ CREATE TABLE state (
 | `plot` | `PlotCard[]` |
 | `research` | `ResearchNote[]` |
 | `ideas` | `Idea[]` (Plot-Funken) |
+| `coverPresets` | `SavedCoverPreset[]` (eigene Cover-Text-Presets) |
 | `notifications` | `AppNotification[]` |
 | `facts` | `CanonFact[]` (Kontinuität) |
 | `relations` | `CharacterRelation[]` (Beziehungen) |
@@ -295,6 +297,7 @@ dauerhaft erhalten.
 | Migration | Auslöser | Verhalten |
 | --- | --- | --- |
 | Legacy → Profil | vorhandene globale Keys (`authorai.books` …), keine Profile | verschiebt Daten in neues Profil „Autor" |
+| `localStorage` → SQLite | Datenbank leer **und** `authorai.<profilId>.*`-Daten vorhanden | einmalige Übernahme in die Datenbank (Flag `authorai.<profilId>.migrated`); danach dient `localStorage` nur noch als lesender Notnagel |
 | Meta v2 → v3 | `DashboardMeta.version < META_VERSION` | Beispiel-Metriken → 0; `todayWords` bleibt; es wird als Schreib-Tag + Wochenslot verbucht |
 | Meta „neuer Tag" | `todayDate !== heute` | `todayWords` → 0 |
 | Meta „neue Woche" | `weekStart !== Montag` | `weeklyWords` → Nullen |

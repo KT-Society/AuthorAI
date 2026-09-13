@@ -61,8 +61,10 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 - **Datenbank-Backup und -Kompaktierung**: `VACUUM`/WAL-Checkpoint aus den Einstellungen,
   Sicherung der `.db`-Datei im laufenden Betrieb
 - **Mehrere Datenbank-Profile (Dateien)**: Projekte als eigene `.db` öffnen/wechseln
-- **Streaming für die Ausbau-Schleife**: Kohärenz, Stil und der Fakten-Check streamen live —
-  „Alles ausbauen" läuft noch als stille Schleife ohne Live-Text
+- **Live-Text auch im Ausbau**: „Alles ausbauen" zeigt den wachsenden Text des laufenden
+  Kapitels (Kohärenz, Stil und der Fakten-Check streamen bereits — der Ausbau selbst noch nicht)
+- **Stream-Fortschritt im Job-Center**: laufende Streams nennen dort Wortstand und Teil
+  (z. B. „Ausbau · 2.400 Wörter"), nicht nur „prüft…"
 - **Stream-Vorschau übernehmen oder verwerfen**: „Text in den Editor übernehmen" und
   „abbrechen" direkt aus der Vorschau
 - **Streaming für den Assistenten**: Kohärenz/Stil-Schritte dort nutzen noch die

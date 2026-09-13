@@ -13,8 +13,8 @@ besten beiträgst — und worauf wir Wert legen.
 
 Drei Prinzipien ziehen sich durch alles — bitte respektiere sie in Beiträgen:
 
-1. **Local-first & privat.** Inhalte bleiben im Browser, Secrets bleiben serverseitig.
-   Kein Cloud-Zwang, keine Telemetrie.
+1. **Local-first & privat.** Inhalte liegen lokal (SQLite-Datenbank), Secrets bleiben
+   serverseitig. Kein Cloud-Zwang, keine Telemetrie.
 2. **Zero-Warning.** Warnungen (Typen, Lint, Build) sind Mängel und werden an der Wurzel
    behoben, nicht ignoriert.
 3. **Die Kette zählt.** Jede KI-Ausgabe soll im richtigen Bereich landen, editierbar,
@@ -91,8 +91,11 @@ Diese Regeln sind nicht verhandelbar, weil sie Sicherheit und Datenintegrität b
   importiert. `src/services/*` spricht ausschließlich lokale `/api/*`-Routen.
 - **Secrets:** nur serverseitig aus der Root-`.env`. Nie an den Client geben, nie loggen,
   nie in Fehlermeldungen aufnehmen.
-- **Persistenz:** `localStorage` **nur** in `src/lib/*`, gescoped pro Profil
-  (`authorai.<profilId>.<sammlung>`). „fehlender Key = frisch" vs. „`[]` = bewusst geleert".
+- **Persistenz:** Fachdaten über `src/lib/persistence.ts` → `/api/state` → SQLite
+  (`src/server/store.ts`), pro Profil. Neue Sammlungen in `src/data/state.ts` (Whitelist)
+  **und** `lib/persistence.ts` eintragen. `localStorage` **nur** in `src/lib/*` — und nur für
+  Profile und geräteweite Einstellungen. „fehlende Sammlung = frisch" vs. „`[]` = bewusst
+  geleert".
 - **Modelle pro Stufe:** freie OpenRouter-ID, **kein** Dropdown, **kein** Default,
   nirgends ein hartcodiertes Model.
 - **Sprache:** Jeder LLM-Prompt braucht den **Language-Lock** (System *und* User).

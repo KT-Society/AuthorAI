@@ -98,17 +98,18 @@ src/
 | Storyboard | `POST /api/storyboard` |
 | Rohentwurf | `POST /api/chapter/draft` · Stream: `POST /api/chapter/draft/stream` |
 | Ausbau | `POST /api/chapter/expand` · Stream: `POST /api/chapter/expand/stream` |
-| Kohärenz | `POST /api/chapter/consistency` |
-| Stil | `POST /api/chapter/style` |
+| Kohärenz | `POST /api/chapter/consistency` · Stream: `POST /api/chapter/consistency/stream` |
+| Stil | `POST /api/chapter/style` · Stream: `POST /api/chapter/style/stream` |
 | Timeline-Prüfung | `POST /api/timeline/check` |
 | Weltenbau-Extraktion | `POST /api/world/extract` |
 | Figuren-Extraktion (Manuskript) | `POST /api/characters/extract` |
-| Kontinuität: Extraktion | `POST /api/continuity/extract` |
+| Kontinuität: Extraktion | `POST /api/continuity/extract` · Stream: `POST /api/continuity/extract/stream` |
 | Kontinuität: Fakten-Check | `POST /api/continuity/check` · Queue/Stream: `POST /api/continuity/check/stream` |
-| Kontinuität: Quick Fix | `POST /api/continuity/repair` |
+| Kontinuität: Quick Fix | `POST /api/continuity/repair` · Queue/Stream: `POST /api/continuity/repair/stream` |
 | Soul-Synthese | `POST /api/generate` |
 | Recherche | `POST /api/research` |
 | Cover | `POST /api/cover`, `POST /api/cover/save`, `DELETE /api/cover/:file` |
+| Speicher | `GET\|PUT\|DELETE /api/state`, `GET /api/store/info` |
 
 Beim Speichern eines Buchs leitet die Shell **automatisch** Charaktere, Weltenbau und
 Plot-Karten aus dem Storyboard ab (dedupliziert). Details: [`docs/pipeline.md`](docs/pipeline.md).

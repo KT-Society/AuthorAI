@@ -27,7 +27,7 @@
 - [ ] Kritische Pfade real getestet (z. B. ein LLM-Pfad, Cover, pure Logik)
 - [ ] **Keine Secrets/Keys** in Code, Logs, Screenshots oder Commits
 - [ ] **Server/Client-Grenze** beachtet (`src/server/*` nie im Client-Bundle)
-- [ ] **Persistenz-Regeln** beachtet (pro Profil, `localStorage` nur in `lib/*`)
+- [ ] **Persistenz-Regeln** beachtet (Fachdaten über `/api/state` → SQLite, pro Profil; `localStorage` nur für Profile/geräteweite Einstellungen)
 - [ ] Bei Verhaltensänderungen: `docs/changelog.md` ergänzt und Doku aktualisiert
 - [ ] Kein hartcodiertes Model, Language-Lock in neuen Prompts vorhanden
 

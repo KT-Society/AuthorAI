@@ -153,8 +153,9 @@ Antwort zeigt eine neue `/covers/…`-URL.
 ### Beispiele sind nach dem Löschen wieder da
 
 Sollte nicht passieren: Eine **leer** gewordene Sammlung wird als `[]` gespeichert und
-greift **nicht** auf Seeds zurück. Tritt es doch auf, wurde der Key entfernt (z. B. durch
-manuelles Löschen aller `authorai.*`-Keys) → dann startet das Profil faktisch neu.
+greift **nicht** auf Seeds zurück. Tritt es doch auf, fehlt die Zeile in der Datenbank
+(z. B. nach manuellem Löschen in `data/authorai.db` oder `DELETE /api/state?profile=<id>`)
+→ dann startet das Profil faktisch neu.
 
 ### Streak zeigt 0, obwohl heute geschrieben
 

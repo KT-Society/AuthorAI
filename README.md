@@ -1,7 +1,7 @@
 # AuthorAI — Dein KI-Buchautor
 
 > **Repository:** [github.com/KT-Society/AuthorAI](https://github.com/KT-Society/AuthorAI)
-> · **Version:** 0.4.0 · **Lizenz:** MIT · **Entwickler:** KT-Society & Echo
+> · **Version:** 0.5.0 · **Lizenz:** MIT · **Entwickler:** KT-Society & Echo
 
 Eine vollständige, lokal laufende **Autoren-Werkbank**: von der Buchidee über Storyboard,
 Rohentwurf und Ausbau bis zu Kohärenz- und Stilprüfung, mit Charakteren, Weltenbau,
@@ -25,6 +25,8 @@ Idee → Storyboard → Rohentwurf (~500 W) → Ausbau (3.000–5.000 W) → Koh
 | **Ausbau** | Ziel 3.000–5.000 Wörter pro Kapitel, Continuation-Loop, Craft-Regeln (Pacing, Show-don't-tell, Foreshadowing) |
 | **Kohärenz-Pass** | Logik-/Kontinuitätsprüfung gegen Nachbarkapitel + Foreshadowing, mit Prüfbericht |
 | **Stil-Pass** | Satzbau, Rhythmus, Grammatik, Sprachgebrauch — inhaltlich unverändert |
+| **Kontinuität** | Kanon aus Fakten & Beziehungen (inkl. Beziehungs-Arc) — verbindlich für alle Pässe; Fakten-Check + Quick Fix |
+| **Live-Vorschau** | Streaming für Rohentwurf, Ausbau, Kohärenz, Stil, Fakten-Check und Extraktion; Hintergrund-Jobs im Job-Center |
 | **Charaktere** | Aus dem Storyboard automatisch angelegt, editierbar, **Soul-Scan** (12 Sektionen) |
 | **Weltenbau** | Orte, Fraktionen, Magie, Artefakte, Lore — automatisch + per Extraktion |
 | **Plot-Board** | Kapitel als Karten, Akt/Status, Board-Ansicht |
@@ -179,8 +181,10 @@ kein Dropdown, kein Default. Leer = erbt das Standard-Model.
 - **Frontend:** React 19, TypeScript, Tailwind CSS v4, shadcn-ui (Radix), lucide-react
 - **promptgen:** React 18 + MUI v5 (eigenes Paket, eigene UI)
 - **Externe APIs:** OpenRouter (LLM), Tavily (Recherche), Pollinations (Bilder)
-- **Persistenz:** Browser-`localStorage` (pro Profil gescoped)
-- **Kein Backend-Store:** der Bun-Server ist Proxy + Static-Host + Dateispeicher für Cover
+- **Persistenz:** lokale SQLite-Datenbank (`<runtimeRoot>/data/authorai.db`, pro Profil);
+  Profile und geräteweite Einstellungen bleiben im Browser
+- **Kein Cloud-Backend:** der Bun-Server ist Proxy, Static-Host, Dateispeicher für Cover
+  und Datenbank — alles auf deinem Rechner
 
 ---
 

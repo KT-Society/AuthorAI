@@ -1,7 +1,7 @@
 # AuthorAI — Dokumentation
 
 > **Repository:** [github.com/KT-Society/AuthorAI](https://github.com/KT-Society/AuthorAI)
-> · **Version:** 0.4.0
+> · **Version:** 0.5.0
 
 Willkommen im Handbuch. Hier steht alles, was du brauchst, um AuthorAI zu verstehen,
 zu betreiben und zu erweitern.
@@ -14,8 +14,8 @@ Manuskript — und verwaltet dabei alles, was zu einem Buch gehört: Figuren, We
 Recherche, Cover und Fortschritt.
 
 Die App läuft vollständig auf deinem Rechner. Ein Bun-Server liefert die Oberfläche aus,
-spricht mit den KI-Diensten und speichert generierte Bilder; alle Inhalte liegen
-im Browser (`localStorage`), getrennt **pro Profil**.
+spricht mit den KI-Diensten und speichert generierte Bilder; alle Inhalte liegen in einer
+lokalen **SQLite-Datenbank** (`data/authorai.db`), getrennt **pro Profil**.
 
 ## Die Idee in einem Satz
 
@@ -65,7 +65,7 @@ Bun          Runtime, Server (Bun.serve), Bundler (Bun.build), Test/Skripte
 React 19     UI (Root-App)          ·  React 18 + MUI (promptgen)
 Tailwind v4  Design-System (Root)   ·  shadcn/Radix + lucide
 OpenRouter   Sprachmodelle          ·  Tavily: Recherche  ·  Pollinations: Bilder
-localStorage Pro-Profil-Persistenz  ·  covers/: generierte Bilder auf Platte
+SQLite       Pro-Profil-Daten (data/authorai.db)  ·  localStorage: Profile & Einstellungen
 ```
 
 ## Wo fange ich an?

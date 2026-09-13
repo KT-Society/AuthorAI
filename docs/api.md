@@ -20,6 +20,7 @@ Nicht-geheime Statusabfrage für die UI.
 {
   "tavily": true,
   "openrouter": true,
+  "pollinations": true,
   "languages": ["German", "English", "Japanese", "French"],
   "defaultLanguage": "German"
 }

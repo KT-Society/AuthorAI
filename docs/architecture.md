@@ -1,9 +1,9 @@
 # Architektur
 
 AuthorAI ist ein **Bun-Monorepo** mit einer Root-App (Autor) und einem Paket
-(`packages/promptgen`, Character-Engine + Standalone-UI). Es gibt **keine Datenbank**:
-Der Bun-Server ist zugleich API-Proxy, Static-Host und Dateispeicher für Cover; alle
-Fachdaten liegen im Browser.
+(`packages/promptgen`, Character-Engine + Standalone-UI). Der Bun-Server ist zugleich
+API-Proxy, Static-Host, Dateispeicher für Cover **und** Datenbank: alle Fachdaten liegen
+lokal in **SQLite** (`<runtimeRoot>/data/authorai.db`), pro Profil gescoped.
 
 ---
 
@@ -14,17 +14,23 @@ flowchart TB
     subgraph Browser["Browser (React 19 SPA)"]
         UI["Views & Dialoge"]
         SVC["services/* — fetch auf /api/*"]
-        LS[("localStorage<br/>pro Profil gescoped")]
+        SET[("localStorage<br/>Profile & Einstellungen")]
     end
 
     subgraph Server["Bun-Server (src/index.ts)"]
         ROUTES["Bun.serve routes"]
         S_STORY["server/story.ts"]
+        S_CONT["server/continuity.ts"]
         S_LLM["server/llm.ts"]
         S_COVER["server/cover.ts"]
         S_RESEARCH["server/research.ts"]
+        S_STORE["server/store.ts (SQLite)"]
         PG[("packages/promptgen Engine")]
         FILES[("covers/*.png")]
+    end
+
+    subgraph Data["Lokale Ablage (runtimeRoot)"]
+        DB[("data/authorai.db")]
     end
 
     subgraph External["Externe Dienste"]
@@ -34,12 +40,14 @@ flowchart TB
     end
 
     UI --> SVC --> ROUTES
-    UI --> LS
+    UI --> SET
     ROUTES --> S_STORY --> S_LLM --> OR
+    ROUTES --> S_CONT --> S_LLM
     ROUTES --> S_RESEARCH --> TV
     ROUTES --> S_COVER --> PO
     S_COVER --> FILES
     ROUTES --> PG --> OR
+    SVC -. "/api/state" .-> S_STORE --> DB
     FILES -. "GET /covers/:file" .-> Browser
 ```
 
@@ -49,7 +57,8 @@ Kernprinzipien:
    passieren serverseitig; der Client sieht nur die eigenen `/api/*`-Routen.
 2. **Der Client kennt keine Secrets.** `src/services/*` sind dünne Wrapper.
 3. **Server-only-Module sind isoliert** (`src/server/*`) und werden nie vom Client importiert.
-4. **Fachdaten gehören dem Nutzer**, nicht dem Server → `localStorage`, pro Profil.
+4. **Fachdaten gehören dem Nutzer** — sie liegen lokal in SQLite
+   (`<runtimeRoot>/data/authorai.db`), pro Profil; kein Cloud-Konto, keine Fremdablage.
 
 ---
 
@@ -96,11 +105,12 @@ Ports: Root **3000**, promptgen **3001** (eigener `Bun.serve`, überschreibbar p
 | `index.ts` | `Bun.serve` mit allen Routen, Fehler-Handling, HMR in Dev |
 | `server/llm.ts` | OpenRouter-Chat-Helper (`chatCompletion`, `chatCompletionDetailed`, `chatCompletionStream`, `cleanJsonBlock`) |
 | `server/story.ts` | Storyboard, Rohentwurf, Ausbau, Kohärenz, Stil, Weltenbau-Extraktion, Figuren-Extraktion, Chunking |
-| `server/continuity.ts` | Fakten-/Beziehungs-Extraktion + Normalisierung, Fakten-Check gegen den Kanon |
+| `server/continuity.ts` | Fakten-/Beziehungs-Extraktion + Normalisierung, Fakten-Check gegen den Kanon (Einzel, Queue/Stream, Quick Fix) |
 | `server/cache.ts` | Antwort-Cache (LRU + TTL) für wiederholbare Analysen; `AUTHORAI_CACHE=0` schaltet ab |
 | `server/cover.ts` | Pollinations-Bilderzeugung, Dateiablage, Löschen |
 | `server/research.ts` | Tavily-Suche |
 | `server/store.ts` | SQLite-Speicher (`bun:sqlite`, `<runtimeRoot>/data/authorai.db`) für alle Fachdaten |
+| `server/paths.ts` | Laufzeit-Pfade (`runtimeRoot`, `runtimePort`, `isStandaloneBinary`) |
 
 Der Server lädt beim Start die Root-`.env` über die promptgen-`env`-Funktionen
 (Eltern-Suche nach `.env`, robust gegenüber verschachtelten Paketen).
@@ -110,7 +120,8 @@ Der Server lädt beim Start die Root-`.env` über die promptgen-`env`-Funktionen
 Dünne Wrapper auf die lokalen Routen:
 
 - `http.ts` — gemeinsamer `postJson`-Helper inkl. Fehler-Normalisierung
-- `story.ts`, `generate.ts`, `cover.ts`, `research.ts`, `continuity.ts`, `stream.ts` (SSE)
+- `story.ts`, `generate.ts`, `cover.ts`, `research.ts`, `continuity.ts`, `state.ts`
+  (`/api/state` + Store-Info), `stream.ts` (SSE)
 
 ### 3. Daten (`src/data/*`)
 
@@ -124,6 +135,7 @@ Typen + Seed-Daten, frei von UI-Logik:
   `relationsForBook`) und `canonBlock()` (verbindlicher Prompt-Block)
 - `series.ts` — Reihen (`Series`): Band-Reihenfolge, `canonVolumeIds` (Kanon über alle Bände)
 - `style.ts` — Stil-Profile (`STYLE_PRESETS`, `styleProfileHint`, Normalisierung)
+- `state.ts` — Whitelist der gespeicherten Sammlungen (Client **und** Server teilen sie)
 
 ### 4. Bibliothek (`src/lib/*`)
 
@@ -146,6 +158,10 @@ Typen + Seed-Daten, frei von UI-Logik:
 | `seriesOverview.ts` | Bände einer Reihe mit Fortschritt, Lücken und Status (pur, getestet) |
 | `seriesContext.ts` | Vorbände-Kontext + Vorbände-Kanon für einen neuen Band (`buildSeriesContext`) |
 | `worldMatch.ts` | Normalisierter Titelvergleich (Dublettenschutz Weltenbau) |
+| `nameMatch.ts` | Gemeinsamer Rechenkern für Namens-/Titel-Abgleich (Weltenbau + Figuren) |
+| `characterMatch.ts` | Figuren-Dubletten: entfernt Anreden/Ränge/Artikel, dann Token-Überlappung |
+| `factMatch.ts` | Unscharfer Aussagen-Vergleich (Dublettenschutz für Fakten & Beziehungen) |
+| `pdf.ts` | PDF-Writer (Titelblatt, Kapitelumbruch; WinAnsi/Helvetica) |
 | `passNotes.ts` | Filtert No-Op-Notizen aus Prüfberichten („A" wurde zu „A") |
 | `prose.ts` | `<TEXT>`-Extraktion + Truncation-Erkennung (Server **und** Client) |
 | `toast.ts` / `clipboard.ts` | Globale Rückmeldungen + Kopieren mit Fallback |
@@ -154,15 +170,16 @@ Typen + Seed-Daten, frei von UI-Logik:
 ### 5. Views (`src/components/dashboard/*`)
 
 - **Shell:** `Dashboard.tsx` (Profil-State, Routing, Persistenz, Auto-Import, Notifications)
+  plus `Sidebar`, `TopBar`, `NotificationsBell` und `JobCenter` (Hintergrund-Queues)
 - **Views:** `DashboardView`, `LibraryView`, `ChaptersView`, `CharactersView`, `WorldView`,
   `ContinuityView` (Fakten + Beziehungsgraph), `PlotBoardView`, `ResearchView`, `StatsView`,
   `BookDetailView` (Editor + Reader)
 - **Dialoge:** `BookWizard`, `CharacterGenerator`, `CharacterEditorDialog`,
   `CharacterExtractDialog`, `ContinuityExtractDialog`, `CanonCheckDialog`, `WorldExtractDialog`,
-  `CoverEditorDialog`, `SeriesDialog`, `SettingsDialog`, `ProfileGate`
+  `TimelineDialog`, `CoverEditorDialog`, `CoverVariantsDialog`, `SeriesDialog`,
+  `SettingsDialog`, `ProfileGate`
 - **Bausteine:** `primitives.tsx` (Panel, Badge, ProgressBar, Sparkline, ViewHeader, …),
-  `CharacterContinuityPanel.tsx` (Fakten-/Beziehungs-Panels im Charakter-Editor)
-- **Bausteine:** `primitives.tsx` (Panel, Badge, ProgressBar, Sparkline, ViewHeader, …)
+  `CharacterContinuityPanel.tsx` (Fakten-/Beziehungs-Panels im Charakter-Editor), `ToastHost`
 
 Die UI-Basis liegt in `src/components/ui/*` (shadcn-Stil, Radix-basiert).
 
@@ -187,7 +204,8 @@ Szenen-Zeiten). Ergebnisse landen als Berichte am Kapitel bzw. im Buch-Header.
 | EPUB | `lib/epub.ts` | EPUB 3, eigener ZIP-Writer (`lib/zip.ts`), Cover + Navigation |
 | DOCX | `lib/docx.ts` | Office Open XML (Titelblatt, Kapitel mit Seitenumbruch) |
 | Markdown | `lib/markdown.ts` | Reiner Text |
-| PDF | Reader + `src/index.css` | Druck-CSS (`data-print-area`, Seitenumbruch je Kapitel) |
+| PDF (direkt) | `lib/pdf.ts` | Eigener Writer (PDF 1.4, WinAnsi/Helvetica), Titelblatt + Kapitelumbruch |
+| PDF (Druck) | Reader + `src/index.css` | Druck-CSS (`data-print-area`, Seitenumbruch je Kapitel) |
 | Backup | `lib/backup.ts` | JSON (alle Sammlungen + Metriken), Import mit Bestätigung |
 
 Dabei lassen sich **Teil-Exporte** erzeugen: Gesamtbuch, Akt I–III (Positions-Regel wie im
@@ -221,18 +239,25 @@ Wichtig: Der Client **ersetzt** den Text und committet sofort → Persistenz nac
 
 ## Persistenz & Profile
 
-- **Profile** (`authorai.profiles`, `authorai.currentProfile`) trennen Nutzer lokal.
-- Fachdaten liegen unter `authorai.<profilId>.<sammlung>`:
-  `books`, `characters`, `world`, `plot`, `research`, `ideas`, `notifications`, `meta`.
-- **Bedeutung von „leer":** fehlender Key = frisches Profil → Seeds greifen;
+- **Profile** (`authorai.profiles`, `authorai.currentProfile`) trennen Nutzer lokal; sie sind
+  winzig und bleiben im Browser.
+- **Fachdaten** (`books`, `characters`, `world`, `plot`, `research`, `ideas`, `coverPresets`,
+  `notifications`, `facts`, `relations`, `series`, `meta`) liegen in **SQLite**
+  (`<runtimeRoot>/data/authorai.db`) — eine Zeile je Profil + Sammlung, erreichbar **nur**
+  über `server/store.ts` und die Routen `/api/state` + `/api/store/info`.
+- **Ablauf:** Beim Start/Profilwechsel lädt `hydrateState()` einmal alle Sammlungen in den
+  Cache (`lib/persistence.ts`); gelesen wird danach **synchron**, geschrieben gebündelt
+  (400 ms) per `PUT /api/state`. Kein Size-Limit mehr (vorher: ~5 MB `localStorage`).
+- **Bedeutung von „leer":** fehlende Sammlung = frisches Profil → Seeds greifen;
   vorhandenes `[]` = bewusst geleert → Beispiele kommen nicht zurück.
-- **Migration:** Alte, nicht-gescopte Daten (`authorai.books` …) werden beim ersten Start
-  automatisch in ein Profil „Autor" überführt.
+- **Migration:** Alte, nicht-gescopte Daten (`authorai.books` …) wandern beim ersten Start in
+  ein Profil „Autor"; vorhandene `localStorage`-Daten werden einmalig in die Datenbank
+  übernommen (danach dienen sie nur noch als lesender Notnagel, falls der Server fehlt).
 - **Meta-Versionierung:** `DashboardMeta.version` erlaubt sanfte Migrationen
   (z. B. Beispiel-Metriken → 0, `todayWords` → Wochenslot backfillen).
 
-Geräteweit (nicht pro Profil) bleiben die **Generierungs-Einstellungen**
-(`authorai.model`, `authorai.model.<stufe>`, `authorai.language`).
+Geräteweit (nicht pro Profil) bleiben im Browser die **Generierungs-Einstellungen**
+(`authorai.model`, `authorai.model.<stufe>`, `authorai.language`, `authorai.styleProfile`).
 
 ---
 
@@ -280,9 +305,11 @@ Zusätzlich erzeugt die Shell bei Änderungen **Notifications** und erhöht die 
 
 ## Grenzen & bewusste Entscheidungen
 
-- **Kein Server-Store:** Inhalte sind nutzer-lokal; es gibt keine Konten/Sync.
-- **Sequenzielle Generierung:** Kapitel werden nacheinander erzeugt (kein Streaming), dafür
-  robust, unterbrechbar und pro Kapitel persistiert.
+- **Lokale Datenbank, kein Cloud-Store:** Inhalte liegen nutzer-lokal in SQLite; es gibt
+  keine Konten und kein Sync.
+- **Streaming, wo es zählt:** lange Antworten (Rohentwurf, Ausbau, Kohärenz, Stil) und
+  Analysen (Fakten-Check, Extraktion) laufen als SSE mit Live-Vorschau; erzeugt wird
+  weiterhin robust, unterbrechbar und pro Kapitel persistiert.
 - **Modellabhängige Qualität:** Länge/Sprache hängen vom Modell ab; der Server fängt das
   mit Continuation-Loops, Language-Lock und Prüfberichten ab (siehe `pipeline.md`).
 - **Meta (Einstellungen) sind geräteweit**, nicht pro Profil.
@@ -292,6 +319,7 @@ Zusätzlich erzeugt die Shell bei Änderungen **Notifications** und erhöht die 
 ## Erweiterungspunkte
 
 - Neue Pipeline-Stufe: Server-Funktion + Route + Service + Wizard-Schritt + Stage-Model.
-- Neue Domäne (z. B. „Timeline"): `data/`-Typ, Persistenz-Name, View, Nav-Eintrag.
-- Export-Formate (EPUB/Markdown) als Client-Feature im Buch-Editor.
-- Streaming für lange Kapitel über Server-Sent Events.
+- Neue Domäne/Sammlung: `data/`-Typ + Whitelist in `data/state.ts` + `lib/persistence.ts`-Wrapper,
+  View + Nav-Eintrag.
+- Export-Formate (EPUB/Markdown/DOCX/PDF) als Client-Feature im Buch-Editor.
+- Streaming: neue Routen als SSE über `sseResponse()` in `src/index.ts`.

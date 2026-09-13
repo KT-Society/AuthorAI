@@ -2,7 +2,7 @@
 
 AuthorAI wird über die **Root-`.env`** (Secrets) und die **App-Einstellungen**
 (Modelle, Sprache) konfiguriert. Es gibt keine Konfigurationsdatei für Fachdaten —
-die liegen pro Profil im Browser.
+die liegen pro Profil in der SQLite-Datenbank `<runtimeRoot>/data/authorai.db`.
 
 ---
 
@@ -123,7 +123,7 @@ release/
 | **Cover** | werden in `covers/` **beim Binary** abgelegt (nicht im Repo) |
 | **Port** | `PORT` (Standard **3000**) |
 | **Aufruf** | Binary starten, dann `http://localhost:3000` öffnen |
-| **Daten** | weiterhin im Browser, pro Profil |
+| **Daten** | in `data/authorai.db` **neben dem Binary** (SQLite, pro Profil) — siehe [`data-model.md`](data-model.md) |
 | **Größe** | ~90–100 MB (Bun-Runtime enthalten), komprimiert deutlich kleiner |
 
 ```bash
