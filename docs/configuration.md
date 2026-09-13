@@ -70,6 +70,18 @@ kein Default**. Leer = erbt das Standard-Model.
 
 ---
 
+## Kanon-Warnung
+
+- Key: `authorai.canonWarn` (`"0"` = aus; Standard **an**), geräteweit.
+- Wirkt beim **Kapitelwechsel**: das verlassene Kapitel wird still gegen den Kanon geprüft; bei
+  Widersprüchen erscheint eine **nicht blockierende** Warnung mit direktem Weg in den Fakten-Check.
+- Modell: die Stufe **Kohärenz** (`authorai.model.consistency`) — sie trägt auch Fakten-Check und
+  Quick Fix.
+- Unveränderte Kapitel kosten nichts (Text-Hash `lib/textHash.ts` + Antwort-Cache;
+  `AUTHORAI_CACHE=0` schaltet den Cache ab).
+
+---
+
 ## Profile
 
 - Profile werden lokal verwaltet (`authorai.profiles`, `authorai.currentProfile`).

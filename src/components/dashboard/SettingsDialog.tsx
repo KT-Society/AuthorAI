@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Cpu, Database, Download, KeyRound, Palette, Settings, Upload, X } from "lucide-react";
+import { ShieldCheck, Cpu, Database, Download, KeyRound, Palette, Settings, Upload, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,10 +17,12 @@ import {
   MODEL_STAGE_LABELS,
   MODEL_STAGES,
   emptyStageModels,
+  readCanonWarn,
   readLanguage,
   readModel,
   readStageModelsRaw,
   readStyleProfile,
+  writeCanonWarn,
   writeLanguage,
   writeModel,
   writeStageModel,
@@ -64,6 +66,7 @@ export function SettingsDialog({
   const [stageModels, setStageModels] = useState<Record<ModelStage, string>>(emptyStageModels);
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [styleProfile, setStyleProfile] = useState<StyleProfile>(DEFAULT_STYLE_PROFILE);
+  const [canonWarn, setCanonWarn] = useState(true);
   const [config, setConfig] = useState<AppConfig | null>(null);
   /** Belegung der SQLite-Datenbank (kein Browserspeicher-Limit mehr). */
   const [store, setStore] = useState<StoreInfo | null>(null);
@@ -75,6 +78,7 @@ export function SettingsDialog({
     setStageModels(readStageModelsRaw());
     setLanguage(readLanguage() ?? DEFAULT_LANGUAGE);
     setStyleProfile(readStyleProfile());
+    setCanonWarn(readCanonWarn());
     fetchConfig().then((data) => {
       if (data) setConfig(data);
     });
@@ -269,6 +273,33 @@ export function SettingsDialog({
               <p className="mt-2 text-[11px] text-muted-foreground">
                 Gilt verbindlich für den <strong>Stil-Pass</strong> — nie auf Kosten von Inhalt,
                 Fakten oder Bedeutung. Aktuell: {styleProfileLabel(styleProfile)}.
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <ShieldCheck className="size-3.5" />
+                Kanon-Warnung beim Kapitelwechsel
+              </label>
+              <label className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/5 p-3">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 accent-brand-emerald"
+                  checked={canonWarn}
+                  onChange={(event) => {
+                    setCanonWarn(event.target.checked);
+                    writeCanonWarn(event.target.checked);
+                  }}
+                />
+                <span className="text-xs text-foreground/85">
+                  Beim Wechsel prüft AuthorAI das verlassene Kapitel still gegen den Kanon und
+                  warnt, wenn es Widersprüche gibt. Die Prüfung ist <strong>nicht blockierend</strong>{" "}
+                  — kein Text geht verloren, das Ergebnis landet in der Prüf-Historie des Kapitels.
+                  Bereits geprüfte, unveränderte Kapitel kosten nichts (Antwort-Cache).
+                </span>
+              </label>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Nutzt das Modell der Stufe <strong>Kohärenz</strong>.
               </p>
             </div>
 

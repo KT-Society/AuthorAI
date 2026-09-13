@@ -8,6 +8,36 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Kanon-Komfort & Versions-Diff
+
+- **Added** **Versions-Vergleich** (`VersionDiffDialog`, `lib/diff.ts`): Im **Versionen**-Panel
+  gibt es „Vergleichen" — zwei Fassungen (aktueller Stand oder eine gespeicherte Version) werden
+  Wort für Wort gegenübergestellt. Entferntes rot/durchgestrichen, Neues grün, plus Bilanz
+  „+n / −m Wörter". Der Diff ist eigenständig (Präfix-/Suffix-Trimmung + LCS im geänderten
+  Mittelteil; bei sehr unterschiedlichen Texten grober Block-Diff statt Pathologie-Kosten).
+- **Added** **Diff-Vorschau vor dem Übernehmen**: Der Quick Fix schreibt nicht mehr direkt,
+  sondern liefert die Änderungen an eine **Vorschau** (`CanonRepairPreviewDialog`): je Kapitel
+  die Wort-Diff, Kapitel einzeln abwählbar, dann „Übernehmen (n)" oder „Verwerfen". Erst die
+  Bestätigung schreibt (mit Snapshot je Kapitel) in einem Commit ins Buch.
+- **Added** **Einzelne Widersprüche auswählen**: Im Fakten-Check hat jeder Widerspruch ein
+  Häkchen (Standard: alle markiert). „Markierte beheben (n)" und das Kapitel-„Beheben (n)"
+  korrigieren nur die markierte Teilmenge — der Server bekommt exakt diese Liste.
+- **Added** **Gezielter Fakten-Check (Umfang)**: Der Check kennt jetzt einen Umfang — *Gesamter
+  Kanon*, *eine einzelne Figur/Welt* oder *nur ausgewählte Fakten* (Checkliste). Der Kanon-Block
+  wird clientseitig verkleinert, es gibt **keine** neue Route.
+- **Added** **Prüf-Historie je Kapitel**: Jedes Check-Ergebnis wird am Kapitel gespeichert
+  (`ChapterContent.canonCheck`: Zeitpunkt, Ergebnis, Anzahl, Umfang, Text-Hash) und erscheint als
+  Badge **„Fakten ✓"** bzw. **„Fakten n"** in der Kapitel-Liste sowie als Abschnitt in den
+  **Prüfberichten**.
+- **Added** **Kanon-Warnung beim Kapitelwechsel** (Einstellungen → geräteweiter Schalter, Standard
+  **an**): Beim Verlassen prüft AuthorAI das Kapitel still gegen den Kanon und warnt bei
+  Widersprüchen mit Liste und direktem Weg in den Fakten-Check. Die Prüfung ist **bewusst nicht
+  blockierend** — ein blockierendes Autosave würde offenen Text verlieren („stiller Datenverlust
+  wäre schlimmer als eine sichtbare Warnung"). Unveränderte Kapitel kosten nichts
+  (`lib/textHash.ts` + Antwort-Cache).
+- **Changed** **Quick Fix nutzt den Kanon des gewählten Umfangs**: Korrektur und Nachprüfung
+  laufen mit demselben (ggf. verkleinerten) Kanon-Block wie der Check.
+
 ### Fixed
 
 - **Dashboard-Metriken (Streak, Tages-/Wochenwerte) überleben den Reload wieder**: Der

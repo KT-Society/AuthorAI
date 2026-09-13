@@ -77,6 +77,22 @@ export interface ChapterVersion {
   note?: string;
 }
 
+/** Ergebnis des letzten Fakten-Checks an einem Kapitel (Prüf-Historie). */
+export interface ChapterCanonCheck {
+  /** Zeitpunkt des Checks (ISO). */
+  at: string;
+  /** Keine Widersprüche gefunden. */
+  ok: boolean;
+  /** Anzahl gemeldeter Widersprüche. */
+  count: number;
+  /** Kurzfassung des Berichts. */
+  summary: string;
+  /** Umfang des Checks (z. B. „Gesamter Kanon" oder ein Figurenname). */
+  scope?: string;
+  /** Hash des geprüften Texts — erkennt „unverändert seit dem Check". */
+  hash: string;
+}
+
 export interface ChapterContent {
   index: number;
   title: string;
@@ -100,6 +116,8 @@ export interface ChapterContent {
   styleNotes?: string;
   /** Whether the style/language pass has run. */
   styleChecked?: boolean;
+  /** Letzter Fakten-Check gegen den Kanon (Prüf-Historie). */
+  canonCheck?: ChapterCanonCheck;
 }
 
 export type WizardStep = "idea" | "storyboard" | "draft" | "expand" | "consistency" | "style";

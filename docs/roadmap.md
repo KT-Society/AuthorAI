@@ -8,17 +8,18 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 ## Nah dran (hoher Nutzen, überschaubar)
 
 ### Schreiben & Struktur
-- **Versions-Diff**: Unterschiede zwischen zwei Kapitelversionen anzeigen
 - **Kapitel-Gerüste**: ganze Kapitelstrukturen als Vorlage wiederverwenden
 - **Szenen-Import/Export**: Szenenplan als JSON austauschen
+- **Drei-Wege-Vergleich**: „aktuell ↔ vor Kohärenz ↔ vor Stil" in einer kombinierten Ansicht
 
 ### Kanon & Kontinuität (Anschlüsse an den Fakten-Check)
-- **Diff-Vorschau vor dem Übernehmen**: Beheben zeigt vorher/nachher je Stelle, statt direkt zu schreiben
-- **Einzelne Widersprüche auswählen**: nur markierte Stellen korrigieren statt „alle"
-- **Kanon-Warnung vor dem Speichern**: Kapitel still gegen die Fakten prüfen und erst dann
-  ablegen (Widerspruch sichtbar, bevor er sich einbrennt)
-- **Prüf-Historie je Kapitel**: letzter Fakten-Check + Ergebnis als Badge im Kapitel
-- **Gezielter Check**: nur markierte Fakten oder eine einzelne Figur prüfen
+- **Widerspruchs-Marker im Editor**: gemeldete Zitate direkt im Kapiteltext hervorheben und
+  dorthin springen, statt sie nur als Liste zu zeigen
+- **„Strenger Modus" (Opt-in)**: blockierendes Speichern, solange ein Kanon-Widerspruch offen
+  ist — heute bewusst nur eine Warnung, um keinen Text zu verlieren
+- **Kontinuitäts-Verlauf**: Änderungen an Fakten und Beziehungen selbst versionieren (wer hat
+  wann was umgestellt)
+- **Check-Bericht exportieren**: Fakten-Check-Ergebnis als Markdown/PDF für das Lektorat
 
 ### Export & Ausgabe
 - **PDF mit Cover-Seite** (Titelseite aus dem Cover-Bild)

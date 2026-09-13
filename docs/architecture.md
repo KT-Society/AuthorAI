@@ -162,6 +162,8 @@ Typen + Seed-Daten, frei von UI-Logik:
 | `characterMatch.ts` | Figuren-Dubletten: entfernt Anreden/Ränge/Artikel, dann Token-Überlappung |
 | `factMatch.ts` | Unscharfer Aussagen-Vergleich (Dublettenschutz für Fakten & Beziehungen) |
 | `pdf.ts` | PDF-Writer (Titelblatt, Kapitelumbruch; WinAnsi/Helvetica) |
+| `diff.ts` | Wort-Diff (Präfix-/Suffix-Trimmung + LCS) für Versions-Vergleich und Korrektur-Vorschau |
+| `textHash.ts` | Billiger Text-Hash (FNV-1a): erkennt „unverändert seit dem letzten Fakten-Check" |
 | `passNotes.ts` | Filtert No-Op-Notizen aus Prüfberichten („A" wurde zu „A") |
 | `prose.ts` | `<TEXT>`-Extraktion + Truncation-Erkennung (Server **und** Client) |
 | `toast.ts` / `clipboard.ts` | Globale Rückmeldungen + Kopieren mit Fallback |
@@ -176,10 +178,11 @@ Typen + Seed-Daten, frei von UI-Logik:
   `BookDetailView` (Editor + Reader)
 - **Dialoge:** `BookWizard`, `CharacterGenerator`, `CharacterEditorDialog`,
   `CharacterExtractDialog`, `ContinuityExtractDialog`, `CanonCheckDialog`, `WorldExtractDialog`,
-  `TimelineDialog`, `CoverEditorDialog`, `CoverVariantsDialog`, `SeriesDialog`,
-  `SettingsDialog`, `ProfileGate`
+  `TimelineDialog`, `VersionDiffDialog`, `CanonRepairPreviewDialog`, `CoverEditorDialog`,
+  `CoverVariantsDialog`, `SeriesDialog`, `SettingsDialog`, `ProfileGate`
 - **Bausteine:** `primitives.tsx` (Panel, Badge, ProgressBar, Sparkline, ViewHeader, …),
-  `CharacterContinuityPanel.tsx` (Fakten-/Beziehungs-Panels im Charakter-Editor), `ToastHost`
+  `DiffView.tsx` (Wort-Diff-Darstellung), `CharacterContinuityPanel.tsx`
+  (Fakten-/Beziehungs-Panels im Charakter-Editor), `ToastHost`
 
 Die UI-Basis liegt in `src/components/ui/*` (shadcn-Stil, Radix-basiert).
 

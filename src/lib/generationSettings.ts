@@ -14,6 +14,7 @@ import type { StyleProfile } from "@/data/style";
 export const MODEL_STORAGE_KEY = "authorai.model";
 export const LANGUAGE_STORAGE_KEY = "authorai.language";
 export const STYLE_PROFILE_STORAGE_KEY = "authorai.styleProfile";
+export const CANON_WARN_STORAGE_KEY = "authorai.canonWarn";
 
 export const FALLBACK_LANGUAGES = ["German", "English", "Japanese", "French"];
 export const DEFAULT_LANGUAGE = "German";
@@ -124,4 +125,18 @@ export function writeStyleProfile(value: StyleProfile): void {
 /** Der wirksame Stimm-Hinweis (Preset + Freitext) oder "" — für Aufrufer, die nur den String brauchen. */
 export function readStyleProfileHint(): string {
   return styleProfileHint(readStyleProfile());
+}
+
+/**
+ * Kanon-Warnung vor dem Speichern (geräteweit). **Standard: an** — nur das ausdrückliche
+ * „aus" (`"0"`) schaltet sie ab. Die Prüfung läuft still und nicht blockierend beim
+ * Kapitelwechsel, damit kein Text verloren geht.
+ */
+export function readCanonWarn(): boolean {
+  return localStorage.getItem(CANON_WARN_STORAGE_KEY) !== "0";
+}
+
+export function writeCanonWarn(value: boolean): void {
+  if (value) localStorage.removeItem(CANON_WARN_STORAGE_KEY);
+  else localStorage.setItem(CANON_WARN_STORAGE_KEY, "0");
 }

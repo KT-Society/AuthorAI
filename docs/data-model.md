@@ -82,6 +82,17 @@ interface ChapterContent {
   consistencyChecked?: boolean;
   styleNotes?: string;
   styleChecked?: boolean;
+  canonCheck?: ChapterCanonCheck; // letzter Fakten-Check (Prüf-Historie)
+}
+
+/** Ergebnis des letzten Fakten-Checks an einem Kapitel (Prüf-Historie). */
+interface ChapterCanonCheck {
+  at: string;        // Zeitpunkt (ISO)
+  ok: boolean;       // keine Widersprüche gefunden
+  count: number;     // Anzahl gemeldeter Widersprüche
+  summary: string;   // Kurzfassung des Berichts
+  scope?: string;    // Umfang (z. B. „Gesamter Kanon" oder ein Figurenname)
+  hash: string;      // Hash des geprüften Texts (erkennt „unverändert seit dem Check")
 }
 
 /** Metadaten je Szene (parallel zur Beat-Liste). */
@@ -274,6 +285,7 @@ gebündelt (`schedule`, 400 ms) über `PUT /api/state`. Sammlungsnamen sind in
 | `authorai.model.storyboard` \| `draft` \| `expand` \| `consistency` \| `style` | Model je Stufe |
 | `authorai.language` | Ausgabesprache |
 | `authorai.styleProfile` | Zielstimme: `{ presetId, custom }` (Stil-Pass) |
+| `authorai.canonWarn` | Kanon-Warnung beim Kapitelwechsel (`"0"` = aus; Standard an) |
 | `authorai.<profilId>.migrated` | Flag der einmaligen Datenübernahme |
 
 > Profile und Generierungs-Einstellungen sind bewusst **geräteweit** und winzig — sie bleiben im

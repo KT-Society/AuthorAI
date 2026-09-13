@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowLeft,
+  ArrowLeftRight,
   ArrowUp,
   BookOpen,
   BookText,
@@ -17,6 +18,7 @@ import {
   Plus,
   Printer,
   ScrollText,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Save,
@@ -59,12 +61,19 @@ import {
   sceneConstraints,
   toParagraphs,
 } from "@/data/story";
-import type { ChapterContent, ChapterPlan, SceneConstraint, SceneMeta } from "@/data/story";
-import { MODEL_STAGE_LABELS, readLanguage, readStageModel, readStyleProfileHint } from "@/lib/generationSettings";
+import type {
+  ChapterContent,
+  ChapterPlan,
+  ChapterVersion,
+  SceneConstraint,
+  SceneMeta,
+} from "@/data/story";
+import { MODEL_STAGE_LABELS, readCanonWarn, readLanguage, readStageModel, readStyleProfileHint } from "@/lib/generationSettings";
 import { manuscriptOf } from "@/lib/bookManuscript";
 import { copyText } from "@/lib/clipboard";
 import { extractProse, looksTruncated } from "@/lib/prose";
 import { characterNamesMatch } from "@/lib/characterMatch";
+import { textHash } from "@/lib/textHash";
 import { createJob, finishJob, isCancelled, updateJob } from "@/lib/jobs";
 import { streamJson } from "@/services/stream";
 import { showToast } from "@/lib/toast";
@@ -75,8 +84,9 @@ import { buildPdf } from "@/lib/pdf";
 import { buildCoverPrompt, deleteCover, generateCover } from "@/services/cover";
 import { checkTimeline, expandChapter, streamPass } from "@/services/story";
 import type { PassResult } from "@/services/story";
-import { streamCanonCheck, streamCanonRepair } from "@/services/continuity";
+import { checkCanon, streamCanonCheck, streamCanonRepair } from "@/services/continuity";
 import type {
+  CanonCheckResult,
   CanonRepairResultEvent,
   CanonStreamHandlers,
   CanonViolation,
@@ -90,6 +100,13 @@ import { CoverEditorDialog } from "./CoverEditorDialog";
 import type { CoverTarget } from "./CoverEditorDialog";
 import { CoverVariantsDialog } from "./CoverVariantsDialog";
 import { CanonCheckDialog } from "./CanonCheckDialog";
+import type {
+  CanonFactOption,
+  CanonScopeOption,
+  CanonScopeSelection,
+} from "./CanonCheckDialog";
+import type { CanonRepairChange } from "./CanonRepairPreviewDialog";
+import { VersionDiffDialog } from "./VersionDiffDialog";
 import { SeriesDialog } from "./SeriesDialog";
 import { TimelineDialog } from "./TimelineDialog";
 import type { TimelineEntry } from "./TimelineDialog";
@@ -205,6 +222,13 @@ export function BookDetailView({
   const [coverVariantsOpen, setCoverVariantsOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [canonCheckOpen, setCanonCheckOpen] = useState(false);
+  const [versionDiffOpen, setVersionDiffOpen] = useState(false);
+  /** Nicht blockierende Kanon-Warnung nach einem Kapitelwechsel (null = keine). */
+  const [canonWarn, setCanonWarn] = useState<{
+    chapterIndex: number;
+    violations: CanonViolation[];
+    scope: string;
+  } | null>(null);
   /** Live-Vorschau während eines gestreamten Laufs (null = keine Vorschau). */
   const [streamText, setStreamText] = useState<string | null>(null);
   /** Zusatzinfo in der Vorschau (z. B. „Teil 2/5"). */
@@ -256,10 +280,9 @@ export function BookDetailView({
    * Kanon-Block für alle Generierungs-/Prüf-Pässe: nur Entitäten dieses Projekts
    * (Figuren des Buchs bzw. aus seinem Storyboard, Welteneinträge mit dieser bookId).
    */
-  const canon = useMemo(() => {
+  const canonData = useMemo(() => {
     const allFacts = facts ?? [];
     const allRelations = relations ?? [];
-    if (allFacts.length === 0 && allRelations.length === 0) return undefined;
 
     // In einer Reihe zählt der Kanon **aller Bände** (gemeinsame Welt und Figuren-Historie).
     const scopeBookIds = new Set(canonVolumeIds(series ?? [], book.id));
@@ -280,13 +303,84 @@ export function BookDetailView({
       scopedWorlds.find((entry) => entry.id === id)?.title ??
       "";
 
-    const block = canonBlock({
-      facts: factsForBook(allFacts, characterIds, worldIds),
-      relations: relationsForBook(allRelations, characterIds),
+    const scopedFacts = factsForBook(allFacts, characterIds, worldIds);
+    const scopedRelations = relationsForBook(allRelations, characterIds);
+    const block = canonBlock({ facts: scopedFacts, relations: scopedRelations, nameOf });
+    return {
       nameOf,
-    });
-    return block.trim().length > 0 ? block : undefined;
+      scopedCharacters,
+      scopedWorlds,
+      facts: scopedFacts,
+      relations: scopedRelations,
+      all: block.trim().length > 0 ? block : undefined,
+    };
   }, [facts, relations, characters, worlds, series, book.id, book.storyboard]);
+
+  /** Kanon-Block für alle Generierungs-/Prüf-Pässe (gesamter Scope des Projekts). */
+  const canon = canonData.all;
+
+  /** Wählbare Umfänge für den gezielten Fakten-Check (Gesamt, eine Figur/Welt, freie Auswahl). */
+  const canonScopes = useMemo<CanonScopeOption[]>(() => {
+    const options: CanonScopeOption[] = [
+      { id: "all", label: `Gesamter Kanon (${canonData.facts.length} Fakten)` },
+    ];
+    for (const character of canonData.scopedCharacters) {
+      const count =
+        canonData.facts.filter((fact) => fact.entityId === character.id).length +
+        canonData.relations.filter(
+          (relation) => relation.fromId === character.id || relation.toId === character.id,
+        ).length;
+      if (count > 0) {
+        options.push({ id: `c:${character.id}`, label: `Nur ${character.name} (${count})` });
+      }
+    }
+    for (const entry of canonData.scopedWorlds) {
+      const count = canonData.facts.filter((fact) => fact.entityId === entry.id).length;
+      if (count > 0) options.push({ id: `w:${entry.id}`, label: `Nur ${entry.title} (${count})` });
+    }
+    return options;
+  }, [canonData]);
+
+  const canonFacts = useMemo<CanonFactOption[]>(
+    () =>
+      canonData.facts
+        .filter((fact) => fact.statement.trim().length > 0)
+        .map((fact) => ({
+          id: fact.id,
+          label: `${canonData.nameOf(fact.entityId) || "?"}: ${fact.statement}`,
+        })),
+    [canonData],
+  );
+
+  /** Baut den Kanon-Block für einen gewählten Umfang (ohne Serveränderung — nur kürzerer Block). */
+  const canonForScope = (scope: CanonScopeSelection): string | undefined => {
+    if (scope.scopeId === "all") return canonData.all;
+    if (scope.scopeId === "facts") {
+      const chosen = canonData.facts.filter((fact) => scope.factIds.includes(fact.id));
+      const block = canonBlock({ facts: chosen, relations: [], nameOf: canonData.nameOf });
+      return block.trim().length > 0 ? block : undefined;
+    }
+    const [kind, id = ""] = scope.scopeId.split(":");
+    if (kind === "c") {
+      const block = canonBlock({
+        facts: canonData.facts.filter((fact) => fact.entityId === id),
+        relations: canonData.relations.filter(
+          (relation) => relation.fromId === id || relation.toId === id,
+        ),
+        nameOf: canonData.nameOf,
+      });
+      return block.trim().length > 0 ? block : undefined;
+    }
+    if (kind === "w") {
+      const block = canonBlock({
+        facts: canonData.facts.filter((fact) => fact.entityId === id),
+        relations: [],
+        nameOf: canonData.nameOf,
+      });
+      return block.trim().length > 0 ? block : undefined;
+    }
+    return canonData.all;
+  };
   const plans = useMemo<ChapterPlan[]>(() => book.storyboard?.chapters ?? [], [book.storyboard]);
   const status = STATUS_META[book.status];
   const progress = progressOf(book);
@@ -427,6 +521,20 @@ export function BookDetailView({
       manuscript.map((chapter, i) => (i === index ? { ...chapter, ...patch } : chapter)),
       plans,
     );
+  };
+
+  /**
+   * Mehrere Kapitel in **einem** Commit ändern. Nötig für schnelle Folgen (z. B. ein
+   * Prüfergebnis je Kapitel): `updateChapter` arbeitet auf dem `manuscript`-Closure und würde
+   * sich sonst gegenseitig überschreiben. Der Ref wird synchron mitgezogen.
+   */
+  const patchChapters = (patches: Map<number, Partial<ChapterContent>>) => {
+    if (patches.size === 0) return;
+    const next = manuscriptRef.current.map((chapter, index) =>
+      patches.has(index) ? { ...chapter, ...(patches.get(index) as Partial<ChapterContent>) } : chapter,
+    );
+    manuscriptRef.current = next;
+    commit(next, plans);
   };
   commitRef.current = updateChapter;
 
@@ -1158,22 +1266,21 @@ export function BookDetailView({
     return model;
   };
 
-  const requireCanon = (): string => {
-    if (!book.storyboard) throw new Error("Kein Storyboard vorhanden — Fakten-Check nicht möglich.");
-    if (!canon) {
-      throw new Error("Kein Kanon vorhanden — bitte zuerst Fakten oder Beziehungen erfassen.");
+  /** Gestreamter Check über alle Kapitel für den gewählten Umfang: Ergebnisse kommen live zurück. */
+  const runCanonCheckStream = async (
+    handlers: CanonStreamHandlers,
+    scope: CanonScopeSelection,
+  ): Promise<void> => {
+    if (!book.storyboard) {
+      throw new Error("Kein Storyboard vorhanden — Fakten-Check nicht möglich.");
     }
-    return canon;
-  };
-
-  /** Gestreamter Check über alle Kapitel: Ergebnisse kommen live zurück. */
-  const runCanonCheckStream = async (handlers: CanonStreamHandlers): Promise<void> => {
-    const scope = requireCanon();
+    const block = canonForScope(scope);
+    if (!block) throw new Error("Der gewählte Umfang enthält keine prüfbaren Fakten.");
     await streamCanonCheck(
       {
-        storyboard: book.storyboard as NonNullable<typeof book.storyboard>,
+        storyboard: book.storyboard,
         chapters: canonChapters.map(({ index, text }) => ({ index, text })),
-        canon: scope,
+        canon: block,
         model: canonModel(),
         language,
       },
@@ -1182,9 +1289,9 @@ export function BookDetailView({
   };
 
   /**
-   * Quick Fix (gestreamt): korrigiert die betroffenen Kapitel und schreibt jeden korrigierten
-   * Text ins Buch, sobald er ankommt. Die **Nachprüfung** macht der Server im selben Lauf und
-   * liefert das frische Ergebnis mit zurück — so bleibt kein alter Stand in der Liste stehen.
+   * Quick Fix (gestreamt): korrigiert die markierten Widersprüche und liefert die **Änderungen**
+   * zurück, statt sie sofort zu schreiben — der Dialog zeigt daraus die Diff-Vorschau. Die
+   * **Nachprüfung** macht der Server im selben Lauf und liefert das frische Ergebnis mit zurück.
    */
   const runCanonRepairMany = async (
     targets: { chapterIndex: number; violations: CanonViolation[] }[],
@@ -1192,8 +1299,15 @@ export function BookDetailView({
       onStarted: (chapterIndex: number) => void;
       onResult: (event: CanonRepairResultEvent) => void;
     },
-  ): Promise<void> => {
-    const scope = requireCanon();
+    scope: CanonScopeSelection,
+  ): Promise<CanonRepairChange[]> => {
+    if (!book.storyboard) {
+      throw new Error("Kein Storyboard vorhanden — Fakten-Check nicht möglich.");
+    }
+    const block = canonForScope(scope) ?? canon;
+    if (!block) {
+      throw new Error("Kein Kanon vorhanden — bitte zuerst Fakten oder Beziehungen erfassen.");
+    }
     const model = canonModel();
 
     const chapters = targets.map((target) => {
@@ -1206,21 +1320,22 @@ export function BookDetailView({
       return { index: target.chapterIndex, text, violations: target.violations };
     });
 
+    const changes: CanonRepairChange[] = [];
     await streamCanonRepair(
-      {
-        storyboard: book.storyboard as NonNullable<typeof book.storyboard>,
-        canon: scope,
-        model,
-        language,
-        chapters,
-      },
+      { storyboard: book.storyboard, canon: block, model, language, chapters },
       {
         onStarted: callbacks.onStarted,
         onResult: (event) => {
-          // Korrigierten Text erst sichern, dann ins Buch schreiben.
           if (event.text && event.changed) {
-            pushSnapshot(event.chapterIndex, "vor Fakten-Korrektur");
-            updateChapter(event.chapterIndex, { expanded: event.text });
+            const chapter = manuscriptRef.current[event.chapterIndex];
+            changes.push({
+              chapterIndex: event.chapterIndex,
+              title: chapter?.title ?? "",
+              before: (chapter?.expanded || chapter?.draft || "").trim(),
+              after: event.text,
+              applied: event.applied ?? 0,
+              unassigned: event.unassigned ?? 0,
+            });
           }
           if (event.unassigned && event.unassigned > 0) {
             showToast(
@@ -1232,7 +1347,108 @@ export function BookDetailView({
         },
       },
     );
+    return changes;
   };
+
+  /** Schreibt die bestätigten Korrekturen (Snapshot je Kapitel) in **einem** Commit ins Buch. */
+  const applyCanonRepairs = (changes: CanonRepairChange[]) => {
+    if (changes.length === 0) return;
+    const patches = new Map<number, Partial<ChapterContent>>();
+    for (const change of changes) {
+      const chapter = manuscriptRef.current[change.chapterIndex];
+      if (!chapter) continue;
+      const history: ChapterVersion[] = [
+        {
+          at: new Date().toISOString(),
+          title: chapter.title,
+          draft: chapter.draft,
+          expanded: chapter.expanded,
+          note: "vor Fakten-Korrektur",
+        },
+        ...(chapter.history ?? []),
+      ].slice(0, HISTORY_MAX_ENTRIES);
+      patches.set(change.chapterIndex, { expanded: change.after, history });
+    }
+    patchChapters(patches);
+  };
+
+  /** Schreibt das Ergebnis eines Checks in die Prüf-Historie des Kapitels. */
+  const recordCanonCheck = (chapterIndex: number, result: CanonCheckResult, scope: string) => {
+    const chapter = manuscriptRef.current[chapterIndex];
+    if (!chapter) return;
+    const text = (chapter.expanded || chapter.draft || "").trim();
+    patchChapters(
+      new Map([
+        [
+          chapterIndex,
+          {
+            canonCheck: {
+              at: new Date().toISOString(),
+              ok: result.ok && result.violations.length === 0,
+              count: result.violations.length,
+              summary: result.summary,
+              scope,
+              hash: textHash(text),
+            },
+          },
+        ],
+      ]),
+    );
+  };
+
+  /**
+   * Kanon-Warnung beim Kapitelwechsel: prüft das **verlassene** Kapitel still gegen den Kanon
+   * und warnt bei Widersprüchen. Bewusst **nicht blockierend** — ein blockierendes Autosave
+   * würde offenen Text verlieren (stiller Datenverlust wäre schlimmer). Unveränderte Kapitel
+   * kosten nichts (Hash-Vergleich + Antwort-Cache).
+   */
+  const prevIndexRef = useRef(safeIndex);
+  useEffect(() => {
+    const previous = prevIndexRef.current;
+    prevIndexRef.current = safeIndex;
+    if (previous === safeIndex) return;
+    if (!readCanonWarn() || !canon || !book.storyboard) return;
+    const model = readStageModel("consistency");
+    if (!model.trim()) return;
+
+    const chapter = manuscriptRef.current[previous];
+    if (!chapter) return;
+    const buffered =
+      previous === bufferIndexRef.current
+        ? expandedBufferRef.current || draftBufferRef.current
+        : chapter.expanded || chapter.draft || "";
+    const text = buffered.trim();
+    if (!text || chapter.canonCheck?.hash === textHash(text)) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await checkCanon({
+          storyboard: book.storyboard as NonNullable<typeof book.storyboard>,
+          chapterIndex: previous,
+          text,
+          canon,
+          model,
+          language,
+        });
+        if (cancelled) return;
+        recordCanonCheck(previous, result, "Gesamter Kanon");
+        if (!result.ok && result.violations.length > 0) {
+          setCanonWarn({
+            chapterIndex: previous,
+            violations: result.violations,
+            scope: "Gesamter Kanon",
+          });
+        }
+      } catch {
+        // Die Warnung ist ein Bonus, kein Blocker — Fehler bewusst still.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeIndex]);
 
   const timelineEntries: TimelineEntry[] = manuscript.map((chapter, index) => ({    chapter: index + 1,
     title: chapter.title || `Kapitel ${index + 1}`,
@@ -1674,10 +1890,81 @@ export function BookDetailView({
           open={canonCheckOpen}
           chapters={canonCheckChapters}
           canonAvailable={Boolean(canon)}
+          scopes={canonScopes}
+          facts={canonFacts}
           onStreamCheck={runCanonCheckStream}
           onRepairMany={runCanonRepairMany}
+          onApplyRepairs={applyCanonRepairs}
+          onRecordCheck={recordCanonCheck}
           onClose={() => setCanonCheckOpen(false)}
         />
+      ) : null}
+
+      {versionDiffOpen && selected ? (
+        <VersionDiffDialog
+          open={versionDiffOpen}
+          chapter={selected}
+          onClose={() => setVersionDiffOpen(false)}
+        />
+      ) : null}
+
+      {canonWarn ? (
+        <div
+          className="fixed inset-0 z-[65] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-6"
+          onClick={() => setCanonWarn(null)}
+        >
+          <div
+            className="glass-strong float-in flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 border-b border-white/10 p-5">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-amber to-brand-rose text-white">
+                <ShieldAlert className="size-5" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold tracking-tight">Kanon-Warnung</h2>
+                <p className="text-xs text-muted-foreground">
+                  Kapitel {canonWarn.chapterIndex + 1} widerspricht dem Kanon ·{" "}
+                  {canonWarn.scope}. Der Text wurde gespeichert — du entscheidest, ob du das
+                  behebst.
+                </p>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-5">
+              {canonWarn.violations.map((violation, index) => (
+                <div
+                  key={index}
+                  className="rounded-lg border border-brand-amber/25 bg-brand-amber/5 p-2.5"
+                >
+                  <p className="text-[11px] font-semibold text-brand-amber">{violation.fact}</p>
+                  <p className="mt-1 text-xs italic text-foreground/85">„{violation.quote}“</p>
+                  {violation.fix ? (
+                    <p className="mt-1 text-[11px] text-muted-foreground">{violation.fix}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-white/10 p-4">
+              <Button
+                variant="outline"
+                className="glass rounded-lg border-white/10"
+                onClick={() => setCanonWarn(null)}
+              >
+                Ausblenden
+              </Button>
+              <Button
+                className="rounded-lg bg-gradient-to-r from-brand-emerald to-brand-cyan font-semibold text-white"
+                onClick={() => {
+                  setCanonWarn(null);
+                  setCanonCheckOpen(true);
+                }}
+              >
+                <ShieldCheck className="size-3.5" />
+                Fakten-Check öffnen
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {onSeriesChange ? (
@@ -1889,6 +2176,29 @@ export function BookDetailView({
                         )}
                       >
                         Stil
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full border px-1.5 py-0.5 text-[9px] font-semibold",
+                          chapter.canonCheck
+                            ? chapter.canonCheck.ok
+                              ? "border-brand-emerald/30 bg-brand-emerald/10 text-brand-emerald"
+                              : "border-brand-amber/30 bg-brand-amber/10 text-brand-amber"
+                            : "border-white/10 bg-white/5 text-muted-foreground/40",
+                        )}
+                        title={
+                          chapter.canonCheck
+                            ? `Fakten-Check: ${chapter.canonCheck.summary || "geprüft"} (${new Date(
+                                chapter.canonCheck.at,
+                              ).toLocaleString("de-DE")})`
+                            : "Noch kein Fakten-Check"
+                        }
+                      >
+                        {chapter.canonCheck
+                          ? chapter.canonCheck.ok
+                            ? "Fakten ✓"
+                            : `Fakten ${chapter.canonCheck.count}`
+                          : "Fakten"}
                       </span>
                     </div>
                   </div>
@@ -2134,15 +2444,28 @@ export function BookDetailView({
                     Versionen ({selected.history?.length ?? 0})
                   </summary>
                   <div className="mt-3 space-y-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="glass rounded-lg border-white/10"
-                      onClick={() => pushSnapshot(safeIndex, "manuell gespeichert")}
-                    >
-                      <Save className="size-3.5" />
-                      Version speichern
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="glass rounded-lg border-white/10"
+                        onClick={() => pushSnapshot(safeIndex, "manuell gespeichert")}
+                      >
+                        <Save className="size-3.5" />
+                        Version speichern
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="glass rounded-lg border-white/10"
+                        onClick={() => setVersionDiffOpen(true)}
+                        disabled={(selected.history?.length ?? 0) === 0}
+                        title="Zwei Fassungen Wort für Wort vergleichen"
+                      >
+                        <ArrowLeftRight className="size-3.5" />
+                        Vergleichen
+                      </Button>
+                    </div>
 
                     {(selected.history ?? []).length === 0 ? (
                       <p className="text-[11px] text-muted-foreground">
@@ -2360,7 +2683,7 @@ export function BookDetailView({
                   </details>
                 ) : null}
 
-                {selected.consistencyChecked || selected.styleChecked ? (
+                {selected.consistencyChecked || selected.styleChecked || selected.canonCheck ? (
                   <details className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
                     <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
                       Prüfberichte
@@ -2402,6 +2725,26 @@ export function BookDetailView({
                           ) : (
                             <p className="text-muted-foreground">Keine Auffälligkeiten.</p>
                           )}
+                        </div>
+                      ) : null}
+                      {selected.canonCheck ? (
+                        <div>
+                          <p className="mb-1 font-semibold text-brand-emerald">
+                            Fakten-Check
+                            {selected.canonCheck.ok
+                              ? ""
+                              : ` · ${selected.canonCheck.count} offen`}
+                          </p>
+                          <p className="text-muted-foreground">
+                            {new Date(selected.canonCheck.at).toLocaleString("de-DE")}
+                            {selected.canonCheck.scope ? ` · ${selected.canonCheck.scope}` : ""}
+                          </p>
+                          <p className="mt-0.5 text-muted-foreground">
+                            {selected.canonCheck.summary ||
+                              (selected.canonCheck.ok
+                                ? "Keine Widersprüche zum Kanon."
+                                : "Widersprüche zum Kanon offen.")}
+                          </p>
                         </div>
                       ) : null}
                     </div>

@@ -251,6 +251,20 @@ RELATIONS (binding — keep these dynamics consistent):
   **prüft jedes Kapitel direkt danach erneut** — das frische Ergebnis kommt im selben Ereignis,
   die Liste zeigt also sofort, was behoben ist und was offen bleibt. Scheitert nur die
   Nachprüfung, wird die Korrektur trotzdem geliefert (keine Arbeit verloren).
+- **Umfang wählbar (gezielter Check)**: Der Dialog prüft wahlweise den gesamten Kanon, **eine
+  einzelne Figur/Welt** oder **nur ausgewählte Fakten**. Der Kanon-Block wird clientseitig
+  verkleinert — kein neuer Endpunkt, aber fokussiertere und günstigere Prüfungen.
+- **Markierte Stellen**: Jeder gemeldete Widerspruch hat ein Häkchen; korrigiert werden nur die
+  markierten (sie gehen als `violations` in den Request).
+- **Vorschau statt direktem Schreiben**: Der Quick Fix liefert die korrigierten Texte zurück; vor
+  dem Schreiben zeigt eine **Diff-Vorschau** je Kapitel vorher/nachher, Kapitel sind einzeln
+  abwählbar („Übernehmen (n)" / „Verwerfen"). Geschrieben wird erst nach Bestätigung — mit
+  Snapshot je Kapitel.
+- **Prüf-Historie**: Jedes Ergebnis wird am Kapitel gespeichert (`canonCheck`) und als Badge
+  („Fakten ✓" / „Fakten n") sowie in den Prüfberichten gezeigt.
+- **Kanon-Warnung beim Kapitelwechsel** (Option, Standard an): Beim Verlassen wird das Kapitel
+  still geprüft — nur wenn sich der Text seit dem letzten Check geändert hat; Widersprüche
+  erscheinen als **nicht blockierende** Warnung mit Weg in den Fakten-Check.
 
 ---
 
