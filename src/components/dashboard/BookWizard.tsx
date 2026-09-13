@@ -10,6 +10,7 @@ import {
   Ruler,
   Save,
   ScrollText,
+  ShieldCheck,
   Sparkles,
   Type,
   Wand2,
@@ -41,11 +42,13 @@ import type { ModelStage } from "@/lib/generationSettings";
 
 import type { Book } from "@/data/author";
 import type { Character } from "@/data/characters";
+import { canonBlock } from "@/data/continuity";
 import type { CanonFact, CharacterRelation } from "@/data/continuity";
 import type { Series } from "@/data/series";
 import { seriesOfBook, volumeLabel } from "@/data/series";
 import type { WorldEntry } from "@/data/world";
 import { buildSeriesContext } from "@/lib/seriesContext";
+import { manuscriptOf, resumeStep } from "@/lib/bookManuscript";
 import {
   EXPAND_DEFAULT_WORDS,
   EXPAND_MAX_WORDS,
@@ -55,15 +58,26 @@ import {
   countWords,
   manuscriptWordCount,
 } from "@/data/story";
-import type { ChapterContent, Storyboard, WizardStep } from "@/data/story";
+import type { ChapterCanonCheck, ChapterContent, Storyboard, WizardStep } from "@/data/story";
 import { fetchConfig } from "@/services/generate";
 import type { AppConfig } from "@/services/generate";
 import { buildCoverPrompt, generateCover } from "@/services/cover";
 import { draftChapter, expandChapter, generateStoryboard } from "@/services/story";
 import { checkConsistency, refineStyle } from "@/services/story";
+import { streamCanonCheck, streamCanonRepair } from "@/services/continuity";
+import type {
+  CanonCheckResult,
+  CanonRepairResultEvent,
+  CanonStreamHandlers,
+  CanonViolation,
+} from "@/services/continuity";
+import { textHash } from "@/lib/textHash";
 
 import { ProgressBar } from "./primitives";
 import { CoverEditorDialog } from "./CoverEditorDialog";
+import { CanonCheckDialog } from "./CanonCheckDialog";
+import type { CanonScopeSelection } from "./CanonCheckDialog";
+import type { CanonRepairChange } from "./CanonRepairPreviewDialog";
 
 const COVER_PALETTE: [string, string][] = [  ["hsl(258 90% 62%)", "hsl(342 90% 58%)"],
   ["hsl(186 100% 52%)", "hsl(232 85% 60%)"],
@@ -80,6 +94,7 @@ const STEPS: { id: WizardStep; label: string }[] = [
   { id: "expand", label: "Ausbau" },
   { id: "consistency", label: "Kohärenz" },
   { id: "style", label: "Stil" },
+  { id: "fakten", label: "Fakten" },
 ];
 
 function slugify(value: string): string {
@@ -94,6 +109,7 @@ function slugify(value: string): string {
 
 export function BookWizard({
   open,
+  editing = null,
   existingCount,
   series = [],
   books = [],
@@ -106,6 +122,8 @@ export function BookWizard({
   onWordsWritten,
 }: {
   open: boolean;
+  /** Gesetzt = Wizard bearbeitet ein vorhandenes Buch (ID bleibt, `onCreate` wird zum Update). */
+  editing?: Book | null;
   existingCount: number;
   /** Reihen zur Auswahl — ein neuer Band berücksichtigt seine Vorbände. */
   series?: Series[];
@@ -139,35 +157,69 @@ export function BookWizard({
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Prüf-Historie aus dem Fakten-Check-Schritt (wandert beim Speichern ins Kapitel). */
+  const [canonChecks, setCanonChecks] = useState<Record<number, ChapterCanonCheck>>({});
+  const [checkOpen, setCheckOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setStepIndex(0);
-    setIdea("");
-    setSeriesId("");
-    setChapterCount("12");
-    setStoryboard(null);
-    setDrafts([]);
-    setExpanded([]);
-    setConsistencyNotes([]);
-    setStyleNotes([]);
-    setConsistencyDone([]);
-    setStyleDone([]);
-    setCoverUrl(undefined);
+    // **Alle** Stufen lesen — sonst wäre `models.consistency`/`models.style` undefined.
+    setModels(readStageModels());
     setCoverEditorOpen(false);
-    setSaved(false);
-    setTargetWords(EXPAND_DEFAULT_WORDS);
     setBusy(null);
     setProgress(null);
     setError(null);
-    // **Alle** Stufen lesen — sonst wäre `models.consistency`/`models.style` undefined.
-    setModels(readStageModels());
+    setCheckOpen(false);
+    setSaved(false);
+
+    if (editing?.storyboard) {
+      // Wiedereinstieg: vorhandenes Buch laden und dort fortsetzen, wo es steht.
+      const story = editing.storyboard;
+      const manuscript = manuscriptOf(editing);
+      setStoryboard(story);
+      setDrafts(manuscript.map((chapter) => chapter.draft));
+      setExpanded(manuscript.map((chapter) => chapter.expanded));
+      setConsistencyNotes(manuscript.map((chapter) => chapter.consistencyNotes ?? ""));
+      setStyleNotes(manuscript.map((chapter) => chapter.styleNotes ?? ""));
+      setConsistencyDone(manuscript.map((chapter) => chapter.consistencyChecked ?? false));
+      setStyleDone(manuscript.map((chapter) => chapter.styleChecked ?? false));
+      setCanonChecks(
+        Object.fromEntries(
+          manuscript
+            .map((chapter, index) => [index, chapter.canonCheck] as const)
+            .filter((entry): entry is readonly [number, ChapterCanonCheck] => Boolean(entry[1])),
+        ),
+      );
+      setIdea(story.logline || story.synopsis || "");
+      setChapterCount(String(editing.chapters || story.chapters.length || 12));
+      setTargetWords(editing.defaultTargetWords ?? EXPAND_DEFAULT_WORDS);
+      setCoverUrl(editing.coverUrl);
+      setSeriesId(seriesOfBook(series, editing.id)?.id ?? "");
+      setStepIndex(resumeStep(manuscript));
+    } else {
+      setStepIndex(0);
+      setIdea("");
+      setSeriesId("");
+      setChapterCount("12");
+      setStoryboard(null);
+      setDrafts([]);
+      setExpanded([]);
+      setConsistencyNotes([]);
+      setStyleNotes([]);
+      setConsistencyDone([]);
+      setStyleDone([]);
+      setCoverUrl(undefined);
+      setCanonChecks({});
+      setTargetWords(EXPAND_DEFAULT_WORDS);
+    }
 
     fetchConfig().then((data) => {
       if (!data) return;
       setConfig(data);
       setLanguage(readLanguage() ?? data.defaultLanguage ?? "German");
     });
+    // `editing` bewusst nicht als Abhängigkeit — der Wizard bleibt während einer Sitzung stabil.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {
@@ -209,6 +261,123 @@ export function BookWizard({
   const languageOptions = languages.includes(language) ? languages : [language, ...languages];
   const chapters = storyboard?.chapters ?? [];
 
+  /* ── Fakten-Check im Assistenten (letzter Schritt) ─────────────────────── */
+
+  /** Kanon-Block aus allen Fakten/Beziehungen des Projekts (im Assistenten ohne Buch-Scoping). */
+  const canonForWizard = useMemo(() => {
+    if (facts.length === 0 && relations.length === 0) return undefined;
+    const nameOf = (id: string) =>
+      characters.find((character) => character.id === id)?.name ??
+      worlds.find((entry) => entry.id === id)?.title ??
+      "";
+    const block = canonBlock({ facts, relations, nameOf });
+    return block.trim().length > 0 ? block : undefined;
+  }, [facts, relations, characters, worlds]);
+
+  const checkChapters = useMemo(
+    () =>
+      expanded
+        .map((text, index) => ({
+          index,
+          title: storyboard?.chapters[index]?.title ?? "",
+          text: text.trim(),
+        }))
+        .filter((entry) => entry.text.length > 0),
+    [expanded, storyboard],
+  );
+
+  const wizardCheckModel = (): string => {
+    const model = models.consistency;
+    if (!model.trim()) {
+      throw new Error(
+        "Bitte eine Model-ID für „Kohärenz“ in den Einstellungen eintragen (der Fakten-Check nutzt sie).",
+      );
+    }
+    return model;
+  };
+
+  const runWizardCheck = async (
+    handlers: CanonStreamHandlers,
+    _scope: CanonScopeSelection,
+  ): Promise<void> => {
+    if (!storyboard) throw new Error("Kein Storyboard vorhanden.");
+    if (!canonForWizard) {
+      throw new Error("Kein Kanon vorhanden — bitte zuerst Fakten oder Beziehungen erfassen.");
+    }
+    await streamCanonCheck(
+      {
+        storyboard,
+        chapters: checkChapters.map(({ index, text }) => ({ index, text })),
+        canon: canonForWizard,
+        model: wizardCheckModel(),
+        language,
+      },
+      handlers,
+    );
+  };
+
+  const repairWizard = async (
+    targets: { chapterIndex: number; violations: CanonViolation[] }[],
+    callbacks: {
+      onStarted: (chapterIndex: number) => void;
+      onResult: (event: CanonRepairResultEvent) => void;
+    },
+    _scope: CanonScopeSelection,
+  ): Promise<CanonRepairChange[]> => {
+    if (!storyboard) throw new Error("Kein Storyboard vorhanden.");
+    if (!canonForWizard) throw new Error("Kein Kanon vorhanden.");
+    const chaptersToRepair = targets.map((target) => ({
+      index: target.chapterIndex,
+      text: (expanded[target.chapterIndex] ?? "").trim(),
+      violations: target.violations,
+    }));
+    const changes: CanonRepairChange[] = [];
+    await streamCanonRepair(
+      { storyboard, canon: canonForWizard, model: wizardCheckModel(), language, chapters: chaptersToRepair },
+      {
+        onStarted: callbacks.onStarted,
+        onResult: (event) => {
+          if (event.text && event.changed) {
+            changes.push({
+              chapterIndex: event.chapterIndex,
+              title: storyboard.chapters[event.chapterIndex]?.title ?? "",
+              before: (expanded[event.chapterIndex] ?? "").trim(),
+              after: event.text,
+              applied: event.applied ?? 0,
+              unassigned: event.unassigned ?? 0,
+            });
+          }
+          callbacks.onResult(event);
+        },
+      },
+    );
+    return changes;
+  };
+
+  const applyWizardRepairs = (changes: CanonRepairChange[]) => {
+    if (changes.length === 0) return;
+    setExpanded((prev) => {
+      const next = [...prev];
+      for (const change of changes) next[change.chapterIndex] = change.after;
+      return next;
+    });
+  };
+
+  const recordWizardCheck = (chapterIndex: number, result: CanonCheckResult, scope: string) => {
+    const text = (expanded[chapterIndex] ?? "").trim();
+    setCanonChecks((prev) => ({
+      ...prev,
+      [chapterIndex]: {
+        at: new Date().toISOString(),
+        ok: result.ok && result.violations.length === 0,
+        count: result.violations.length,
+        summary: result.summary,
+        scope,
+        hash: textHash(text),
+      },
+    }));
+  };
+
   const stage: ModelStage =
     stepIndex <= 1
       ? "storyboard"
@@ -216,7 +385,7 @@ export function BookWizard({
         ? "draft"
         : stepIndex === 3
           ? "expand"
-          : stepIndex === 4
+          : stepIndex === 4 || stepIndex === 6
             ? "consistency"
             : "style";
   const currentModel = models[stage];
@@ -636,6 +805,7 @@ export function BookWizard({
       consistencyChecked: consistencyDone[index] ?? false,
       styleNotes: (styleNotes[index] ?? "").trim() || undefined,
       styleChecked: styleDone[index] ?? false,
+      canonCheck: canonChecks[index],
     }));
 
     const total = manuscript.length;
@@ -656,7 +826,7 @@ export function BookWizard({
     }
 
     onCreate({
-      id: `${slugify(storyboard.title)}-${Date.now().toString(36)}`,
+      id: editing?.id ?? `${slugify(storyboard.title)}-${Date.now().toString(36)}`,
       title: storyboard.title,
       subtitle: storyboard.subtitle || "Roman",
       genre: storyboard.genre || "Roman",
@@ -667,14 +837,14 @@ export function BookWizard({
       chapters: total,
       chaptersDone: mode === "storyboard" ? 0 : expandedDone || draftedDone,
       updatedAt: new Date().toISOString(),
-      coverFrom: gradient[0],
-      coverTo: gradient[1],
+      coverFrom: editing?.coverFrom ?? gradient[0],
+      coverTo: editing?.coverTo ?? gradient[1],
       tags: storyboard.themes.slice(0, 3),
       synopsis: storyboard.synopsis || storyboard.logline,
       coverUrl: finalCover,
       storyboard,
       manuscript,
-    }, seriesId || undefined);
+    }, editing ? undefined : seriesId || undefined);
     setSaved(true);
     onClose();
   };
@@ -701,9 +871,11 @@ export function BookWizard({
               <BookOpenCheck className="size-5" />
             </span>
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">Buch erstellen</h2>
+              <h2 className="text-lg font-semibold tracking-tight">
+                {editing ? `Assistent · ${editing.title}` : "Buch erstellen"}
+              </h2>
               <p className="text-xs text-muted-foreground">
-                Idee → Storyboard → Rohentwurf → Ausbau
+                Idee → Storyboard → Rohentwurf → Ausbau → Fakten
               </p>
             </div>
           </div>
@@ -1191,6 +1363,82 @@ export function BookWizard({
           ) : null}
           {stepIndex === 4 && storyboard ? renderPassStep("consistency") : null}
           {stepIndex === 5 && storyboard ? renderPassStep("style") : null}
+          {stepIndex === 6 && storyboard ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <p className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <ShieldCheck className="size-4 text-brand-emerald" />
+                  Fakten-Check — letzter Schritt
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Prüft die ausgebauten Kapitel gegen den Kanon (Fakten und Beziehungen). Korrekturen
+                  werden vor dem Übernehmen als Diff gezeigt; das Ergebnis wandert in die
+                  Prüf-Historie der Kapitel.
+                </p>
+
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                  <span>{checkChapters.length} Kapitel mit Text</span>
+                  <span>{facts.length} Fakten</span>
+                  <span>{relations.length} Beziehungen</span>
+                  <span>Modell: {models.consistency || "—"}</span>
+                </div>
+
+                <Button
+                  className="mt-3 rounded-xl bg-gradient-to-r from-brand-emerald to-brand-cyan font-semibold text-white disabled:opacity-50"
+                  onClick={() => setCheckOpen(true)}
+                  disabled={Boolean(busy) || !canonForWizard || checkChapters.length === 0}
+                  title={
+                    !canonForWizard
+                      ? "Kein Kanon vorhanden"
+                      : checkChapters.length === 0
+                        ? "Noch kein ausgebauter Kapiteltext"
+                        : "Fakten-Check starten"
+                  }
+                >
+                  <ShieldCheck className="size-4" />
+                  Fakten-Check starten
+                </Button>
+
+                {!canonForWizard ? (
+                  <p className="mt-2 text-[11px] text-brand-amber">
+                    Kein Kanon vorhanden — lege in der Ansicht <strong>Kontinuität</strong> Fakten
+                    oder Beziehungen an.
+                  </p>
+                ) : null}
+              </div>
+
+              {Object.keys(canonChecks).length > 0 ? (
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Prüf-Historie
+                  </p>
+                  <ul className="space-y-1 text-[11px]">
+                    {Object.entries(canonChecks)
+                      .map(([index, check]) => ({ index: Number(index), check }))
+                      .sort((a, b) => a.index - b.index)
+                      .map(({ index, check }) => (
+                        <li key={index} className="flex items-center justify-between gap-2">
+                          <span className="truncate text-foreground/85">
+                            Kapitel {index + 1}
+                            {storyboard.chapters[index]?.title
+                              ? `: ${storyboard.chapters[index]?.title}`
+                              : ""}
+                          </span>
+                          <span
+                            className={cn(
+                              "shrink-0 font-semibold",
+                              check.ok ? "text-brand-emerald" : "text-brand-amber",
+                            )}
+                          >
+                            {check.ok ? "keine Widersprüche" : `${check.count} offen`}
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         {/* Footer */}
@@ -1333,12 +1581,34 @@ export function BookWizard({
                   Zwischenspeichern
                 </Button>
                 <Button
+                  onClick={() => setStepIndex(6)}
+                  disabled={Boolean(busy)}
+                  className="rounded-xl bg-gradient-to-r from-brand-cyan to-brand-indigo px-5 font-semibold text-white shadow-[0_0_30px_-10px_hsl(186_100%_55%/0.95)]"
+                >
+                  Weiter zum Fakten-Check
+                  <ArrowRight className="size-4" />
+                </Button>
+              </>
+            ) : null}
+
+            {stepIndex === 6 ? (
+              <>
+                <Button
+                  variant="outline"
+                  className="glass rounded-xl border-white/10"
+                  onClick={() => void saveBook("draft")}
+                  disabled={Boolean(busy)}
+                >
+                  <Save className="size-4" />
+                  Zwischenspeichern
+                </Button>
+                <Button
                   onClick={() => void saveBook("final")}
                   disabled={Boolean(busy)}
                   className="rounded-xl bg-gradient-to-r from-brand-emerald to-brand-cyan px-5 font-semibold text-white shadow-[0_0_30px_-10px_hsl(158_84%_46%/0.95)]"
                 >
                   <BookOpenCheck className="size-4" />
-                  Buch fertigstellen
+                  {editing ? "Änderungen speichern" : "Buch fertigstellen"}
                 </Button>
               </>
             ) : null}
@@ -1353,6 +1623,21 @@ export function BookWizard({
         onClose={() => setCoverEditorOpen(false)}
         onSaved={(url) => setCoverUrl(url)}
       />
+
+      {checkOpen && storyboard ? (
+        <CanonCheckDialog
+          open={checkOpen}
+          chapters={checkChapters.map(({ index, title }) => ({ index, title }))}
+          canonAvailable={Boolean(canonForWizard)}
+          scopes={[{ id: "all", label: `Gesamter Kanon (${facts.length} Fakten)` }]}
+          facts={[]}
+          onStreamCheck={runWizardCheck}
+          onRepairMany={repairWizard}
+          onApplyRepairs={applyWizardRepairs}
+          onRecordCheck={recordWizardCheck}
+          onClose={() => setCheckOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

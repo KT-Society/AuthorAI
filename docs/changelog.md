@@ -8,6 +8,22 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Assistent: Fakten-Check & Wiedereinstieg
+
+- **Added** **Fakten-Check als letzter Wizard-Schritt**: Der Buch-Assistent hat jetzt den Schritt
+  **„Fakten"**. Er prüft die ausgebauten Kapitel gegen den Kanon — direkt im Assistenten, ohne dass
+  das Buch schon gespeichert sein muss. Korrekturen laufen über die vorhandene **Diff-Vorschau**,
+  und die Ergebnisse wandern in die **Prüf-Historie** der Kapitel.
+- **Added** **Einzelkapitel-Fakten-Check**: Neben **„Stil"** in der Kapitel-Aktionsleiste steht
+  jetzt **„Fakten-Check"** — er prüft **nur dieses Kapitel** gegen den Kanon (gleicher Dialog,
+  gleiche Diff-Vorschau). Der Button im oberen Aktionen-Band prüft weiterhin **alle** Kapitel.
+- **Added** **Wiedereinstieg in den Assistenten**: Über **„Assistent"** im Buch-Editor lässt sich
+  ein gespeichertes Buch erneut öffnen. Der Assistent lädt Storyboard, Rohentwurf, Ausbau,
+  Prüf-Flags, Cover und Ziel-Wörter und springt auf den **letzten erledigten Schritt**.
+- **Fixed** **Kein Duplikat beim Speichern aus dem Assistenten**: Beim Wiedereinstieg behält das
+  Speichern die **vorhandene Buch-ID** und die Cover-Farben — das Buch wird **aktualisiert** statt
+  ein zweites angelegt (vorher erzeugte jeder Speichervorgang ein neues Buch).
+
 ### Eigener LLM-Anbieter
 
 - **Added** **Anbieter-Umschalter (OpenRouter ⇄ eigener OpenAI-kompatibler Anbieter)** in den

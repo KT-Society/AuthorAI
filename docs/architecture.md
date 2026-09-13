@@ -181,7 +181,8 @@ Typen + Seed-Daten, frei von UI-Logik:
 - **Views:** `DashboardView`, `LibraryView`, `ChaptersView`, `CharactersView`, `WorldView`,
   `ContinuityView` (Fakten + Beziehungsgraph), `PlotBoardView`, `ResearchView`, `StatsView`,
   `BookDetailView` (Editor + Reader)
-- **Dialoge:** `BookWizard`, `CharacterGenerator`, `CharacterEditorDialog`,
+- **Dialoge:** `BookWizard` (im Dashboard für neue Bücher **und** im Buch-Editor für den
+  Wiedereinstieg), `CharacterGenerator`, `CharacterEditorDialog`,
   `CharacterExtractDialog`, `ContinuityExtractDialog`, `CanonCheckDialog`, `WorldExtractDialog`,
   `TimelineDialog`, `VersionDiffDialog`, `CanonRepairPreviewDialog`, `CoverEditorDialog`,
   `CoverVariantsDialog`, `SeriesDialog`, `SettingsDialog`, `ProfileGate`

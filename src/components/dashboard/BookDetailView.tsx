@@ -25,6 +25,7 @@ import {
   Trash2,
   Type,
   Users,
+  Wand2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -106,6 +107,7 @@ import type {
   CanonScopeSelection,
 } from "./CanonCheckDialog";
 import type { CanonRepairChange } from "./CanonRepairPreviewDialog";
+import { BookWizard } from "./BookWizard";
 import { VersionDiffDialog } from "./VersionDiffDialog";
 import { SeriesDialog } from "./SeriesDialog";
 import { TimelineDialog } from "./TimelineDialog";
@@ -222,6 +224,9 @@ export function BookDetailView({
   const [coverVariantsOpen, setCoverVariantsOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [canonCheckOpen, setCanonCheckOpen] = useState(false);
+  /** null = alle Kapitel prüfen · Zahl = nur dieses Kapitel (Einzelkapitel-Button). */
+  const [canonOnly, setCanonOnly] = useState<number | null>(null);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [versionDiffOpen, setVersionDiffOpen] = useState(false);
   /** Nicht blockierende Kanon-Warnung nach einem Kapitelwechsel (null = keine). */
   const [canonWarn, setCanonWarn] = useState<{
@@ -1250,9 +1255,17 @@ export function BookDetailView({
         .filter((entry) => entry.text.length > 0),
     [manuscript],
   );
+  /** Ziel des Checks: alle Kapitel oder nur eines (Einzelkapitel-Button). */
+  const checkChapters = useMemo(
+    () =>
+      canonOnly === null
+        ? canonChapters
+        : canonChapters.filter((entry) => entry.index === canonOnly),
+    [canonChapters, canonOnly],
+  );
   const canonCheckChapters = useMemo(
-    () => canonChapters.map(({ index, title }) => ({ index, title })),
-    [canonChapters],
+    () => checkChapters.map(({ index, title }) => ({ index, title })),
+    [checkChapters],
   );
 
   /** Modell der Kohärenz-Stufe (wird auch für Check und Korrektur genutzt). */
@@ -1279,7 +1292,7 @@ export function BookDetailView({
     await streamCanonCheck(
       {
         storyboard: book.storyboard,
-        chapters: canonChapters.map(({ index, text }) => ({ index, text })),
+        chapters: checkChapters.map(({ index, text }) => ({ index, text })),
         canon: block,
         model: canonModel(),
         language,
@@ -1713,12 +1726,25 @@ export function BookDetailView({
               <Button
                 variant="outline"
                 className="glass rounded-xl border-white/10"
-                onClick={() => setCanonCheckOpen(true)}
+                onClick={() => {
+                  setCanonOnly(null);
+                  setCanonCheckOpen(true);
+                }}
                 disabled={Boolean(busy) || !book.storyboard}
                 title="Alle Kapitel nur gegen den Kanon prüfen (Fakten und Beziehungen)"
               >
                 <ShieldCheck className="size-4" />
                 Fakten-Check
+              </Button>
+              <Button
+                variant="outline"
+                className="glass rounded-xl border-white/10"
+                onClick={() => setAssistantOpen(true)}
+                disabled={Boolean(busy) || !book.storyboard}
+                title="Assistent öffnen — Pipeline-Schritte erneut durchlaufen und speichern"
+              >
+                <Wand2 className="size-4" />
+                Assistent
               </Button>
               <Button
                 variant="outline"
@@ -1896,7 +1922,10 @@ export function BookDetailView({
           onRepairMany={runCanonRepairMany}
           onApplyRepairs={applyCanonRepairs}
           onRecordCheck={recordCanonCheck}
-          onClose={() => setCanonCheckOpen(false)}
+          onClose={() => {
+            setCanonCheckOpen(false);
+            setCanonOnly(null);
+          }}
         />
       ) : null}
 
@@ -1905,6 +1934,23 @@ export function BookDetailView({
           open={versionDiffOpen}
           chapter={selected}
           onClose={() => setVersionDiffOpen(false)}
+        />
+      ) : null}
+
+      {assistantOpen && book.storyboard ? (
+        <BookWizard
+          open={assistantOpen}
+          editing={book}
+          existingCount={(books ?? []).length}
+          series={series ?? []}
+          books={books ?? []}
+          characters={characters}
+          worlds={worlds ?? []}
+          facts={facts ?? []}
+          relations={relations ?? []}
+          onClose={() => setAssistantOpen(false)}
+          onCreate={(updated) => onUpdate(updated)}
+          onWordsWritten={onWordsWritten}
         />
       ) : null}
 
@@ -1956,6 +2002,7 @@ export function BookDetailView({
                 className="rounded-lg bg-gradient-to-r from-brand-emerald to-brand-cyan font-semibold text-white"
                 onClick={() => {
                   setCanonWarn(null);
+                  setCanonOnly(canonWarn.chapterIndex);
                   setCanonCheckOpen(true);
                 }}
               >
@@ -2263,6 +2310,20 @@ export function BookDetailView({
                     >
                       <Sparkles className="size-3.5" />
                       Stil
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="glass rounded-lg border-white/10"
+                      onClick={() => {
+                        setCanonOnly(safeIndex);
+                        setCanonCheckOpen(true);
+                      }}
+                      disabled={Boolean(busy) || !canon || !selected.expanded.trim()}
+                      title="Dieses Kapitel nur gegen den Kanon prüfen (Fakten und Beziehungen)"
+                    >
+                      <ShieldCheck className="size-3.5" />
+                      Fakten-Check
                     </Button>
 
                     <span className="hidden h-6 w-px self-center bg-white/10 sm:block" />

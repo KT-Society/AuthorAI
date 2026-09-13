@@ -265,6 +265,12 @@ RELATIONS (binding — keep these dynamics consistent):
 - **Kanon-Warnung beim Kapitelwechsel** (Option, Standard an): Beim Verlassen wird das Kapitel
   still geprüft — nur wenn sich der Text seit dem letzten Check geändert hat; Widersprüche
   erscheinen als **nicht blockierende** Warnung mit Weg in den Fakten-Check.
+- **Im Assistenten**: Der Wizard hat den letzten Schritt **„Fakten"** — dort läuft derselbe Check
+  (inklusive Diff-Vorschau) über das Wizard-Manuskript, **bevor** das Buch gespeichert ist; die
+  Ergebnisse wandern beim Speichern in die Prüf-Historie der Kapitel.
+- **Einzelkapitel**: Neben den Kapitel-Aktionen (`Rohentwurf`, `Ausbauen`, `Kohärenz`, `Stil`)
+  prüft ein eigener **„Fakten-Check"**-Button nur das offene Kapitel; der Button im oberen
+  Aktionen-Band prüft alle Kapitel.
 
 ---
 
@@ -313,10 +319,14 @@ Modelle werden **pro Stufe** gesetzt (freie OpenRouter-ID). Leer = erbt das Stan
 
 ## Speichern & Weitermachen
 
-- **Zwischenspeichern** ist auf jeder Textstufe möglich (Steps 2–6) → Buch landet in der
+- **Zwischenspeichern** ist auf jeder Textstufe möglich (Steps 2–7) → Buch landet in der
   Bibliothek, Wizard schließt.
-- Später im **Buch-Editor** einzeln weitergenerieren (`Rohentwurf`, `Ausbauen`, `Kohärenz`, `Stil`)
-  oder als Queue.
+- **Wiedereinstieg**: Über **„Assistent"** im Buch-Editor öffnet sich der Wizard erneut für dieses
+  Buch — mit geladenem Storyboard, Rohentwurf, Ausbau, Prüf-Flags, Cover und Ziel-Wörtern, und
+  startet auf dem **letzten erledigten Schritt** (`resumeStep`). Beim Speichern bleibt die
+  **vorhandene Buch-ID** erhalten (Update statt Neuanlage).
+- Später im **Buch-Editor** einzeln weitergenerieren (`Rohentwurf`, `Ausbauen`, `Kohärenz`, `Stil`,
+  `Fakten-Check`) oder als Queue.
 - **Schließen ohne Speichern** fragt nach (X / Abbrechen / Escape).
 
 ---

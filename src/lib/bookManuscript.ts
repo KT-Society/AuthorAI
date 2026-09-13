@@ -22,3 +22,21 @@ export function manuscriptOf(book: Book): ChapterContent[] {
     expanded: extractProse(chapter.expanded ?? ""),
   }));
 }
+
+/**
+ * Start-Schritt für den Wizard beim **Wiedereinstieg**: der letzte erledigte Pipeline-Schritt,
+ * damit man dort weitermacht, wo man aufgehört hat. Reihenfolge:
+ * `0 Idee · 1 Storyboard · 2 Rohentwurf · 3 Ausbau · 4 Kohärenz · 5 Stil · 6 Fakten`.
+ */
+export function resumeStep(manuscript: ChapterContent[]): number {
+  if (manuscript.length === 0) return 0;
+  const hasText = (text: string) => text.trim().length > 0;
+  const all = (fn: (chapter: ChapterContent) => boolean) => manuscript.every(fn);
+  const some = (fn: (chapter: ChapterContent) => boolean) => manuscript.some(fn);
+  if (some((chapter) => hasText(chapter.expanded)) && all((chapter) => chapter.styleChecked)) return 6;
+  if (some((chapter) => hasText(chapter.expanded)) && all((chapter) => chapter.consistencyChecked)) return 5;
+  if (all((chapter) => hasText(chapter.expanded))) return 4;
+  if (some((chapter) => hasText(chapter.expanded))) return 3;
+  if (some((chapter) => hasText(chapter.draft))) return 2;
+  return 1;
+}

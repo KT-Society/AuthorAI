@@ -20,6 +20,8 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 - **Kontinuitäts-Verlauf**: Änderungen an Fakten und Beziehungen selbst versionieren (wer hat
   wann was umgestellt)
 - **Check-Bericht exportieren**: Fakten-Check-Ergebnis als Markdown/PDF für das Lektorat
+- **Assistent-Schritt „Export"**: nach dem Fakten-Check direkt Cover/EPUB/PDF aus dem Assistenten
+  erzeugen, statt erst in den Buch-Editor zu wechseln
 
 ### Export & Ausgabe
 - **PDF mit Cover-Seite** (Titelseite aus dem Cover-Bild)
@@ -64,6 +66,9 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 - **Mehrere Datenbank-Profile (Dateien)**: Projekte als eigene `.db` öffnen/wechseln
 - **Live-Text auch im Ausbau**: „Alles ausbauen" zeigt den wachsenden Text des laufenden
   Kapitels (Kohärenz, Stil und der Fakten-Check streamen bereits — der Ausbau selbst noch nicht)
+- **Typprüfung als Skript**: `tsc --noEmit` (o. ä.) in den Check aufnehmen — `bun run check`
+  prüft nur Syntax, Imports und Links und übersieht Laufzeitfehler wie einen `[0]`-Zugriff auf
+  einen `Series | undefined`-Rückgabewert
 - **Stream-Fortschritt im Job-Center**: laufende Streams nennen dort Wortstand und Teil
   (z. B. „Ausbau · 2.400 Wörter"), nicht nur „prüft…"
 - **Stream-Vorschau übernehmen oder verwerfen**: „Text in den Editor übernehmen" und

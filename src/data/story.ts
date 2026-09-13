@@ -120,7 +120,14 @@ export interface ChapterContent {
   canonCheck?: ChapterCanonCheck;
 }
 
-export type WizardStep = "idea" | "storyboard" | "draft" | "expand" | "consistency" | "style";
+export type WizardStep =
+  | "idea"
+  | "storyboard"
+  | "draft"
+  | "expand"
+  | "consistency"
+  | "style"
+  | "fakten";
 
 export const DRAFT_TARGET_WORDS = 500;
 export const EXPAND_MIN_WORDS = 3000;
