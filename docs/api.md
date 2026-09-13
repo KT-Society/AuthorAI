@@ -30,11 +30,48 @@ Booleans spiegeln nur, **ob** Keys vorhanden sind — niemals deren Inhalt.
 
 ---
 
+### `GET /api/provider`
+
+Status des LLM-Anbieters — **ohne Key** (`hasKey` ist nur ein Boolean).
+
+```json
+{
+  "mode": "custom",
+  "baseUrl": "https://api.openai.com/v1",
+  "hasKey": true,
+  "openrouterAvailable": false,
+  "effective": "custom",
+  "effectiveBaseUrl": "https://api.openai.com/v1",
+  "ready": true
+}
+```
+
+`effective` berücksichtigt den Env-Override (`AUTHORAI_PROVIDER` / `AUTHORAI_BASE_URL` /
+`AUTHORAI_API_KEY`).
+
+### `PUT /api/provider`
+
+Setzt die Konfiguration. Body: `{ mode: "openrouter" | "custom", baseUrl, apiKey? }`.
+
+- `apiKey` nicht-leer → setzen · `null` → löschen · weglassen/leer → **behalten**
+- ungültiges Schema (nicht `http(s)://`) → **HTTP 400**
+
+Antwort wie `GET /api/provider`. Der Key wird **serverseitig** gespeichert und **nie**
+zurückgegeben.
+
+### `POST /api/provider/test`
+
+Prüft **auch ungespeicherte** Werte gegen `{base}/models` (Key + URL gültig?).
+Body: `{ mode?, baseUrl?, apiKey? }` → `{ ok: boolean, detail: string }`. Ohne `apiKey` wird der
+gespeicherte bzw. der `.env`-Key benutzt.
+
+---
+
 ## Charaktere
 
 ### `POST /api/generate`
 
-Erzeugt über die promptgen-Engine (Tavily-Recherche + OpenRouter) einen 12-teiligen
+Erzeugt über die promptgen-Engine (Tavily-Recherche + LLM-Anbieter) einen 12-teiligen
 Soul-Prompt.
 
 **Request**

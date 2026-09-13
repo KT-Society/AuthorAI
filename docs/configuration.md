@@ -24,6 +24,9 @@ Die Datei liegt im Repository-Root und ist **gitignored**. Sie wird serverseitig
 | Variable | Default | Wirkung |
 | --- | --- | --- |
 | `POLLINATIONS_API_BASE` | `https://gen.pollinations.ai` | API-Basis für Bilder |
+| `AUTHORAI_PROVIDER` | — | `openrouter` erzwingt OpenRouter (Override vor der gespeicherten Konfiguration) |
+| `AUTHORAI_BASE_URL` | — | Base-URL eines eigenen OpenAI-kompatiblen Anbieters (nur mit `AUTHORAI_API_KEY`) |
+| `AUTHORAI_API_KEY` | — | Key für den eigenen Anbieter (Override; wird **nie** geloggt) |
 | `PROMPTGEN_LANGUAGES` | `German,English,Japanese,French` | Auswählbare Sprachen (promptgen-Config) |
 | `PROMPTGEN_DEFAULT_LANGUAGE` | `German` | Fallback-Sprache |
 | `PORT` | `3001` (promptgen) | Port des promptgen-Servers; Root nutzt 3000 |
@@ -58,6 +61,27 @@ kein Default**. Leer = erbt das Standard-Model.
 
 **Setzen:** Einstellungen (Sidebar → „Einstellungen") oder direkt im Buch-Wizard
 (die Leiste zeigt das Model der aktiven Stufe).
+
+---
+
+## Anbieter (LLM)
+
+In den Einstellungen lässt sich zwischen **OpenRouter** (Standard) und einem **eigenen
+OpenAI-kompatiblen Anbieter** umschalten. Bei „Eigener Anbieter" kommen **Base-URL** und
+**API-Key** hinzu; „Verbindung testen" prüft die Werte gegen `{base}/models`.
+
+- **OpenRouter:** Key aus der Root-`.env` (`OPENROUTER_API_KEY`).
+- **Eigener Anbieter:** Base-URL (z. B. `https://api.openai.com/v1` — `/chat/completions` wird
+  ergänzt, ein vollständiger Pfad bleibt) und Key. Die **Model-IDs je Stufe** bleiben Freitext
+  und müssen zum Anbieter passen.
+- **Speicherort:** Der Key liegt **serverseitig** in der SQLite-Tabelle `provider` — **nicht**
+  in `state`, also **nicht** über `/api/state` lesbar und **nicht** in Client-Backups. `GET
+  /api/provider` liefert nur `hasKey: boolean`; der Key geht **nie** zurück an den Browser, wird
+  nie geloggt und nie in Fehlermeldungen aufgenommen.
+- **Env-Override** (headless/Standalone): Sind `AUTHORAI_BASE_URL` + `AUTHORAI_API_KEY` gesetzt,
+  gewinnen sie vor der gespeicherten Konfiguration; `AUTHORAI_PROVIDER=openrouter` erzwingt
+  OpenRouter.
+- **Cache:** Der Antwort-Cache ist anbieterabhängig (Anbieterwechsel liefert keine alten Treffer).
 
 ---
 

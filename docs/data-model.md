@@ -290,6 +290,11 @@ gebündelt (`schedule`, 400 ms) über `PUT /api/state`. Sammlungsnamen sind in
 
 > Profile und Generierungs-Einstellungen sind bewusst **geräteweit** und winzig — sie bleiben im
 > Browser. Alles Große (Manuskripte, Historie) liegt in der Datenbank.
+>
+> **Nicht hier:** die LLM-Anbieter-Konfiguration (Base-URL + API-Key). Der Key liegt
+> **serverseitig** in der SQLite-Tabelle `provider` — bewusst **nicht** in der Sammlung `state`,
+> damit er weder über `/api/state` noch über Backups nach außen gelangt (siehe
+> [`configuration.md`](configuration.md)).
 
 
 ---

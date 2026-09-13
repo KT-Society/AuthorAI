@@ -1,16 +1,52 @@
 /**
- * Server-only LLM helper (OpenRouter).
+ * Server-only LLM helper.
  *
- * Reuses the promptgen environment loader for the API key. This module must
- * NEVER be imported by client code.
+ * Der wirksame Anbieter kommt aus `server/provider.ts`: OpenRouter (Standard, Key aus der `.env`)
+ * oder ein eigener OpenAI-kompatibler Anbieter (Base-URL + Key aus den Einstellungen). Dieser
+ * Modul darf **nie** aus Client-Code importiert werden und gibt Keys **nie** nach außen.
  */
 
-import { getOpenRouterKey } from "@promptgen/server/env";
 import { ApiError } from "@promptgen/server/api";
 
 import { cacheEnabled, cacheGet, cacheKey, cacheSet } from "./cache";
+import { resolveChatEndpoint } from "./provider";
+import type { ChatEndpoint, ProviderMode } from "./provider";
 
-const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+function noKeyMessage(label: ProviderMode): string {
+  return label === "custom"
+    ? "Kein API-Key für den eigenen Anbieter — bitte in den Einstellungen unter „Anbieter“ hinterlegen."
+    : "Kein OPENROUTER_API_KEY in der .env gefunden. Bitte im Repo-Root ergänzen oder in den Einstellungen einen eigenen Anbieter einstellen.";
+}
+
+function providerHeaders(endpoint: ChatEndpoint, stream: boolean): Record<string, string> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${endpoint.apiKey}`,
+    "Content-Type": "application/json",
+  };
+  // Der Referer ist eine OpenRouter-Eigenheit; fremde Anbieter ignorieren ihn besser.
+  if (endpoint.label === "openrouter") headers["HTTP-Referer"] = "https://habitatai.biz";
+  if (stream) headers.Accept = "text/event-stream";
+  return headers;
+}
+
+/** Fehlertext ohne Key — mit dem Provider-Detail, falls vorhanden (z. B. „invalid model"). */
+async function providerError(label: ProviderMode, response: Response): Promise<string> {
+  const name = label === "custom" ? "Anbieter" : "OpenRouter";
+  let detail = "";
+  try {
+    const data = (await response.json()) as {
+      error?: { message?: string } | string;
+      message?: string;
+    };
+    const raw = typeof data.error === "string" ? data.error : (data.error?.message ?? data.message ?? "");
+    detail = raw.slice(0, 200);
+  } catch {
+    // Kein JSON im Fehlerfall → nur der Status.
+  }
+  return detail
+    ? `${name}-Aufruf fehlgeschlagen (HTTP ${response.status}): ${detail}`
+    : `${name}-Aufruf fehlgeschlagen (HTTP ${response.status}).`;
+}
 
 export interface ChatOptions {
   model: string;
@@ -33,8 +69,13 @@ export interface ChatResult {
 }
 
 export async function chatCompletionDetailed(options: ChatOptions): Promise<ChatResult> {
+  const endpoint = resolveChatEndpoint();
+  if (!endpoint.apiKey) {
+    throw new ApiError(noKeyMessage(endpoint.label), 500);
+  }
+
   const useCache = options.cache === true && cacheEnabled();
-  const key = useCache ? cacheKey(options) : "";
+  const key = useCache ? cacheKey({ ...options, provider: endpoint.url }) : "";
 
   if (useCache) {
     const hit = cacheGet(key);
@@ -42,14 +83,6 @@ export async function chatCompletionDetailed(options: ChatOptions): Promise<Chat
       console.log(`[cache] hit ${key} (${options.model})`);
       return hit;
     }
-  }
-
-  const apiKey = getOpenRouterKey();
-  if (!apiKey) {
-    throw new ApiError(
-      "Kein OPENROUTER_API_KEY in der .env gefunden. Bitte im Repo-Root ergänzen.",
-      500,
-    );
   }
 
   const body: Record<string, unknown> = {
@@ -63,18 +96,14 @@ export async function chatCompletionDetailed(options: ChatOptions): Promise<Chat
   if (typeof options.maxTokens === "number") body.max_tokens = options.maxTokens;
   if (typeof options.temperature === "number") body.temperature = options.temperature;
 
-  const response = await fetch(OPENROUTER_API_URL, {
+  const response = await fetch(endpoint.url, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": "https://habitatai.biz",
-      "Content-Type": "application/json",
-    },
+    headers: providerHeaders(endpoint, false),
     body: JSON.stringify(body),
   });
 
   if (!response.ok) {
-    throw new ApiError(`OpenRouter-Aufruf fehlgeschlagen (HTTP ${response.status}).`, 502);
+    throw new ApiError(await providerError(endpoint.label, response), 502);
   }
 
   const data = (await response.json()) as {
@@ -83,7 +112,12 @@ export async function chatCompletionDetailed(options: ChatOptions): Promise<Chat
   const choice = data.choices?.[0];
   const content = choice?.message?.content;
   if (!content || content.trim().length === 0) {
-    throw new ApiError("OpenRouter hat keine Antwort geliefert.", 502);
+    throw new ApiError(
+      endpoint.label === "custom"
+        ? "Der Anbieter hat keine Antwort geliefert."
+        : "OpenRouter hat keine Antwort geliefert.",
+      502,
+    );
   }
   const result: ChatResult = { content, finishReason: choice?.finish_reason ?? null };
   // Nur brauchbare Antworten cachen (kein Abbruch ins Token-Limit).
@@ -108,12 +142,9 @@ export async function chatCompletionStream(
   options: ChatOptions,
   onDelta: (text: string) => void,
 ): Promise<ChatResult> {
-  const apiKey = getOpenRouterKey();
-  if (!apiKey) {
-    throw new ApiError(
-      "Kein OPENROUTER_API_KEY in der .env gefunden. Bitte im Repo-Root ergänzen.",
-      500,
-    );
+  const endpoint = resolveChatEndpoint();
+  if (!endpoint.apiKey) {
+    throw new ApiError(noKeyMessage(endpoint.label), 500);
   }
 
   const body: Record<string, unknown> = {
@@ -128,19 +159,14 @@ export async function chatCompletionStream(
   if (typeof options.maxTokens === "number") body.max_tokens = options.maxTokens;
   if (typeof options.temperature === "number") body.temperature = options.temperature;
 
-  const response = await fetch(OPENROUTER_API_URL, {
+  const response = await fetch(endpoint.url, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": "https://habitatai.biz",
-      "Content-Type": "application/json",
-      Accept: "text/event-stream",
-    },
+    headers: providerHeaders(endpoint, true),
     body: JSON.stringify(body),
   });
 
   if (!response.ok) {
-    throw new ApiError(`OpenRouter-Aufruf fehlgeschlagen (HTTP ${response.status}).`, 502);
+    throw new ApiError(await providerError(endpoint.label, response), 502);
   }
   if (!response.body) {
     // Kein Stream verfügbar → normaler Aufruf (ohne Vorschau).

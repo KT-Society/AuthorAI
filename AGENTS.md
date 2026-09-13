@@ -60,8 +60,10 @@ src/
 
 1. **Server-only-Grenze:** `src/server/*` **niemals** aus Client-Code importieren.
    `src/services/*` ruft **ausschließlich** lokale `/api/*`-Routen auf.
-2. **Secrets:** nur serverseitig aus der Root-`.env` lesen. Keys nie an den Client geben,
-   nie loggen, nie in Fehlermeldungen aufnehmen.
+2. **Secrets:** nur serverseitig halten. Standard: Keys aus der Root-`.env`. Ein in den
+   Einstellungen eingegebener Anbieter-Key wird **einmalig** an den lokalen Server geschickt und
+   liegt dort in der Tabelle `provider` (nicht in `state`); er wird **nie** an den Client
+   zurückgegeben, nie geloggt und nie in Fehlermeldungen aufgenommen.
 3. **Persistenz:** Fachdaten gehören in die **SQLite-Datenbank** (`<runtimeRoot>/data/authorai.db`,
    Zugriff **nur** über `src/server/store.ts` + `/api/state`). Der Client liest synchron aus dem
    Cache in `src/lib/persistence.ts`; `localStorage` ist **nur** für Profile, geräteweite
@@ -110,6 +112,7 @@ src/
 | Recherche | `POST /api/research` |
 | Cover | `POST /api/cover`, `POST /api/cover/save`, `DELETE /api/cover/:file` |
 | Speicher | `GET\|PUT\|DELETE /api/state`, `GET /api/store/info` |
+| LLM-Anbieter | `GET\|PUT /api/provider` · Test: `POST /api/provider/test` |
 
 Beim Speichern eines Buchs leitet die Shell **automatisch** Charaktere, Weltenbau und
 Plot-Karten aus dem Storyboard ab (dedupliziert). Details: [`docs/pipeline.md`](docs/pipeline.md).

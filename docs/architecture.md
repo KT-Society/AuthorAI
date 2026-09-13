@@ -22,6 +22,7 @@ flowchart TB
         S_STORY["server/story.ts"]
         S_CONT["server/continuity.ts"]
         S_LLM["server/llm.ts"]
+        S_PROV["server/provider.ts"]
         S_COVER["server/cover.ts"]
         S_RESEARCH["server/research.ts"]
         S_STORE["server/store.ts (SQLite)"]
@@ -35,13 +36,16 @@ flowchart TB
 
     subgraph External["Externe Dienste"]
         OR["OpenRouter"]
+        CUSTOM["Eigener Anbieter<br/>(OpenAI-kompatibel)"]
         TV["Tavily"]
         PO["Pollinations"]
     end
 
     UI --> SVC --> ROUTES
     UI --> SET
-    ROUTES --> S_STORY --> S_LLM --> OR
+    ROUTES --> S_STORY --> S_LLM --> S_PROV
+    S_PROV --> OR
+    S_PROV --> CUSTOM
     ROUTES --> S_CONT --> S_LLM
     ROUTES --> S_RESEARCH --> TV
     ROUTES --> S_COVER --> PO
@@ -110,6 +114,7 @@ Ports: Root **3000**, promptgen **3001** (eigener `Bun.serve`, überschreibbar p
 | `server/cover.ts` | Pollinations-Bilderzeugung, Dateiablage, Löschen |
 | `server/research.ts` | Tavily-Suche |
 | `server/store.ts` | SQLite-Speicher (`bun:sqlite`, `<runtimeRoot>/data/authorai.db`) für alle Fachdaten |
+| `server/provider.ts` | LLM-Anbieter (OpenRouter ↔ eigener OpenAI-kompatibler): Auflösung, Env-Override, Status ohne Key, Verbindungstest |
 | `server/paths.ts` | Laufzeit-Pfade (`runtimeRoot`, `runtimePort`, `isStandaloneBinary`) |
 
 Der Server lädt beim Start die Root-`.env` über die promptgen-`env`-Funktionen
@@ -121,7 +126,7 @@ Dünne Wrapper auf die lokalen Routen:
 
 - `http.ts` — gemeinsamer `postJson`-Helper inkl. Fehler-Normalisierung
 - `story.ts`, `generate.ts`, `cover.ts`, `research.ts`, `continuity.ts`, `state.ts`
-  (`/api/state` + Store-Info), `stream.ts` (SSE)
+  (`/api/state` + Store-Info), `provider.ts` (LLM-Anbieter + Test), `stream.ts` (SSE)
 
 ### 3. Daten (`src/data/*`)
 

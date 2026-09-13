@@ -8,6 +8,26 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Eigener LLM-Anbieter
+
+- **Added** **Anbieter-Umschalter (OpenRouter ⇄ eigener OpenAI-kompatibler Anbieter)** in den
+  Einstellungen. Bei „Eigener Anbieter" lassen sich **Base-URL** und **API-Key** eingeben und mit
+  einem Klick **testen** (`{base}/models`); die Model-IDs je Stufe bleiben Freitext und müssen zum
+  Anbieter passen.
+- **Added** **Routen** `GET|PUT /api/provider` und `POST /api/provider/test`.
+- **Sicherheit**: Der Key kommt einmalig vom Browser zum lokalen Server und wird **serverseitig**
+  in einer eigenen Tabelle `provider` gespeichert — **nicht** in `state`, also nicht über
+  `/api/state` lesbar und nicht in Client-Backups enthalten. `GET /api/provider` liefert nur
+  `hasKey: boolean`; der Key wird nie an den Client zurückgegeben, nie geloggt und nie in
+  Fehlermeldungen aufgenommen.
+- **Added** **Env-Override** (headless/Standalone): `AUTHORAI_PROVIDER=openrouter|custom`,
+  `AUTHORAI_BASE_URL`, `AUTHORAI_API_KEY` haben Vorrang vor der gespeicherten Konfiguration.
+- **Changed** Der **Antwort-Cache ist anbieterabhängig** — ein Anbieterwechsel liefert keine alten
+  Treffer mehr. Fehlermeldungen nennen den wirksamen Anbieter („Anbieter" statt immer
+  „OpenRouter") und hängen, wenn vorhanden, das Provider-Detail an.
+- **Changed** Die **Charakter-Synthese** (`/api/generate`) nutzt denselben aufgelösten Anbieter
+  (Override an die promptgen-Engine); der Standalone-promptgen-Server bleibt bei der `.env`.
+
 ### Kanon-Komfort & Versions-Diff
 
 - **Added** **Versions-Vergleich** (`VersionDiffDialog`, `lib/diff.ts`): Im **Versionen**-Panel

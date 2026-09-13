@@ -35,8 +35,11 @@ export function cacheKey(parts: {
   temperature?: number;
   maxTokens?: number;
   json?: boolean;
+  /** Wirksamer Anbieter-Endpoint — ein Anbieterwechsel darf keine alten Treffer liefern. */
+  provider?: string;
 }): string {
   const payload = [
+    parts.provider ?? "",
     parts.model,
     String(parts.temperature ?? ""),
     String(parts.maxTokens ?? ""),

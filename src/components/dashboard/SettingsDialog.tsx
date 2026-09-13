@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ShieldCheck, Cpu, Database, Download, KeyRound, Palette, Settings, Upload, X } from "lucide-react";
+import { Cpu, Database, Download, KeyRound, Loader2, Palette, Plug, Save, Server, Settings, ShieldCheck, Upload, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,14 @@ import {
 import type { StyleProfile } from "@/data/style";
 import { fetchConfig } from "@/services/generate";
 import type { AppConfig } from "@/services/generate";
+import {
+  fetchProvider,
+  saveProvider,
+  testProvider,
+} from "@/services/provider";
+import type { ProviderMode, ProviderStatus, ProviderTestResult } from "@/services/provider";
+import { cn } from "@/lib/utils";
+import { showToast } from "@/lib/toast";
 
 const STATUS_OK = "#4caf50";
 const STATUS_FAIL = "#ff5252";
@@ -67,6 +75,14 @@ export function SettingsDialog({
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
   const [styleProfile, setStyleProfile] = useState<StyleProfile>(DEFAULT_STYLE_PROFILE);
   const [canonWarn, setCanonWarn] = useState(true);
+  /* ── LLM-Anbieter (OpenRouter oder eigener OpenAI-kompatibler Anbieter) ── */
+  const [provider, setProvider] = useState<ProviderStatus | null>(null);
+  const [providerMode, setProviderMode] = useState<ProviderMode>("openrouter");
+  const [providerBaseUrl, setProviderBaseUrl] = useState("");
+  const [providerKey, setProviderKey] = useState("");
+  const [providerBusy, setProviderBusy] = useState(false);
+  const [providerError, setProviderError] = useState<string | null>(null);
+  const [providerTest, setProviderTest] = useState<ProviderTestResult | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
   /** Belegung der SQLite-Datenbank (kein Browserspeicher-Limit mehr). */
   const [store, setStore] = useState<StoreInfo | null>(null);
@@ -79,6 +95,13 @@ export function SettingsDialog({
     setLanguage(readLanguage() ?? DEFAULT_LANGUAGE);
     setStyleProfile(readStyleProfile());
     setCanonWarn(readCanonWarn());
+    void fetchProvider().then((info) => {
+      if (!info) return;
+      setProvider(info);
+      setProviderMode(info.mode);
+      setProviderBaseUrl(info.baseUrl);
+      setProviderKey("");
+    });
     fetchConfig().then((data) => {
       if (data) setConfig(data);
     });
@@ -92,6 +115,42 @@ export function SettingsDialog({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, onClose]);
+
+  /** Speichert die Anbieter-Konfiguration; ohne Key-Angabe bleibt der gespeicherte Key erhalten. */
+  const persistProvider = async (apiKey?: string | null) => {
+    setProviderBusy(true);
+    setProviderError(null);
+    setProviderTest(null);
+    try {
+      const status = await saveProvider({ mode: providerMode, baseUrl: providerBaseUrl, apiKey });
+      setProvider(status);
+      setProviderKey("");
+      showToast("Anbieter gespeichert", "ok");
+    } catch (err) {
+      setProviderError(err instanceof Error ? err.message : "Speichern fehlgeschlagen.");
+    } finally {
+      setProviderBusy(false);
+    }
+  };
+
+  const runProviderTest = async () => {
+    setProviderBusy(true);
+    setProviderError(null);
+    setProviderTest(null);
+    try {
+      setProviderTest(
+        await testProvider({
+          mode: providerMode,
+          baseUrl: providerBaseUrl,
+          apiKey: providerKey.trim() || undefined,
+        }),
+      );
+    } catch (err) {
+      setProviderError(err instanceof Error ? err.message : "Test fehlgeschlagen.");
+    } finally {
+      setProviderBusy(false);
+    }
+  };
 
   if (!open) return null;
 
@@ -208,6 +267,140 @@ export function SettingsDialog({
               <p className="mt-3 text-[11px] text-muted-foreground">
                 Leer = erbt das Standard-Model. Für jeden Schritt kannst du eine eigene OpenRouter
                 Model-ID eintragen.
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <Server className="size-3.5" />
+                Anbieter (LLM)
+              </label>
+
+              <div className="glass inline-flex rounded-xl border border-white/10 p-1">
+                {(["openrouter", "custom"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setProviderMode(value)}
+                    className={cn(
+                      "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                      providerMode === value
+                        ? "bg-gradient-to-r from-brand-violet to-brand-indigo text-white"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {value === "openrouter" ? "OpenRouter" : "Eigener Anbieter"}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                {providerMode === "openrouter"
+                  ? "Standard — Key aus der Root-.env (OPENROUTER_API_KEY)."
+                  : "OpenAI-kompatibler Endpunkt: Base-URL und Key von deinem Anbieter. Die Model-IDs je Stufe müssen zu ihm passen."}
+              </p>
+
+              {providerMode === "custom" ? (
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Base-URL
+                    </label>
+                    <Input
+                      value={providerBaseUrl}
+                      onChange={(event) => setProviderBaseUrl(event.target.value)}
+                      placeholder="https://api.openai.com/v1"
+                      className="glass h-10 rounded-xl border-white/10"
+                      spellCheck={false}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      API-Key
+                    </label>
+                    <Input
+                      type="password"
+                      value={providerKey}
+                      onChange={(event) => setProviderKey(event.target.value)}
+                      placeholder={
+                        provider?.hasKey ? "gespeichert — leer lassen zum Behalten" : "sk-…"
+                      }
+                      className="glass h-10 rounded-xl border-white/10"
+                      spellCheck={false}
+                      autoComplete="new-password"
+                    />
+                    <p className="mt-1.5 text-[11px] text-muted-foreground">
+                      Der Key wird <strong>serverseitig</strong> gespeichert, nie an den Browser
+                      zurückgegeben und nie geloggt.
+                      {provider?.hasKey ? " Ein Key ist hinterlegt." : ""}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="glass rounded-xl border-white/10"
+                  onClick={() => void runProviderTest()}
+                  disabled={providerBusy}
+                >
+                  {providerBusy ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Plug className="size-4" />
+                  )}
+                  Verbindung testen
+                </Button>
+                <Button
+                  className="rounded-xl bg-gradient-to-r from-brand-violet to-brand-indigo font-semibold text-white"
+                  onClick={() =>
+                    void persistProvider(
+                      providerKey.trim().length > 0 ? providerKey.trim() : undefined,
+                    )
+                  }
+                  disabled={providerBusy}
+                >
+                  <Save className="size-4" />
+                  Speichern
+                </Button>
+                {provider?.hasKey ? (
+                  <button
+                    type="button"
+                    onClick={() => void persistProvider(null)}
+                    disabled={providerBusy}
+                    className="text-[11px] font-semibold text-muted-foreground transition-colors hover:text-brand-rose disabled:opacity-50"
+                  >
+                    Key entfernen
+                  </button>
+                ) : null}
+              </div>
+
+              {providerTest ? (
+                <p
+                  className={cn(
+                    "mt-2 text-[11px]",
+                    providerTest.ok ? "text-brand-emerald" : "text-brand-rose",
+                  )}
+                >
+                  {providerTest.ok ? "✓ " : "✗ "}
+                  {providerTest.detail}
+                </p>
+              ) : null}
+              {providerError ? (
+                <p className="mt-2 text-[11px] text-brand-rose">{providerError}</p>
+              ) : null}
+
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Aktiv:{" "}
+                {provider
+                  ? provider.effective === "custom"
+                    ? `Eigener Anbieter (${provider.effectiveBaseUrl})`
+                    : provider.openrouterAvailable
+                      ? "OpenRouter"
+                      : "OpenRouter — kein Key in der .env"
+                  : "…"}
+                {provider && !provider.ready ? " · nicht einsatzbereit" : ""}
               </p>
             </div>
 

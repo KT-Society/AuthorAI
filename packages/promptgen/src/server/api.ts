@@ -20,10 +20,20 @@ export class ApiError extends Error {
   }
 }
 
+/** Optionaler Anbieter-Override (vom Root-Server aufgelöst; Standalone nutzt die `.env`). */
+export interface ProviderOverride {
+  /** Vollständige Chat-Completions-URL. */
+  url: string;
+  apiKey: string;
+  /** `custom` unterdrückt den OpenRouter-Referer. */
+  label?: string;
+}
+
 export interface GenerateInput {
   slug: string;
   model: string;
   language: string;
+  provider?: ProviderOverride;
 }
 
 interface TavilyResponse {
@@ -74,11 +84,13 @@ async function synthesizeSoul(
   research: TavilyResponse,
   model: string,
   language: string,
+  provider?: ProviderOverride,
 ): Promise<Record<string, string>> {
-  const apiKey = getOpenRouterKey();
+  const apiKey = provider?.apiKey || getOpenRouterKey();
+  const url = provider?.url || OPENROUTER_API_URL;
   if (!apiKey) {
     throw new ApiError(
-      "Kein OPENROUTER_API_KEY in der .env gefunden. Bitte im Repo-Root ergänzen.",
+      "Kein API-Key für den LLM-Anbieter gefunden — bitte in den Einstellungen (Anbieter) oder in der .env hinterlegen.",
       500,
     );
   }
@@ -126,13 +138,16 @@ async function synthesizeSoul(
     Remember: write every section in ${language}, not in English.
   `;
 
-  const response = await fetch(OPENROUTER_API_URL, {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  };
+  // Der Referer ist eine OpenRouter-Eigenheit; fremde Anbieter ignorieren ihn besser.
+  if (provider?.label !== "custom") headers["HTTP-Referer"] = "https://habitatai.biz";
+
+  const response = await fetch(url, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": "https://habitatai.biz", // Optional
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify({
       model,
       messages: [
@@ -144,7 +159,8 @@ async function synthesizeSoul(
   });
 
   if (!response.ok) {
-    throw new ApiError(`OpenRouter-Synthese fehlgeschlagen (HTTP ${response.status}).`, 502);
+    const name = provider?.label === "custom" ? "Anbieter" : "OpenRouter";
+    throw new ApiError(`${name}-Synthese fehlgeschlagen (HTTP ${response.status}).`, 502);
   }
 
   const data = (await response.json()) as {
@@ -152,7 +168,7 @@ async function synthesizeSoul(
   };
   const rawContent = data.choices?.[0]?.message?.content;
   if (!rawContent) {
-    throw new ApiError("OpenRouter hat keine Antwort geliefert.", 502);
+    throw new ApiError("Der LLM-Anbieter hat keine Antwort geliefert.", 502);
   }
 
   try {
@@ -168,5 +184,5 @@ async function synthesizeSoul(
 
 export async function generateSoul(input: GenerateInput): Promise<Record<string, string>> {
   const research = await searchTavily(input.slug);
-  return synthesizeSoul(input.slug, research, input.model, input.language);
+  return synthesizeSoul(input.slug, research, input.model, input.language, input.provider);
 }

@@ -20,6 +20,13 @@ import {
 import type { CanonRepairTarget, CanonViolation } from "./server/continuity";
 import { clearState, readState, storeInfo, writeState, writeStateBulk } from "./server/store";
 import { isStateCollection } from "./data/state";
+import {
+  providerStatus,
+  resolveChatEndpoint,
+  testProvider,
+  writeProvider,
+} from "./server/provider";
+import type { ProviderMode } from "./server/provider";
 import { isStandaloneBinary, runtimePort } from "./server/paths";
 import { runResearch } from "./server/research";
 import {
@@ -308,6 +315,54 @@ const server = serve({
       },
     },
 
+    // LLM-Anbieter: OpenRouter (Standard) oder eigener OpenAI-kompatibler Anbieter.
+    // Die Antwort enthält **nie** den Key — nur `hasKey: boolean`.
+    "/api/provider": {
+      GET() {
+        try {
+          return Response.json(providerStatus());
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+      async PUT(req) {
+        try {
+          const body = await readJson(req);
+          const mode: ProviderMode = body.mode === "custom" ? "custom" : "openrouter";
+          const baseUrl =
+            typeof body.baseUrl === "string" ? body.baseUrl.trim().slice(0, 500) : "";
+          if (mode === "custom" && baseUrl && !/^https?:\/\//i.test(baseUrl)) {
+            throw new ApiError("Die Base-URL muss mit http:// oder https:// beginnen.", 400);
+          }
+          // apiKey: null = löschen · nicht-leer = setzen · sonst behalten.
+          const apiKey =
+            body.apiKey === null
+              ? null
+              : typeof body.apiKey === "string" && body.apiKey.trim().length > 0
+                ? body.apiKey.trim()
+                : undefined;
+          return Response.json(writeProvider({ mode, baseUrl, apiKey }));
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Verbindungstest für (auch ungespeicherte) Anbieter-Werte.
+    "/api/provider/test": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const mode: ProviderMode = body.mode === "custom" ? "custom" : "openrouter";
+          const baseUrl = typeof body.baseUrl === "string" ? body.baseUrl.trim() : undefined;
+          const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : undefined;
+          return Response.json(await testProvider({ mode, baseUrl, apiKey }));
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
     // Character generation powered by the promptgen engine.
     "/api/generate": {
       async POST(req) {
@@ -316,7 +371,16 @@ const server = serve({
           const slug = requiredString(body.slug, "Bitte einen Charakter-Namen angeben.");
           const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
           const language = optionalLanguage(body.language);
-          const soul = await generateSoul({ slug, model, language });
+          // Wirksamen Anbieter auflösen und nur die nötigen Felder an die Engine geben.
+          const endpoint = resolveChatEndpoint();
+          const soul = await generateSoul({
+            slug,
+            model,
+            language,
+            provider: endpoint.apiKey
+              ? { url: endpoint.url, apiKey: endpoint.apiKey, label: endpoint.label }
+              : undefined,
+          });
           return Response.json({ soul });
         } catch (err) {
           return errorResponse(err);
