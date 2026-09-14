@@ -8,6 +8,30 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Timeline: Quick Fix für die Chronologie
+
+- **Added** **Quick Fix im Timeline-Dialog**: Der Knopf neben „Erneut prüfen" schlägt je Kapitel
+  konkrete Korrekturen der **Szenen-Struktur** vor (Zeit, Schauplatz, Szenen-Text) — mit
+  Diff-Vorschau und Kapitel-Auswahl, geschrieben wird erst nach Bestätigung. Damit hat die
+  Timeline denselben Weg wie der Fakten-Check: prüfen → reparieren → gegenprüfen. Nach dem
+  Übernehmen läuft die Prüfung automatisch neu.
+  *Bewusst ohne Versions-Snapshot:* Die Kapitel-Version speichert nur Rohtext und Ausbau — der
+  Fix ändert dagegen die Struktur (`sceneMeta`, Storyboard-Beats), ein Versionseintrag enthielte
+  davon nichts. Die Sicherung ist die Diff-Vorschau (Rückholbarkeit steht als Roadmap-Idee).
+- **Changed** **Timeline-Befunde sind jetzt strukturiert**: `findings` liefert statt Freitext
+  Objekte `{ chapter, scene, issue, fix }`. Ursache: Die Zuordnung „Befund → Kapitel" wurde
+  clientseitig aus dem Text geraten (`includes("Kapitel N")`) — bei englischen Befunden oder
+  anderer Schreibweise blieb die Kapitel-Markierung aus, und eine Korrektur war gar nicht
+  adressierbar. Wirkung: Kapitel werden exakt markiert (inkl. Szenennummer), der Vorschlag des
+  Modells wird sichtbar, und die Korrektur kennt ihr Ziel. Alte Antworten mit reinen Strings
+  werden weiterhin verarbeitet (Kapitelnummer wird dann aus dem Text gelesen).
+- **Added** **Route `POST /api/timeline/repair`**: korrigiert die Struktur der gemeldeten
+  Widersprüche in **einem** Aufruf (die Prüfung liest die Struktur, nicht den Fließtext).
+  Serverseitig geprüft: unbekannte Kapitel/Szenen fliegen raus, unveränderte Werte werden gar
+  nicht erst gemeldet — das Modell listet gern auch Unverändertes.
+- **Added** **Diff-Vorschau** `TimelineRepairPreviewDialog` (Zeit/Schauplatz als Vorher → Nachher,
+  Szenen-Text als Wort-Diff), spiegelbildlich zur Fakten-Korrektur.
+
 ### Live-Vorschau überall & Fortschritt im Job-Center
 
 - **Added** **Storyboard-Entwurf mit Live-Fortschritt** (`POST /api/storyboard/stream`): Der

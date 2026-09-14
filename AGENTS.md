@@ -102,7 +102,7 @@ src/
 | Ausbau | `POST /api/chapter/expand` · Stream: `POST /api/chapter/expand/stream` |
 | Kohärenz | `POST /api/chapter/consistency` · Stream: `POST /api/chapter/consistency/stream` |
 | Stil | `POST /api/chapter/style` · Stream: `POST /api/chapter/style/stream` |
-| Timeline-Prüfung | `POST /api/timeline/check` |
+| Timeline-Prüfung | `POST /api/timeline/check` · Quick Fix: `POST /api/timeline/repair` |
 | Weltenbau-Extraktion | `POST /api/world/extract` |
 | Figuren-Extraktion (Manuskript) | `POST /api/characters/extract` |
 | Kontinuität: Extraktion | `POST /api/continuity/extract` · Stream: `POST /api/continuity/extract/stream` |

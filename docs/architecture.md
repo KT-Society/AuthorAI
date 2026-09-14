@@ -184,7 +184,8 @@ Typen + Seed-Daten, frei von UI-Logik:
 - **Dialoge:** `BookWizard` (im Dashboard für neue Bücher **und** im Buch-Editor für den
   Wiedereinstieg), `CharacterGenerator`, `CharacterEditorDialog`,
   `CharacterExtractDialog`, `ContinuityExtractDialog`, `CanonCheckDialog`, `WorldExtractDialog`,
-  `TimelineDialog`, `VersionDiffDialog`, `CanonRepairPreviewDialog`, `CoverEditorDialog`,
+  `TimelineDialog`, `VersionDiffDialog`, `CanonRepairPreviewDialog`, `TimelineRepairPreviewDialog`,
+  `CoverEditorDialog`,
   `CoverVariantsDialog`, `SeriesDialog`, `SettingsDialog`, `ProfileGate`
 - **Bausteine:** `primitives.tsx` (Panel, Badge, ProgressBar, Sparkline, ViewHeader, …),
   `DiffView.tsx` (Wort-Diff-Darstellung), `StreamPreview.tsx` (Live-Vorschau eines laufenden
@@ -206,7 +207,9 @@ Szenen-Block als bindende Struktur (`SCENES (binding …)`).
 
 **Prüfungen** laufen serverseitig: Kohärenz, Stil (je Kapitel) und die **Timeline-Prüfung**
 für das ganze Buch (`POST /api/timeline/check`, chronologische Widersprüche aus den
-Szenen-Zeiten). Ergebnisse landen als Berichte am Kapitel bzw. im Buch-Header.
+Szenen-Zeiten). Der **Timeline-Quick-Fix** (`POST /api/timeline/repair`) korrigiert dieselbe
+Struktur (Szenen-Zeit/Schauplatz/Text) hinter einer Diff-Vorschau — geschrieben wird erst nach
+Bestätigung. Ergebnisse landen als Berichte am Kapitel bzw. im Timeline-Dialog.
 
 **Ausgabe und Sicherung** passieren komplett im Browser — kein Server-Roundtrip nötig:
 

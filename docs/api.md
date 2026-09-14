@@ -504,10 +504,51 @@ Chronologische Prüfung über alle Kapitel/Szenen (nutzt konzeptionell das Kohä
 **Response**
 
 ```json
-{ "summary": "…", "findings": ["Kapitel 3, Szene 2 …"] }
+{
+  "summary": "…",
+  "findings": [
+    { "chapter": 3, "scene": 2, "issue": "Rückwärtssprung: …", "fix": "Szene 2 auf Tag 3 verschieben." }
+  ]
+}
 ```
 
-`findings` ist leer, wenn die Chronologie konsistent ist.
+`findings` ist leer, wenn die Chronologie konsistent ist. `chapter`/`scene` sind **1-basiert**,
+`chapter: 0` heißt „nicht zuordenbar", `scene` fehlt bei kapitelweiten Problemen. Antworten mit
+reinen Strings werden weiterhin akzeptiert (die Kapitelnummer wird dann aus dem Text gelesen).
+
+### `POST /api/timeline/repair`
+
+Quick Fix der Chronologie: korrigiert die **Szenen-Struktur** (Zeit, Schauplatz, Szenen-Text) der
+gemeldeten Widersprüche — genau die Daten, die `timeline/check` liest. Ein Aufruf, kein Streaming
+(die Korrektur ist klein). Der Server prüft alle Nummern gegen Storyboard und Szenen-Matrix und
+meldet **nur tatsächliche Änderungen** zurück.
+
+```json
+{
+  "storyboard": { … },
+  "scenesByChapter": [[{ "text": "…", "characters": [], "time": "Tag 1", "setting": "Hafen" }]],
+  "findings": [{ "chapter": 1, "scene": 2, "issue": "…", "fix": "…" }],
+  "model": "<model-id>",
+  "language": "German",
+  "canon": "… (optional)"
+}
+```
+
+**Response**
+
+```json
+{
+  "fixes": [
+    { "chapter": 1, "note": "Zeiten angeglichen",
+      "scenes": [{ "scene": 2, "time": "Tag 3", "setting": "Bucht", "text": "…" }] }
+  ],
+  "notes": ["Nicht reparierbare Hinweise (optional)"]
+}
+```
+
+In `scenes` stehen **nur die geänderten Felder** — fehlt `time`, bleibt die Zeit; fehlt `text`,
+bleibt der Szenen-Text. Unbekannte Kapitel/Szenen und unveränderte Werte werden verworfen (leeres
+`fixes` = nichts zu tun). Keine Befunde oder fehlendes Model → **HTTP 400** (vor dem Modell-Aufruf).
 
 ---
 

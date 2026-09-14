@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Hourglass, Loader2, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Hourglass, Loader2, RefreshCw, Wand2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { showToast } from "@/lib/toast";
 
-import type { TimelineResult } from "@/services/story";
+import type { TimelineFinding, TimelineResult } from "@/services/story";
+
+import { TimelineRepairPreviewDialog } from "./TimelineRepairPreviewDialog";
+import type { TimelineRepairChange } from "./TimelineRepairPreviewDialog";
 
 export interface TimelineEntry {
   chapter: number;
@@ -16,15 +20,24 @@ export function TimelineDialog({
   open,
   entries,
   onCheck,
+  onRepair,
+  onApplyRepairs,
   onClose,
 }: {
   open: boolean;
   entries: TimelineEntry[];
   onCheck: () => Promise<TimelineResult>;
+  /** Quick Fix: liefert die vorgeschlagenen Änderungen — geschrieben wird erst nach Bestätigung. */
+  onRepair?: (findings: TimelineFinding[]) => Promise<TimelineRepairChange[]>;
+  /** Schreibt die bestätigten Kapitel-Korrekturen. */
+  onApplyRepairs?: (changes: TimelineRepairChange[]) => void;
   onClose: () => void;
 }) {
   const [result, setResult] = useState<TimelineResult | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Läuft gerade die Korrektur (statt der Prüfung)? */
+  const [repairing, setRepairing] = useState(false);
+  const [pending, setPending] = useState<TimelineRepairChange[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   /**
    * React StrictMode führt Effekte im Dev-Modus doppelt aus (mount → cleanup → mount).
@@ -53,16 +66,59 @@ export function TimelineDialog({
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) onClose();
+      // Bei offener Vorschau gehört Escape der Vorschau (sie schließt sich selbst).
+      if (event.key === "Escape" && !busy && !repairing && !pending) onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, busy, onClose]);
+  }, [open, busy, repairing, pending, onClose]);
 
   if (!open) return null;
 
-  const isFlagged = (chapterNumber: number) =>
-    Boolean(result?.findings.some((finding) => finding.includes(`Kapitel ${chapterNumber}`)));
+  const findings = result?.findings ?? [];
+  const isFlagged = (chapterNumber: number) => findings.some((f) => f.chapter === chapterNumber);
+
+  /** Quick Fix starten: Vorschlag holen, nichts schreiben. */
+  const startRepair = async () => {
+    if (!onRepair || findings.length === 0) return;
+    setRepairing(true);
+    setError(null);
+    try {
+      const changes = await onRepair(findings);
+      if (changes.length === 0) {
+        showToast("Keine Änderung vorgeschlagen — bitte einen Blick auf die Hinweise werfen.", "info");
+      } else {
+        setPending(changes);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
+    } finally {
+      setRepairing(false);
+    }
+  };
+
+  const applyPending = (chapterIndices: number[]) => {
+    const chosen = (pending ?? []).filter((change) =>
+      chapterIndices.includes(change.chapterIndex),
+    );
+    setPending(null);
+    if (chosen.length === 0) return;
+    onApplyRepairs?.(chosen);
+    showToast(
+      chosen.length === 1
+        ? `Timeline-Korrektur in Kapitel ${chosen[0]!.chapterIndex + 1} übernommen`
+        :       `Timeline-Korrektur in ${chosen.length} Kapiteln übernommen`,
+      "ok",
+    );
+    // Direkt nachprüfen: zeigt, was jetzt noch offen ist.
+    setResult(null);
+    run();
+  };
+
+  const discardPending = () => {
+    setPending(null);
+    showToast("Timeline-Korrektur verworfen — Struktur unverändert.", "info");
+  };
 
   return (
     <div
@@ -90,7 +146,7 @@ export function TimelineDialog({
             size="icon-sm"
             className="rounded-lg text-muted-foreground hover:text-foreground"
             onClick={onClose}
-            disabled={busy}
+            disabled={busy || repairing}
           >
             <X className="size-4" />
           </Button>
@@ -103,25 +159,36 @@ export function TimelineDialog({
             </p>
           ) : null}
 
-          {busy ? (
+          {busy || repairing ? (
             <div className="mb-4 flex items-center gap-3 rounded-xl border border-brand-cyan/20 bg-brand-cyan/5 px-4 py-3 text-sm text-brand-cyan">
               <Loader2 className="size-4 animate-spin" />
-              Chronologie wird geprüft…
+              {repairing ? "Korrektur wird vorbereitet…" : "Chronologie wird geprüft…"}
             </div>
           ) : null}
 
           {result ? (
             <div className="mb-5 rounded-xl border border-white/10 bg-white/5 p-3">
-              {result.findings.length > 0 ? (
+              {findings.length > 0 ? (
                 <>
                   <p className="mb-2 inline-flex items-center gap-2 text-xs font-semibold text-brand-amber">
                     <AlertTriangle className="size-3.5" />
-                    {result.findings.length} Hinweis(e)
+                    {findings.length} Hinweis(e)
                   </p>
-                  <ul className="space-y-1 text-sm">
-                    {result.findings.map((finding, index) => (
+                  <ul className="space-y-1.5 text-sm">
+                    {findings.map((finding, index) => (
                       <li key={index} className="text-brand-amber">
-                        • {finding}
+                        • {finding.issue}
+                        {finding.chapter > 0 ? (
+                          <span className="ml-1.5 text-[10px] text-muted-foreground">
+                            (Kapitel {finding.chapter}
+                            {finding.scene ? `, Szene ${finding.scene}` : ""})
+                          </span>
+                        ) : null}
+                        {finding.fix ? (
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            Vorschlag: {finding.fix}
+                          </span>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
@@ -177,18 +244,39 @@ export function TimelineDialog({
           </ol>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-white/10 p-5">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/10 p-5">
+          {onRepair && findings.length > 0 ? (
+            <Button
+              className="rounded-xl bg-gradient-to-r from-brand-amber to-brand-cyan font-semibold text-white disabled:opacity-50"
+              onClick={() => void startRepair()}
+              disabled={busy || repairing}
+            >
+              {repairing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Wand2 className="size-4" />
+              )}
+              Quick Fix ({findings.length})
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             className="glass rounded-xl border-white/10"
             onClick={run}
-            disabled={busy}
+            disabled={busy || repairing}
           >
             <RefreshCw className={cn("size-4", busy && "animate-spin")} />
             Erneut prüfen
           </Button>
         </div>
       </div>
+
+      <TimelineRepairPreviewDialog
+        open={Boolean(pending)}
+        changes={pending ?? []}
+        onApply={applyPending}
+        onDiscard={discardPending}
+      />
     </div>
   );
 }

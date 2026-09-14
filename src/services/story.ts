@@ -192,19 +192,126 @@ export interface TimelineRequest {
   canon?: string;
 }
 
+export interface TimelineFinding {
+  /** 1-basierte Kapitelnummer aus der Auflistung; **0** = nicht zuordenbar. */
+  chapter: number;
+  /** 1-basierte Szenennummer im Kapitel (fehlt = kapitelweit). */
+  scene?: number;
+  /** Was sich widerspricht. */
+  issue: string;
+  /** Konkrete Auflösung — Grundlage der Korrektur. */
+  fix: string;
+}
+
 export interface TimelineResult {
   summary: string;
-  findings: string[];
+  findings: TimelineFinding[];
 }
 
 export async function checkTimeline(input: TimelineRequest): Promise<TimelineResult> {
-  const data = await postJson<{ summary?: string; findings?: string[] }>(
+  const data = await postJson<{ summary?: string; findings?: unknown[] }>(
     "/api/timeline/check",
     input,
   );
   return {
     summary: typeof data.summary === "string" ? data.summary : "",
-    findings: Array.isArray(data.findings) ? data.findings : [],
+    findings: asTimelineFindings(data.findings),
+  };
+}
+
+/**
+ * Befunde kommen als Objekte; ältere Modelle (oder ein Modell, das sich nicht ans Schema hält)
+ * liefern reine Strings. Beides wird auf dieselbe Form gebracht — die Kapitelnummer wird zur Not
+ * aus dem Text gelesen, damit die Markierung trotzdem greift.
+ */
+function asTimelineFindings(value: unknown): TimelineFinding[] {
+  if (!Array.isArray(value)) return [];
+  const findings: TimelineFinding[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string") {
+      const issue = entry.trim();
+      if (!issue) continue;
+      const match = issue.match(/\b(?:kapitel|chapter|kap\.?|ch\.?)\s*(\d{1,3})\b/i);
+      const parsed = match?.[1] ? Number.parseInt(match[1], 10) : Number.NaN;
+      findings.push({ chapter: Number.isFinite(parsed) ? parsed : 0, issue, fix: "" });
+      continue;
+    }
+    const item = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const issue = typeof item.issue === "string" ? item.issue.trim() : "";
+    if (!issue) continue;
+    const chapter = Number.parseInt(String(item.chapter ?? ""), 10);
+    const scene = Number.parseInt(String(item.scene ?? ""), 10);
+    findings.push({
+      chapter: Number.isFinite(chapter) && chapter > 0 ? chapter : 0,
+      scene: Number.isFinite(scene) && scene > 0 ? scene : undefined,
+      issue,
+      fix: typeof item.fix === "string" ? item.fix.trim() : "",
+    });
+  }
+  return findings;
+}
+
+export interface TimelineRepairRequest extends TimelineRequest {
+  findings: TimelineFinding[];
+}
+
+/** Vorgeschlagene Korrektur **einer Szene** — nur gesetzte Felder ändern etwas. */
+export interface TimelineSceneFix {
+  scene: number;
+  time?: string;
+  setting?: string;
+  text?: string;
+}
+
+export interface TimelineRepairFix {
+  /** 1-basierte Kapitelnummer. */
+  chapter: number;
+  note: string;
+  scenes: TimelineSceneFix[];
+}
+
+export interface TimelineRepairResult {
+  fixes: TimelineRepairFix[];
+  notes: string[];
+}
+
+/**
+ * Quick Fix der Timeline: korrigiert die **Struktur** (Szenen-Zeit/Schauplatz/Text), die die
+ * Chronologie-Prüfung liest. Der Server prüft die Nummern gegen die echten Kapitel/Szenen und
+ * meldet nur tatsächliche Änderungen zurück.
+ */
+export async function repairTimeline(input: TimelineRepairRequest): Promise<TimelineRepairResult> {
+  const data = await postJson<{ fixes?: unknown[]; notes?: unknown[] }>(
+    "/api/timeline/repair",
+    input,
+  );
+  const fixes: TimelineRepairFix[] = [];
+  for (const entry of Array.isArray(data.fixes) ? data.fixes : []) {
+    const item = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const chapter = Number.parseInt(String(item.chapter ?? ""), 10);
+    if (!Number.isFinite(chapter) || chapter <= 0) continue;
+    const scenes: TimelineSceneFix[] = [];
+    for (const sceneEntry of Array.isArray(item.scenes) ? item.scenes : []) {
+      const sceneItem =
+        sceneEntry && typeof sceneEntry === "object" ? (sceneEntry as Record<string, unknown>) : {};
+      const scene = Number.parseInt(String(sceneItem.scene ?? ""), 10);
+      if (!Number.isFinite(scene) || scene <= 0) continue;
+      const fix: TimelineSceneFix = { scene };
+      if (typeof sceneItem.time === "string" && sceneItem.time.trim())
+        fix.time = sceneItem.time.trim();
+      if (typeof sceneItem.setting === "string" && sceneItem.setting.trim())
+        fix.setting = sceneItem.setting.trim();
+      if (typeof sceneItem.text === "string" && sceneItem.text.trim())
+        fix.text = sceneItem.text.trim();
+      if (fix.time || fix.setting || fix.text) scenes.push(fix);
+    }
+    if (scenes.length > 0) {
+      fixes.push({ chapter, note: typeof item.note === "string" ? item.note : "", scenes });
+    }
+  }
+  return {
+    fixes,
+    notes: Array.isArray(data.notes) ? data.notes.map((note) => String(note)) : [],
   };
 }
 

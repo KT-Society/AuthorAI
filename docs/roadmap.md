@@ -23,6 +23,16 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 - **Assistent-Schritt „Export"**: nach dem Fakten-Check direkt Cover/EPUB/PDF aus dem Assistenten
   erzeugen, statt erst in den Buch-Editor zu wechseln
 
+### Zeit & Chronologie (Anschlüsse an die Timeline-Prüfung)
+- **Szenen-Struktur versionieren**: Ein Timeline-Quick-Fix ändert `sceneMeta` und Storyboard-Beats
+  — beides liegt außerhalb der Kapitel-Version, deshalb ist der Fix heute nicht rückholbar
+  (gesichert ist nur die Diff-Vorschau)
+- **Timeline-Prüfung gegen die Prosa**: Der Check liest heute nur die Szenen-Struktur (Zeit,
+  Schauplatz, Beats) — Widersprüche, die erst im Fließtext stehen, sieht er nicht (die
+  Kohärenz-Prüfung kennt dafür keine Zeitachse)
+- **Zeitachse als Ansicht**: Szenen-Zeiten als lineare Zeitlinie (Kapitel × Zeit) mit Konflikten
+  und Sprüngen, statt sie als Liste zu lesen
+
 ### Export & Ausgabe
 - **PDF mit Cover-Seite** (Titelseite aus dem Cover-Bild)
 - **DOCX mit Kommentaren** für Lektorats-Workflows

@@ -83,8 +83,8 @@ import { buildEpub } from "@/lib/epub";
 import { buildMarkdown } from "@/lib/markdown";
 import { buildPdf } from "@/lib/pdf";
 import { buildCoverPrompt, deleteCover, generateCover } from "@/services/cover";
-import { checkTimeline, streamPass } from "@/services/story";
-import type { PassResult } from "@/services/story";
+import { checkTimeline, repairTimeline, streamPass } from "@/services/story";
+import type { PassResult, TimelineFinding, TimelineResult } from "@/services/story";
 import { checkCanon, streamCanonCheck, streamCanonRepair } from "@/services/continuity";
 import type {
   CanonCheckResult,
@@ -92,7 +92,6 @@ import type {
   CanonStreamHandlers,
   CanonViolation,
 } from "@/services/continuity";
-import type { TimelineResult } from "@/services/story";
 
 import { SCENE_TEMPLATES } from "@/data/sceneTemplates";
 import type { CoverTextLayer, SavedCoverPreset } from "@/data/cover";
@@ -112,6 +111,7 @@ import { VersionDiffDialog } from "./VersionDiffDialog";
 import { SeriesDialog } from "./SeriesDialog";
 import { TimelineDialog } from "./TimelineDialog";
 import type { TimelineEntry } from "./TimelineDialog";
+import type { TimelineRepairChange, TimelineSceneChange } from "./TimelineRepairPreviewDialog";
 import { Panel, ProgressBar } from "./primitives";
 import { StreamPreview } from "./StreamPreview";
 
@@ -1272,23 +1272,127 @@ export function BookDetailView({
     setDraftBuffer(version.draft);
   };
 
-  const runTimelineCheck = async (): Promise<TimelineResult> => {
-    if (!book.storyboard) {
-      throw new Error("Kein Storyboard vorhanden — Timeline-Prüfung nicht möglich.");
-    }
+  /** Modell der Kohärenz-Stufe — Timeline-Prüfung und Quick Fix nutzen es. */
+  const timelineModel = (): string => {
     const model = readStageModel("consistency");
     if (!model.trim()) {
       throw new Error(
         "Bitte eine Model-ID für „Kohärenz“ in den Einstellungen eintragen (die Timeline nutzt sie).",
       );
     }
+    return model;
+  };
+
+  const runTimelineCheck = async (): Promise<TimelineResult> => {
+    if (!book.storyboard) {
+      throw new Error("Kein Storyboard vorhanden — Timeline-Prüfung nicht möglich.");
+    }
     return checkTimeline({
       storyboard: book.storyboard,
       scenesByChapter: manuscript.map((_, index) => scenesFor(index)),
-      model,
+      model: timelineModel(),
       language,
       canon,
     });
+  };
+
+  /**
+   * Timeline-Quick-Fix: Der Server korrigiert die **Struktur** (Szenen-Zeit/Schauplatz/Text) —
+   * genau die Daten, die die Prüfung liest. Hier wird **nichts** geschrieben: der Dialog zeigt
+   * daraus die Vorschau; erst `applyTimelineRepairs` übernimmt die bestätigten Kapitel.
+   */
+  const runTimelineRepair = async (
+    findings: TimelineFinding[],
+  ): Promise<TimelineRepairChange[]> => {
+    if (!book.storyboard) {
+      throw new Error("Kein Storyboard vorhanden — Timeline-Korrektur nicht möglich.");
+    }
+    const scenesByChapter = manuscriptRef.current.map((_, index) => scenesFor(index));
+    const result = await repairTimeline({
+      storyboard: book.storyboard,
+      scenesByChapter,
+      findings,
+      model: timelineModel(),
+      language,
+      canon,
+    });
+
+    const changes: TimelineRepairChange[] = [];
+    for (const fix of result.fixes) {
+      const chapterIndex = fix.chapter - 1;
+      const chapter = manuscriptRef.current[chapterIndex];
+      if (!chapter) continue;
+      const scenes: TimelineSceneChange[] = [];
+      for (const sceneFix of fix.scenes) {
+        const sceneIndex = sceneFix.scene - 1;
+        const current = scenesByChapter[chapterIndex]?.[sceneIndex];
+        if (!current) continue;
+        const change: TimelineSceneChange = { sceneIndex };
+        if (sceneFix.time !== undefined) {
+          change.timeBefore = current.time;
+          change.timeAfter = sceneFix.time;
+        }
+        if (sceneFix.setting !== undefined) {
+          change.settingBefore = current.setting;
+          change.settingAfter = sceneFix.setting;
+        }
+        if (sceneFix.text !== undefined) {
+          change.textBefore = current.text;
+          change.textAfter = sceneFix.text;
+        }
+        scenes.push(change);
+      }
+      if (scenes.length > 0) {
+        changes.push({
+          chapterIndex,
+          title: chapter.title || `Kapitel ${chapterIndex + 1}`,
+          note: fix.note,
+          scenes,
+        });
+      }
+    }
+    if (result.notes.length > 0) showToast(result.notes[0]!, "info");
+    return changes;
+  };
+
+  /**
+   * Übernimmt die bestätigten Korrekturen: Szenen-Zeiten/Schauplätze landen in `sceneMeta`,
+   * geänderte Szenen-Texte ersetzen den Beat im Storyboard. Beides in **einem** Commit.
+   *
+   * Bewusst **kein** Versions-Snapshot: `ChapterVersion` speichert nur `draft`/`expanded`, hier
+   * ändert sich aber die Struktur (`sceneMeta`, Beats) — ein Eintrag „vor Timeline-Korrektur"
+   * würde nichts von der Änderung enthalten und eine Rückholbarkeit vortäuschen, die es nicht
+   * gibt. Die Sicherung ist die Diff-Vorschau vor dem Übernehmen.
+   */
+  const applyTimelineRepairs = (changes: TimelineRepairChange[]) => {
+    if (changes.length === 0) return;
+    const nextManuscript = manuscriptRef.current.map((chapter) => ({ ...chapter }));
+    const nextPlans = plans.map((plan) => ({ ...plan, beats: [...plan.beats] }));
+    let touched = 0;
+
+    for (const change of changes) {
+      const chapter = nextManuscript[change.chapterIndex];
+      const plan = nextPlans[change.chapterIndex];
+      if (!chapter || !plan) continue;
+      const sceneMeta = [...(chapter.sceneMeta ?? [])];
+
+      for (const scene of change.scenes) {
+        // sceneMeta ist parallel zur Beat-Liste — fehlende Slots defensiv auffüllen.
+        while (sceneMeta.length <= scene.sceneIndex) sceneMeta.push({});
+        const meta = { ...sceneMeta[scene.sceneIndex] };
+        if (scene.timeAfter !== undefined) meta.time = scene.timeAfter;
+        if (scene.settingAfter !== undefined) meta.setting = scene.settingAfter;
+        sceneMeta[scene.sceneIndex] = meta;
+        if (scene.textAfter !== undefined) plan.beats[scene.sceneIndex] = scene.textAfter;
+      }
+
+      nextManuscript[change.chapterIndex] = { ...chapter, sceneMeta };
+      touched += 1;
+    }
+
+    if (touched === 0) return;
+    manuscriptRef.current = nextManuscript;
+    commit(nextManuscript, nextPlans);
   };
 
   /** Kapitel mit Text — nur die lohnt der Fakten-Check. */
@@ -1955,6 +2059,8 @@ export function BookDetailView({
           open={timelineOpen}
           entries={timelineEntries}
           onCheck={runTimelineCheck}
+          onRepair={runTimelineRepair}
+          onApplyRepairs={applyTimelineRepairs}
           onClose={() => setTimelineOpen(false)}
         />
       ) : null}

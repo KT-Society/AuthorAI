@@ -39,10 +39,11 @@ import {
   extractWorld,
   generateStoryboard,
   refineStyle,
+  repairTimeline,
   checkConsistencyStream,
   refineStyleStream,
 } from "./server/story";
-import type { PassInput, PassStreamHandlers } from "./server/story";
+import type { PassInput, PassStreamHandlers, TimelineFinding } from "./server/story";
 
 // Load API keys from the repository root `.env` (server-side only).
 loadRootEnv();
@@ -131,6 +132,31 @@ function asScenes(value: unknown): SceneConstraint[] | undefined {
 function asSceneMatrix(value: unknown): SceneConstraint[][] {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => asScenes(entry) ?? []);
+}
+
+/** Timeline-Befunde aus dem Request-Body (nur Einträge mit Text). */
+function asTimelineFindings(value: unknown): TimelineFinding[] {
+  if (!Array.isArray(value)) return [];
+  const findings: TimelineFinding[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string") {
+      const issue = entry.trim();
+      if (issue) findings.push({ chapter: 0, issue, fix: "" });
+      continue;
+    }
+    const item = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const issue = typeof item.issue === "string" ? item.issue.trim() : "";
+    if (!issue) continue;
+    const chapter = Number.parseInt(String(item.chapter ?? ""), 10);
+    const scene = Number.parseInt(String(item.scene ?? ""), 10);
+    findings.push({
+      chapter: Number.isFinite(chapter) && chapter > 0 ? Math.round(chapter) : 0,
+      scene: Number.isFinite(scene) && scene > 0 ? Math.round(scene) : undefined,
+      issue,
+      fix: typeof item.fix === "string" ? item.fix.trim() : "",
+    });
+  }
+  return findings;
 }
 
 function asStoryboard(value: unknown): Storyboard {
@@ -650,6 +676,33 @@ const server = serve({
           const result = await checkTimeline({
             storyboard,
             scenesByChapter: asSceneMatrix(body.scenesByChapter),
+            canon: optionalString(body.canon),
+            model,
+            language,
+          });
+          return Response.json(result);
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Quick Fix der Timeline: korrigiert die Struktur (Szenen-Zeit/Schauplatz/Text) der Befunde.
+    "/api/timeline/repair": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const findings = asTimelineFindings(body.findings);
+          if (findings.length === 0) {
+            throw new ApiError("Keine Timeline-Befunde für die Korrektur.", 400);
+          }
+          const result = await repairTimeline({
+            storyboard,
+            scenesByChapter: asSceneMatrix(body.scenesByChapter),
+            findings,
             canon: optionalString(body.canon),
             model,
             language,

@@ -1124,34 +1124,75 @@ export interface TimelineInput {
   canon?: string;
 }
 
+/**
+ * Ein Chronologie-Befund.
+ *
+ * **Strukturiert** (statt nur Freitext), weil zwei Dinge daran hängen: die Markierung der
+ * betroffenen Kapitel in der Ansicht und die Zuordnung der Korrektur. Vorher wurde die
+ * Kapitelnummer clientseitig aus dem Text geraten (`includes("Kapitel N")`) — das ging bei
+ * englischen Befunden oder abweichender Schreibweise schief.
+ */
+export interface TimelineFinding {
+  /** 1-basierte Kapitelnummer aus der Auflistung; **0** = nicht zuordenbar. */
+  chapter: number;
+  /** 1-basierte Szenennummer im Kapitel (fehlt = kapitelweit). */
+  scene?: number;
+  /** Was sich widerspricht. */
+  issue: string;
+  /** Konkrete Auflösung — Grundlage der Korrektur. */
+  fix: string;
+}
+
 export interface TimelineResult {
   summary: string;
-  findings: string[];
+  findings: TimelineFinding[];
 }
 
-function timelineSystem(language: string): string {
-  return `You are a continuity editor specialised in chronology.
-${languageLock(language)}
-
-TASK: check the chapter/scene timeline for contradictions and impossibilities:
-- times that jump backwards within a chapter's scene order
-- travel, preparation or recovery times that cannot fit the stated span
-- day/night, season or weather contradicting the order
-- ages, dates or durations that do not add up
-- scenes whose stated time is missing or clashes with the chapter summary
-
-Respond ONLY with a single valid JSON object:
-{ "summary": string, "findings": string[] }
-Rules:
-- findings: one short, concrete bullet per problem, referencing chapter and scene numbers.
-- If the chronology is consistent, findings MUST be an empty array and the summary should say so.
-- All text in ${language}.`;
+/** „Kapitel 3", „Chapter 3", „Kap. 3" → 3; 0, wenn keine Nummer genannt ist. */
+function chapterNumberFromText(text: string): number {
+  const match = text.match(/\b(?:kapitel|chapter|kap\.?|ch\.?)\s*(\d{1,3})\b/i);
+  const value = match?.[1] ? Number.parseInt(match[1], 10) : Number.NaN;
+  return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-export async function checkTimeline(input: TimelineInput): Promise<TimelineResult> {
-  const listing = input.storyboard.chapters
+/** Positive Ganzzahl oder `undefined` (akzeptiert auch Strings wie "3"). */
+function positiveInt(value: unknown): number | undefined {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : undefined;
+}
+
+/**
+ * Bringt Befunde auf eine Form — Modelle liefern die Objekte wie gefordert, aber auch weiterhin
+ * reine Strings (oder gemischt). Die Kapitelnummer wird zur Not aus dem Text gelesen.
+ */
+function normalizeTimelineFindings(value: unknown): TimelineFinding[] {
+  if (!Array.isArray(value)) return [];
+  const findings: TimelineFinding[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string") {
+      const issue = entry.trim();
+      if (!issue) continue;
+      findings.push({ chapter: chapterNumberFromText(issue), issue, fix: "" });
+      continue;
+    }
+    const item = asRecord(entry);
+    const issue = str(item.issue) || str(item.text) || str(item.message);
+    if (!issue) continue;
+    findings.push({
+      chapter: positiveInt(item.chapter) ?? chapterNumberFromText(issue),
+      scene: positiveInt(item.scene),
+      issue,
+      fix: str(item.fix) || str(item.suggestion),
+    });
+  }
+  return findings;
+}
+
+/** Die Auflistung, die Prüfung **und** Korrektur sehen — beide müssen dieselben Daten lesen. */
+function timelineListing(storyboard: Storyboard, scenesByChapter: SceneConstraint[][]): string {
+  return storyboard.chapters
     .map((chapter, index) => {
-      const scenes = input.scenesByChapter[index] ?? [];
+      const scenes = scenesByChapter[index] ?? [];
       const sceneLines = scenes
         .map((scene, sceneIndex) => {
           const parts = [
@@ -1167,6 +1208,37 @@ export async function checkTimeline(input: TimelineInput): Promise<TimelineResul
       return `${index + 1}. ${chapter.title}\n   Setting: ${chapter.setting}\n   Summary: ${chapter.summary}\n${sceneLines || "   (no scenes)"}`;
     })
     .join("\n\n");
+}
+
+function timelineSystem(language: string): string {
+  return `You are a continuity editor specialised in chronology.
+${languageLock(language)}
+
+TASK: check the chapter/scene timeline for contradictions and impossibilities:
+- times that jump backwards within a chapter's scene order
+- travel, preparation or recovery times that cannot fit the stated span
+- day/night, season or weather contradicting the order
+- ages, dates or durations that do not add up
+- scenes whose stated time is missing or clashes with the chapter summary
+
+Respond ONLY with a single valid JSON object:
+{
+  "summary": string,
+  "findings": [
+    { "chapter": number, "scene": number | null, "issue": string, "fix": string }
+  ]
+}
+Rules:
+- chapter: the 1-based chapter number from the listing. Use 0 ONLY if the problem cannot be tied to one chapter.
+- scene: the 1-based scene number inside that chapter, or null when the problem spans scenes.
+- issue: one short, concrete sentence naming what contradicts what (mention the numbers).
+- fix: the concrete repair in the timeline data (which time/setting/order must change) — not prose advice.
+- If the chronology is consistent, findings MUST be an empty array and the summary should say so.
+- All text in ${language}.`;
+}
+
+export async function checkTimeline(input: TimelineInput): Promise<TimelineResult> {
+  const listing = timelineListing(input.storyboard, input.scenesByChapter);
 
   const { content, finishReason } = await chatCompletionDetailed({
     model: input.model,
@@ -1189,8 +1261,156 @@ export async function checkTimeline(input: TimelineInput): Promise<TimelineResul
   const parsed = parseJson(content, "Timeline");
   return {
     summary: str(parsed.summary),
-    findings: strArray(parsed.findings),
+    findings: normalizeTimelineFindings(parsed.findings),
   };
+}
+
+/* ─────────────────────── timeline quick fix (Chronologie) ─────────────────────── */
+
+export interface TimelineRepairInput {
+  storyboard: Storyboard;
+  scenesByChapter: SceneConstraint[][];
+  findings: TimelineFinding[];
+  model: string;
+  language: string;
+  canon?: string;
+}
+
+/** Vorgeschlagene Korrektur **einer Szene** — nur gesetzte Felder ändern etwas. */
+export interface TimelineSceneFix {
+  /** 1-basierte Szenennummer der bestehenden Szene. */
+  scene: number;
+  /** Neuer Zeitstempel. */
+  time?: string;
+  /** Neuer Schauplatz. */
+  setting?: string;
+  /** Neuer Szenen-Text — nur wenn der Text selbst der Widerspruch ist. */
+  text?: string;
+}
+
+export interface TimelineRepairFix {
+  /** 1-basierte Kapitelnummer. */
+  chapter: number;
+  note: string;
+  scenes: TimelineSceneFix[];
+}
+
+export interface TimelineRepairResult {
+  fixes: TimelineRepairFix[];
+  notes: string[];
+}
+
+function timelineRepairSystem(language: string): string {
+  return `You are a continuity editor repairing chronology in a story plan.
+${languageLock(language)}
+
+TASK: repair ONLY the listed timeline problems — by changing as little as possible.
+
+WHAT YOU MAY CHANGE (per scene):
+- the time label (preferred: most contradictions are label/order problems)
+- the setting label
+- the scene text, but ONLY when the text itself contradicts the timeline (e.g. it says a
+  character arrives by ship while the plan has an arrival by carriage)
+
+RULES:
+- Never touch chapters or scenes that are not named in the problems.
+- Keep every character, place name and plot beat; do NOT invent new plot.
+- Do NOT reorder, add or delete scenes, and do NOT change the story's outcome.
+- Keep the wording of a repaired scene as close to the original as possible.
+- Lists in the scene text stay lists; keep the same language and style.
+
+Respond ONLY with a single valid JSON object:
+{
+  "chapters": [
+    { "chapter": number, "note": string,
+      "scenes": [ { "scene": number, "time": string, "setting": string, "text": string } ] }
+  ],
+  "notes": string[]
+}
+Rules:
+- chapter / scene are the 1-based numbers from the listing below.
+- List a scene ONLY if you change it, and omit every field that stays the same.
+- note: one short sentence per chapter saying what you changed.
+- notes: optional remarks about problems you could not repair.
+- All text in ${language}.`;
+}
+
+/**
+ * Quick Fix für die Timeline: korrigiert die **Struktur** (Szenen-Zeit/Schauplatz/Text), die die
+ * Chronologie-Prüfung liest — nicht die Prosa.
+ *
+ * Bewusst **ein** JSON-Aufruf: die Korrektur ist klein (ein paar Labels/Zeilen), und die Prüfung
+ * liest die Struktur, nicht den Fließtext. Ergebnis wird gegen die echten Kapitel/Szenen geprüft:
+ * unbekannte Nummern fliegen raus, unveränderte Werte werden gar nicht erst gemeldet.
+ */
+export async function repairTimeline(input: TimelineRepairInput): Promise<TimelineRepairResult> {
+  if (input.findings.length === 0) return { fixes: [], notes: [] };
+
+  const listing = timelineListing(input.storyboard, input.scenesByChapter);
+  const problemList = input.findings
+    .map((finding, index) => {
+      const where = [
+        finding.chapter > 0 ? `Kapitel ${finding.chapter}` : "Kapitel unbekannt",
+        finding.scene ? `Szene ${finding.scene}` : "",
+      ]
+        .filter(Boolean)
+        .join(", ");
+      return `${index + 1}. [${where}] PROBLEM: ${finding.issue}${finding.fix ? `\n   FIX: ${finding.fix}` : ""}`;
+    })
+    .join("\n");
+
+  const { content, finishReason } = await chatCompletionDetailed({
+    model: input.model,
+    system: timelineRepairSystem(input.language),
+    user: `TIMELINE:\n${listing}${input.canon?.trim() ? `\n\n${input.canon.trim()}` : ""}\n\nPROBLEMS TO REPAIR:\n${problemList}\n\nReturn the repair JSON now, entirely in ${input.language}.`,
+    json: true,
+    maxTokens: 3000,
+    temperature: 0.2,
+  });
+
+  if (finishReason === "length") {
+    throw new ApiError(
+      "Die Timeline-Korrektur wurde vom Token-Limit abgeschnitten. Bitte erneut versuchen oder ein Modell mit größerem Ausgabelimit wählen.",
+      502,
+    );
+  }
+
+  const parsed = parseJson(content, "Timeline-Korrektur");
+  const rawChapters = Array.isArray(parsed.chapters) ? parsed.chapters : [];
+  const fixes: TimelineRepairFix[] = [];
+
+  for (const entry of rawChapters) {
+    const item = asRecord(entry);
+    const chapter = positiveInt(item.chapter);
+    if (!chapter || chapter > input.storyboard.chapters.length) continue;
+    const scenes = input.scenesByChapter[chapter - 1] ?? [];
+    const rawScenes = Array.isArray(item.scenes) ? item.scenes : [];
+    const sceneFixes: TimelineSceneFix[] = [];
+
+    for (const sceneEntry of rawScenes) {
+      const sceneItem = asRecord(sceneEntry);
+      const sceneNumber = positiveInt(sceneItem.scene);
+      if (!sceneNumber || sceneNumber > scenes.length) continue;
+      const current = scenes[sceneNumber - 1];
+      const fixed: TimelineSceneFix = { scene: sceneNumber };
+
+      const time = str(sceneItem.time);
+      const setting = str(sceneItem.setting);
+      const text = str(sceneItem.text);
+      // Nur echte Änderungen übernehmen — das Modell listet gern auch Unverändertes.
+      if (time && time !== current?.time) fixed.time = time;
+      if (setting && setting !== current?.setting) fixed.setting = setting;
+      if (text && text !== current?.text) fixed.text = text;
+
+      if (fixed.time || fixed.setting || fixed.text) sceneFixes.push(fixed);
+    }
+
+    if (sceneFixes.length > 0) {
+      fixes.push({ chapter, note: str(item.note), scenes: sceneFixes });
+    }
+  }
+
+  return { fixes, notes: strArray(parsed.notes) };
 }
 
 /* ───────────────────────────── world extraction ───────────────────────────── */

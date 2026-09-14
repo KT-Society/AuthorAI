@@ -207,8 +207,25 @@ jede gelistete Figur in ihrer Szene auftreten lassen und das Wortziel berücksic
 
 **Timeline-Prüfung** (`POST /api/timeline/check`) liest dieselben Angaben für das ganze Buch
 und meldet chronologische Probleme (Rückwärtssprünge, unplausible Reise-/Vorbereitungszeiten,
-Tag/Nacht, Daten/Dauern, fehlende Zeiten). Ergebnis: Kurzfassung + Befundliste im Buch-Header.
+Tag/Nacht, Daten/Dauern, fehlende Zeiten). Ergebnis: Kurzfassung + Befundliste im Dialog.
 Sie nutzt das **Kohärenz-Model**.
+
+Befunde sind **strukturiert** (`{ chapter, scene, issue, fix }`, 1-basiert; `chapter: 0` =
+nicht zuordenbar). Das ist die Grundlage für die Markierung der betroffenen Kapitel **und** für die
+Korrektur — vorher wurde die Kapitelnummer aus dem Freitext geraten.
+
+**Quick Fix (Chronologie):** `POST /api/timeline/repair` korrigiert die **Struktur**, die der
+Check liest — Szenen-Zeit, Szenen-Schauplatz und (nur wenn der Text selbst der Widerspruch ist)
+den Szenen-Text. Bewusst **kein** Prosa-Umbau: Der Check kennt die Prosa nicht, und ein
+Prosa-Pass mit Zeitachse ist die Kohärenz-Prüfung. Ein Aufruf statt einer Queue, weil die
+Korrektur klein ist. Der Server prüft jede Nummer gegen Storyboard und Szenen-Matrix, verwirft
+Unverändertes und liefert nur echte Änderungen. Im Dialog: „Quick Fix" → Diff-Vorschau
+(Zeit/Schauplatz als Vorher → Nachher, Text als Wort-Diff) → Kapitel einzeln abwählbar →
+Übernehmen schreibt `sceneMeta` (Labels) bzw. den Beat im Storyboard. Danach läuft die Prüfung
+automatisch neu. **Kein** Versions-Snapshot: die Kapitel-Version enthält nur Rohtext und Ausbau,
+der Fix ändert aber die Struktur — die Sicherung ist die Vorschau.
+Probleme, die der Check **nicht** sieht: Widersprüche, die nur im Fließtext stehen (dafür ist die
+Kohärenz-Prüfung da).
 
 ---
 
