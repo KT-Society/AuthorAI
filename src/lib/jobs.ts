@@ -9,6 +9,8 @@
 
 import { useSyncExternalStore } from "react";
 
+import { countWords } from "@/data/story";
+
 export type JobStatus = "running" | "done" | "error" | "cancelled";
 
 export interface Job {
@@ -20,6 +22,11 @@ export interface Job {
   total: number;
   /** Aktueller Schritt, z. B. „Kapitel 3". */
   label?: string;
+  /**
+   * Live-Info zum **laufenden** Schritt aus dem Stream, z. B. „Teil 2/5 · 1.240 Wörter".
+   * Anders als `message` (Abschluss-Meldung) wird sie nur während `running` angezeigt.
+   */
+  detail?: string;
   status: JobStatus;
   message?: string;
   startedAt: number;
@@ -80,7 +87,7 @@ export function createJob(input: {
 
 export function updateJob(
   id: string,
-  patch: { done?: number; total?: number; label?: string; message?: string },
+  patch: { done?: number; total?: number; label?: string; detail?: string; message?: string },
 ): void {
   const job = jobs.get(id);
   if (!job) return;
@@ -89,9 +96,44 @@ export function updateJob(
     done: patch.done ?? job.done,
     total: patch.total ?? job.total,
     label: patch.label ?? job.label,
+    detail: patch.detail ?? job.detail,
     message: patch.message ?? job.message,
   });
   emit();
+}
+
+/**
+ * Live-Meldungen aus einem Stream in einen Job schreiben — **gedrosselt**.
+ *
+ * Der Job-Store benachrichtigt bei jedem Schreibvorgang alle Abonnenten; ein Aufruf pro
+ * Textstück (Token) würde das Job-Center dauerhaft neu rendern. Der Reporter zählt Wörter
+ * über den gesamten Text (nicht je Stück — sonst zählen Wortfragmente doppelt) und schreibt
+ * **mindestens** `intervalMs` auseinander (das erste Stück meldet sofort, damit ohne
+ * Verzögerung etwas sichtbar wird; `flush` schreibt den Endstand).
+ */
+export function createJobStreamReporter(
+  id: string,
+  describe: (words: number) => string,
+  intervalMs = 300,
+): { add: (delta: string) => void; flush: () => void } {
+  let text = "";
+  let lastAt = 0;
+
+  const report = () => {
+    lastAt = Date.now();
+    updateJob(id, { detail: describe(countWords(text)) });
+  };
+
+  return {
+    add(delta: string) {
+      text += delta;
+      if (Date.now() - lastAt < intervalMs) return;
+      report();
+    },
+    flush() {
+      report();
+    },
+  };
 }
 
 export function finishJob(id: string, status: Exclude<JobStatus, "running">, message?: string): void {

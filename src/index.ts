@@ -7,6 +7,7 @@ import { ApiError, generateSoul } from "@promptgen/server/api";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
+import { EXPAND_DEFAULT_WORDS } from "./data/story";
 import type { SceneConstraint, Storyboard } from "./data/story";
 import { coversDir, generateCover, saveCoverImage } from "./server/cover";
 import {
@@ -455,7 +456,8 @@ const server = serve({
             scenes: asScenes(body.scenes),
             canon: optionalString(body.canon),
             draft: typeof body.draft === "string" ? body.draft : "",
-            targetWords: optionalInt(body.targetWords, 1200),
+            // Gleicher Standard wie die nicht-streamende Route — der Client schickt ihn ohnehin mit.
+            targetWords: optionalInt(body.targetWords, EXPAND_DEFAULT_WORDS),
           };
           return sseResponse(async (emit) => {
             const expanded = await expandChapter(input, (delta) =>
@@ -532,7 +534,7 @@ const server = serve({
           const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
           const language = optionalLanguage(body.language);
           const draft = typeof body.draft === "string" ? body.draft : "";
-          const targetWords = optionalInt(body.targetWords, 4000);
+          const targetWords = optionalInt(body.targetWords, EXPAND_DEFAULT_WORDS);
           const expanded = await expandChapter({
             storyboard,
             chapterIndex,

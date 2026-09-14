@@ -159,7 +159,7 @@ Typen + Seed-Daten, frei von UI-Logik:
 | `markdown.ts` | Markdown-Export eines Buchs |
 | `backup.ts` | Projekt-Backup (JSON) erzeugen/validieren |
 | `graph.ts` | Deterministisches Kreis-Layout + Kanten-Helfer (+ Sparkline) für den Beziehungsgraphen |
-| `jobs.ts` | Job-Store (Modul-Singleton) für Hintergrund-Queues + `useJobs()` |
+| `jobs.ts` | Job-Store (Modul-Singleton) für Hintergrund-Queues + `useJobs()`; `createJobStreamReporter` schreibt Stream-Fortschritt gedrosselt in `Job.detail` |
 | `seriesOverview.ts` | Bände einer Reihe mit Fortschritt, Lücken und Status (pur, getestet) |
 | `seriesContext.ts` | Vorbände-Kontext + Vorbände-Kanon für einen neuen Band (`buildSeriesContext`) |
 | `worldMatch.ts` | Normalisierter Titelvergleich (Dublettenschutz Weltenbau) |
@@ -187,7 +187,9 @@ Typen + Seed-Daten, frei von UI-Logik:
   `TimelineDialog`, `VersionDiffDialog`, `CanonRepairPreviewDialog`, `CoverEditorDialog`,
   `CoverVariantsDialog`, `SeriesDialog`, `SettingsDialog`, `ProfileGate`
 - **Bausteine:** `primitives.tsx` (Panel, Badge, ProgressBar, Sparkline, ViewHeader, …),
-  `DiffView.tsx` (Wort-Diff-Darstellung), `CharacterContinuityPanel.tsx`
+  `DiffView.tsx` (Wort-Diff-Darstellung), `StreamPreview.tsx` (Live-Vorschau eines laufenden
+  Streams: wachsender Text, Wortstand, Schritt-Info — von Buch-Editor **und** Assistent genutzt),
+  `CharacterContinuityPanel.tsx`
   (Fakten-/Beziehungs-Panels im Charakter-Editor), `ToastHost`
 
 Die UI-Basis liegt in `src/components/ui/*` (shadcn-Stil, Radix-basiert).
@@ -317,8 +319,11 @@ Zusätzlich erzeugt die Shell bei Änderungen **Notifications** und erhöht die 
 - **Lokale Datenbank, kein Cloud-Store:** Inhalte liegen nutzer-lokal in SQLite; es gibt
   keine Konten und kein Sync.
 - **Streaming, wo es zählt:** lange Antworten (Rohentwurf, Ausbau, Kohärenz, Stil) und
-  Analysen (Fakten-Check, Extraktion) laufen als SSE mit Live-Vorschau; erzeugt wird
-  weiterhin robust, unterbrechbar und pro Kapitel persistiert.
+  Analysen (Fakten-Check, Extraktion) laufen als SSE mit Live-Vorschau; beim Ausbau streamen
+  **auch** die Fortsetzungen des Continuation-Loops, damit die Vorschau bis zum Kapitelende
+  mitwächst. Das Job-Center nennt für den laufenden Stream zusätzlich Teil und Wortstand
+  (`Job.detail`, gedrosselt geschrieben). Erzeugt wird weiterhin robust, unterbrechbar und pro
+  Kapitel persistiert.
 - **Modellabhängige Qualität:** Länge/Sprache hängen vom Modell ab; der Server fängt das
   mit Continuation-Loops, Language-Lock und Prüfberichten ab (siehe `pipeline.md`).
 - **Meta (Einstellungen) sind geräteweit**, nicht pro Profil.

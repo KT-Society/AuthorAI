@@ -64,17 +64,20 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 - **Datenbank-Backup und -Kompaktierung**: `VACUUM`/WAL-Checkpoint aus den Einstellungen,
   Sicherung der `.db`-Datei im laufenden Betrieb
 - **Mehrere Datenbank-Profile (Dateien)**: Projekte als eigene `.db` öffnen/wechseln
-- **Live-Text auch im Ausbau**: „Alles ausbauen" zeigt den wachsenden Text des laufenden
-  Kapitels (Kohärenz, Stil und der Fakten-Check streamen bereits — der Ausbau selbst noch nicht)
+- **Live-Text im Rohentwurf**: „Alle Rohentwürfe generieren" im Assistenten streamt noch nicht —
+  der Buch-Editor tut es dort schon
 - **Typprüfung als Skript**: `tsc --noEmit` (o. ä.) in den Check aufnehmen — `bun run check`
   prüft nur Syntax, Imports und Links und übersieht Laufzeitfehler wie einen `[0]`-Zugriff auf
   einen `Series | undefined`-Rückgabewert
-- **Stream-Fortschritt im Job-Center**: laufende Streams nennen dort Wortstand und Teil
-  (z. B. „Ausbau · 2.400 Wörter"), nicht nur „prüft…"
+- **Wortstand live im Editor**: Der Kapitel-Zähler springt heute erst nach dem Abschluss auf den
+  neuen Wert — während des Streams könnte er schon mitlaufen (die Vorschau kennt die Zahl bereits)
+- **Laufenden Stream wirklich abbrechen**: „Abbrechen" im Job-Center wirkt erst zwischen den
+  Kapiteln; ein bereits laufender Aufruf läuft zu Ende (Abbruch am Server fehlt)
 - **Stream-Vorschau übernehmen oder verwerfen**: „Text in den Editor übernehmen" und
   „abbrechen" direkt aus der Vorschau
-- **Streaming für den Assistenten**: Kohärenz/Stil-Schritte dort nutzen noch die
-  nicht-streamenden Routen
+- **Fortschritt beim Storyboard-Entwurf**: Der Entwurf läuft in zwei Phasen (Outline, dann
+  Kapitel-Details in Batches), die Oberfläche zeigt aber nur „Storyboard wird entworfen…" —
+  je Batch könnte der Stand erscheinen (wie im Job-Center)
 - **Live-Token-/Kostenzähler** während des Streams (verzahnt mit dem Tracking unten)
 - **Jobs über Neustart hinweg**: laufende Queues nach einem Reload wiederaufnehmen
 - **Job-Historie**: Dauer, Ergebnis und „Wiederholen" für abgeschlossene Läufe

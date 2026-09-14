@@ -62,8 +62,9 @@ import type { ChapterCanonCheck, ChapterContent, Storyboard, WizardStep } from "
 import { fetchConfig } from "@/services/generate";
 import type { AppConfig } from "@/services/generate";
 import { buildCoverPrompt, generateCover } from "@/services/cover";
-import { draftChapter, expandChapter, generateStoryboard } from "@/services/story";
-import { checkConsistency, refineStyle } from "@/services/story";
+import { draftChapter, generateStoryboard, streamPass } from "@/services/story";
+import type { PassResult } from "@/services/story";
+import { streamJson } from "@/services/stream";
 import { streamCanonCheck, streamCanonRepair } from "@/services/continuity";
 import type {
   CanonCheckResult,
@@ -74,6 +75,7 @@ import type {
 import { textHash } from "@/lib/textHash";
 
 import { ProgressBar } from "./primitives";
+import { StreamPreview } from "./StreamPreview";
 import { CoverEditorDialog } from "./CoverEditorDialog";
 import { CanonCheckDialog } from "./CanonCheckDialog";
 import type { CanonScopeSelection } from "./CanonCheckDialog";
@@ -156,6 +158,10 @@ export function BookWizard({
   const [targetWords, setTargetWords] = useState(EXPAND_DEFAULT_WORDS);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  /** Live-Vorschau eines gestreamten Laufs (null = keine Vorschau). */
+  const [streamText, setStreamText] = useState<string | null>(null);
+  /** Zusatzinfo in der Vorschau (z. B. „Kohärenz · Teil 2/5"). */
+  const [streamLabel, setStreamLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** Prüf-Historie aus dem Fakten-Check-Schritt (wandert beim Speichern ins Kapitel). */
   const [canonChecks, setCanonChecks] = useState<Record<number, ChapterCanonCheck>>({});
@@ -168,6 +174,8 @@ export function BookWizard({
     setCoverEditorOpen(false);
     setBusy(null);
     setProgress(null);
+    setStreamText(null);
+    setStreamLabel(null);
     setError(null);
     setCheckOpen(false);
     setSaved(false);
@@ -522,16 +530,23 @@ export function BookWizard({
     if (!id || !storyboard) return;
     setError(null);
     setBusy(`Ausbau Kapitel ${index + 1}/${chapters.length}…`);
+    setStreamText("");
+    setStreamLabel(`Ausbau · Kapitel ${index + 1}/${chapters.length}`);
     try {
-      const result = await expandChapter({
-        storyboard,
-        chapterIndex: index,
-        model: id,
-        language,
-        draft: drafts[index] ?? "",
-        targetWords,
-        canon: seriesData.canon,
-      });
+      // Streaming: Der Ausbau ist die längste Antwort der Pipeline — inklusive Fortsetzungen.
+      const result = await streamJson(
+        "/api/chapter/expand/stream",
+        {
+          storyboard,
+          chapterIndex: index,
+          model: id,
+          language,
+          draft: drafts[index] ?? "",
+          targetWords,
+          canon: seriesData.canon,
+        },
+        { onDelta: (delta) => setStreamText((prev) => `${prev ?? ""}${delta}`) },
+      );
       setExpanded((prev) => {
         const next = [...prev];
         next[index] = result;
@@ -541,6 +556,8 @@ export function BookWizard({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
+      setStreamText(null);
+      setStreamLabel(null);
       setBusy(null);
     }
   };
@@ -557,15 +574,22 @@ export function BookWizard({
         continue;
       }
       setBusy(`Ausbau ${index + 1}/${total}…`);
+      setStreamText("");
+      setStreamLabel(`Ausbau · Kapitel ${index + 1}/${total}`);
       try {
-        const result = await expandChapter({
-          storyboard,
-          chapterIndex: index,
-          model: id,
-          language,
-          draft: drafts[index] ?? "",
-          targetWords,
-        });
+        const result = await streamJson(
+          "/api/chapter/expand/stream",
+          {
+            storyboard,
+            chapterIndex: index,
+            model: id,
+            language,
+            draft: drafts[index] ?? "",
+            targetWords,
+            canon: seriesData.canon,
+          },
+          { onDelta: (delta) => setStreamText((prev) => `${prev ?? ""}${delta}`) },
+        );
         setExpanded((prev) => {
           const next = [...prev];
           next[index] = result;
@@ -578,8 +602,30 @@ export function BookWizard({
       }
       setProgress({ done: index + 1, total });
     }
+    setStreamText(null);
+    setStreamLabel(null);
     setBusy(null);
     setProgress(null);
+  };
+
+  /**
+   * Überarbeitung mit Live-Vorschau: Der Server chunkt das Kapitel und schickt Teil-Ereignisse —
+   * die Vorschau wächst mit, die Teile werden mit Leerzeile verbunden (wie serverseitig).
+   */
+  const runPassStreamed = async (
+    kind: "consistency" | "style",
+    index: number,
+    request: Parameters<typeof streamPass>[1],
+  ): Promise<PassResult> => {
+    setStreamText("");
+    setStreamLabel(`${MODEL_STAGE_LABELS[kind]}-Prüfung · Kapitel ${index + 1}`);
+    return streamPass(kind, request, {
+      onPartStart: (part, parts) => {
+        setStreamLabel(`${MODEL_STAGE_LABELS[kind]} · Teil ${part}/${parts}`);
+        if (part > 1) setStreamText((prev) => `${prev ?? ""}\n\n`);
+      },
+      onPartDelta: (delta) => setStreamText((prev) => `${prev ?? ""}${delta}`),
+    });
   };
 
   const runPass = async (kind: "consistency" | "style", index: number) => {
@@ -595,7 +641,8 @@ export function BookWizard({
     setBusy(`${MODEL_STAGE_LABELS[kind]}-Prüfung Kapitel ${index + 1}…`);
     try {
       const request = { storyboard, chapterIndex: index, model: id, language, text: source, canon: seriesData.canon, styleProfile: readStyleProfileHint() };
-      const result = kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
+      // Gestreamt: der Text wächst live mit (Teil für Teil).
+      const result = await runPassStreamed(kind, index, request);
       setExpanded((prev) => {
         const next = [...prev];
         next[index] = result.text;
@@ -628,6 +675,8 @@ export function BookWizard({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
+      setStreamText(null);
+      setStreamLabel(null);
       setBusy(null);
     }
   };
@@ -657,8 +706,8 @@ export function BookWizard({
       setBusy(`${MODEL_STAGE_LABELS[kind]}-Prüfung ${position + 1}/${total} · Kapitel ${index + 1}…`);
       try {
         const request = { storyboard, chapterIndex: index, model: id, language, text: source, canon: seriesData.canon, styleProfile: readStyleProfileHint() };
-        const result =
-          kind === "consistency" ? await checkConsistency(request) : await refineStyle(request);
+        // Gestreamt: dasselbe wie beim Einzel-Prüfen — der Text wächst live mit.
+        const result = await runPassStreamed(kind, index, request);
         current = current.map((text, i) => (i === index ? result.text : text));
         setExpanded(current);
         const notes = result.notes.join("\n");
@@ -692,6 +741,8 @@ export function BookWizard({
       setProgress({ done: position + 1, total });
     }
 
+    setStreamText(null);
+    setStreamLabel(null);
     setBusy(null);
     setProgress(null);
   };
@@ -982,6 +1033,8 @@ export function BookWizard({
               <ProgressBar value={(progress.done / Math.max(1, progress.total)) * 100} tone="cyan" />
             </div>
           ) : null}
+
+          <StreamPreview text={streamText} label={streamLabel} className="mb-4" />
 
           {error ? (
             <div className="mb-4 rounded-xl border border-brand-rose/30 bg-brand-rose/10 px-3 py-2 text-sm text-brand-rose">

@@ -126,8 +126,20 @@ export function JobCenter() {
                 </p>
               ) : null}
 
-              {job.status === "running" && job.label ? (
-                <p className="mt-1 text-[10px] text-muted-foreground">{job.label}</p>
+              {job.status === "running" && (job.label || job.detail) ? (
+                <p className="mt-1 flex items-center gap-1.5 text-[10px]">
+                  {job.label ? (
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {job.label}
+                    </span>
+                  ) : null}
+                  {job.label && job.detail ? (
+                    <span className="text-muted-foreground/40">·</span>
+                  ) : null}
+                  {job.detail ? (
+                    <span className="shrink-0 tabular-nums text-brand-cyan/80">{job.detail}</span>
+                  ) : null}
+                </p>
               ) : null}
             </div>
           );

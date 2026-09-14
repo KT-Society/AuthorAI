@@ -8,6 +8,38 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Live-Vorschau überall & Fortschritt im Job-Center
+
+- **Added** **Live-Text auch beim Ausbau-Queue-Lauf**: **„Alles ausbauen"** schreibt das laufende
+  Kapitel jetzt mit, statt nur „Kapitel 3" zu melden — dasselbe Verhalten wie beim Einzel-Ausbau
+  (die Vorschau zeigt Wortstand und Kapitel, z. B. „Ausbau · Kapitel 2/7").
+- **Fixed** **Die Live-Vorschau bricht nicht mehr nach der ersten Modellantwort ab**: Der
+  **Continuation-Loop** des Ausbaus (bis zu 3 Fortsetzungen) und die abschließende
+  Satz-Vervollständigung (`completeProse`) liefen bisher **ohne** Callback — der gestreamte Text
+  endete mitten im Kapitel, obwohl der Server weiter Text anhängte. Beide rufen den Provider jetzt
+  ebenfalls gestreamt auf, wenn eine Vorschau angefordert ist. Das gilt auch für die
+  Fortsetzungen der Kohärenz-/Stil-Teile.
+- **Added** **Fortschritt im Job-Center während des Streams**: Laufende Jobs nennen jetzt den
+  Live-Stand der Vorschau — z. B. **„Kapitel 3 · Teil 2/5 · 1.240 Wörter"** bzw.
+  **„Kapitel 2 · Ausbau · 2.400 Wörter"** statt nur „prüft…". Neues `Job.detail`-Feld plus
+  gedrosselter Schreiber (`createJobStreamReporter`): gemeldet wird höchstens alle ~300 ms (das
+  erste Stück sofort), und Wörter werden über den **gesamten** Text gezählt — Wortfragmente aus
+  dem Token-Stream zählen nicht doppelt. Ohne Drosselung würde jedes Textstück das Job-Center neu
+  rendern.
+- **Added** **Assistent streamt ebenfalls**: Die Schritte **Kohärenz** und **Stil** im
+  Buch-Assistenten nutzen jetzt die SSE-Routen (vorher nur die nicht-streamenden) und zeigen den
+  entstehenden Text in einer Live-Vorschau („Kohärenz · Teil 2/5"); der **Ausbau** (einzeln und
+  „Alle ausbauen") streamt dort ebenso.
+- **Added** **Gemeinsame Vorschau-Komponente** `StreamPreview`: Wortstand, Schritt-Info und
+  wachsender Text in einem Baustein — Buch-Editor und Assistent teilen ihn (vorher war die
+  Vorschau nur im Editor fest verdrahtet).
+- **Fixed** **Assistent: Ausbau berücksichtigt den Kanon**: „Alle ausbauen" im Wizard schickte
+  den Kanon-Block (Fakten + Beziehungen) nicht mit, anders als der Einzel-Ausbau — jetzt tun es
+  beide.
+- **Changed** **Einheitlicher Standard für die Ausbau-Zielwörter**: Die Streaming-Route lag bei
+  1.200 Wörtern, die nicht-streamende bei 4.000 — beide nutzen jetzt `EXPAND_DEFAULT_WORDS`
+  (4.000). Die Oberfläche schickt den Wert ohnehin immer mit.
+
 ### Assistent: Fakten-Check & Wiedereinstieg
 
 - **Added** **Fakten-Check als letzter Wizard-Schritt**: Der Buch-Assistent hat jetzt den Schritt

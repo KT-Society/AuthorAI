@@ -72,10 +72,10 @@ import type {
 import { MODEL_STAGE_LABELS, readCanonWarn, readLanguage, readStageModel, readStyleProfileHint } from "@/lib/generationSettings";
 import { manuscriptOf } from "@/lib/bookManuscript";
 import { copyText } from "@/lib/clipboard";
-import { extractProse, looksTruncated } from "@/lib/prose";
+import { looksTruncated } from "@/lib/prose";
 import { characterNamesMatch } from "@/lib/characterMatch";
 import { textHash } from "@/lib/textHash";
-import { createJob, finishJob, isCancelled, updateJob } from "@/lib/jobs";
+import { createJob, createJobStreamReporter, finishJob, isCancelled, updateJob } from "@/lib/jobs";
 import { streamJson } from "@/services/stream";
 import { showToast } from "@/lib/toast";
 import { buildDocx } from "@/lib/docx";
@@ -83,7 +83,7 @@ import { buildEpub } from "@/lib/epub";
 import { buildMarkdown } from "@/lib/markdown";
 import { buildPdf } from "@/lib/pdf";
 import { buildCoverPrompt, deleteCover, generateCover } from "@/services/cover";
-import { checkTimeline, expandChapter, streamPass } from "@/services/story";
+import { checkTimeline, streamPass } from "@/services/story";
 import type { PassResult } from "@/services/story";
 import { checkCanon, streamCanonCheck, streamCanonRepair } from "@/services/continuity";
 import type {
@@ -113,6 +113,7 @@ import { SeriesDialog } from "./SeriesDialog";
 import { TimelineDialog } from "./TimelineDialog";
 import type { TimelineEntry } from "./TimelineDialog";
 import { Panel, ProgressBar } from "./primitives";
+import { StreamPreview } from "./StreamPreview";
 
 type Mode = "edit" | "read";
 
@@ -242,22 +243,44 @@ export function BookDetailView({
   /**
    * Überarbeitung (Kohärenz/Stil) mit Live-Vorschau: Der Server chunkt das Kapitel und schickt
    * Teil-Ereignisse — die Vorschau wächst mit, die Teile werden mit Leerzeile verbunden.
+   *
+   * Mit `jobId` meldet der Lauf zusätzlich Teil und Wortstand ins Job-Center (gedrosselt).
    */
   const runPassStreamed = async (
     kind: "consistency" | "style",
     chapterIndex: number,
     request: Parameters<typeof streamPass>[1],
+    jobId?: string,
   ): Promise<PassResult> => {
     setStreamText("");
     setStreamLabel(`${MODEL_STAGE_LABELS[kind]}-Prüfung · Kapitel ${chapterIndex + 1}`);
-    return streamPass(kind, request, {
-      onPartStart: (part, parts) => {
-        setStreamLabel(`${MODEL_STAGE_LABELS[kind]} · Teil ${part}/${parts}`);
-        // Teile werden serverseitig mit Leerzeile verbunden — in der Vorschau genauso.
-        if (part > 1) setStreamText((prev) => `${prev ?? ""}\n\n`);
-      },
-      onPartDelta: (delta) => setStreamText((prev) => `${prev ?? ""}${delta}`),
-    });
+    let part = 1;
+    let parts = 1;
+    const reporter = jobId
+      ? createJobStreamReporter(
+          jobId,
+          (words) => `Teil ${part}/${parts} · ${words.toLocaleString("de-DE")} Wörter`,
+        )
+      : null;
+    try {
+      return await streamPass(kind, request, {
+        onPartStart: (nextPart, nextParts) => {
+          part = nextPart;
+          parts = nextParts;
+          setStreamLabel(`${MODEL_STAGE_LABELS[kind]} · Teil ${part}/${parts}`);
+          // Teile werden serverseitig mit Leerzeile verbunden — in der Vorschau genauso.
+          if (part > 1) setStreamText((prev) => `${prev ?? ""}\n\n`);
+          reporter?.flush();
+        },
+        onPartDelta: (delta) => {
+          setStreamText((prev) => `${prev ?? ""}${delta}`);
+          reporter?.add(delta);
+        },
+        onPartDone: () => reporter?.flush(),
+      });
+    } finally {
+      reporter?.flush();
+    }
   };
   const [seriesOpen, setSeriesOpen] = useState(false);
   const [epubCover, setEpubCover] = useState<"front" | "back" | "none">("front");
@@ -762,8 +785,8 @@ export function BookDetailView({
           canon,
           styleProfile: readStyleProfileHint(),
         };
-        // Gestreamt: der Text wächst live mit (Teil für Teil).
-        const result = await runPassStreamed(kind, chapterIndex, request);
+        // Gestreamt: der Text wächst live mit (Teil für Teil) — inklusive Wortstand im Job-Center.
+        const result = await runPassStreamed(kind, chapterIndex, request, jobId);
         current = current.map((chapter, i) =>
           i === chapterIndex
             ? {
@@ -810,6 +833,7 @@ export function BookDetailView({
     setError(null);
     setBusy(`Rohentwurf Kapitel ${index + 1}…`);
     setStreamText("");
+    setStreamLabel(`Rohentwurf · Kapitel ${index + 1}`);
     try {
       // Streaming: Der Text wächst live mit (Fallback im Server, falls kein SSE).
       const draft = await streamJson(
@@ -830,6 +854,7 @@ export function BookDetailView({
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
       setStreamText(null);
+      setStreamLabel(null);
       setBusy(null);
     }
   };
@@ -900,6 +925,7 @@ export function BookDetailView({
     setError(null);
     setBusy(`Ausbau Kapitel ${index + 1}…`);
     setStreamText("");
+    setStreamLabel(`Ausbau · Kapitel ${index + 1}`);
     if ((manuscript[index]?.expanded ?? "").trim()) pushSnapshot(index, "vor Ausbau");
     try {
       // Streaming: Der Ausbau ist die längste Einzelantwort — hier lohnt die Live-Vorschau.
@@ -923,6 +949,7 @@ export function BookDetailView({
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
       setStreamText(null);
+      setStreamLabel(null);
       setBusy(null);
     }
   };
@@ -966,17 +993,34 @@ export function BookDetailView({
       }
       updateJob(jobId, { done: position, label: `Kapitel ${chapterIndex + 1}` });
       setBusy(`Ausbau ${position + 1}/${pending.length} · Kapitel ${chapterIndex + 1}…`);
+      setStreamText("");
+      setStreamLabel(`Ausbau · Kapitel ${chapterIndex + 1}/${pending.length}`);
+      const reporter = createJobStreamReporter(
+        jobId,
+        (words) => `Ausbau · ${words.toLocaleString("de-DE")} Wörter`,
+      );
       try {
-        const expanded = await expandChapter({
-          storyboard: book.storyboard,
-          chapterIndex,
-          model,
-          language,
-          draft: current[chapterIndex]?.draft ?? "",
-          targetWords: targetFor(current[chapterIndex]),
-          scenes: scenesFor(chapterIndex),
-          canon,
-        });
+        // Gestreamt: dasselbe wie beim Einzel-Ausbau — der Text wächst live mit, die
+        // Fortsetzungen (Continuation-Loop) ebenfalls.
+        const expanded = await streamJson(
+          "/api/chapter/expand/stream",
+          {
+            storyboard: book.storyboard,
+            chapterIndex,
+            model,
+            language,
+            draft: current[chapterIndex]?.draft ?? "",
+            targetWords: targetFor(current[chapterIndex]),
+            scenes: scenesFor(chapterIndex),
+            canon,
+          },
+          {
+            onDelta: (delta) => {
+              setStreamText((prev) => `${prev ?? ""}${delta}`);
+              reporter.add(delta);
+            },
+          },
+        );
         current = current.map((chapter, i) =>
           i === chapterIndex ? { ...chapter, expanded } : chapter,
         );
@@ -987,6 +1031,8 @@ export function BookDetailView({
         failure = err instanceof Error ? err.message : "Unbekannter Fehler.";
         setError(`${failure} (abgebrochen bei Kapitel ${chapterIndex + 1})`);
         break;
+      } finally {
+        reporter.flush();
       }
     }
 
@@ -998,6 +1044,8 @@ export function BookDetailView({
       updateJob(jobId, { done: pending.length });
       finishJob(jobId, "done", `${pending.length} Kapitel ausgebaut`);
     }
+    setStreamText(null);
+    setStreamLabel(null);
     setBusy(null);
   };
 
@@ -2453,16 +2501,7 @@ export function BookDetailView({
                 </div>
 
                 {streamText !== null ? (
-                  <div className="mt-3 rounded-xl border border-brand-cyan/30 bg-brand-cyan/5 p-3">
-                    <p className="mb-1 inline-flex items-center gap-2 text-[11px] font-semibold text-brand-cyan">
-                      <Loader2 className="size-3.5 animate-spin" />
-                      {streamLabel ?? "Live-Vorschau"} ·{" "}
-                      {countWords(extractProse(streamText)).toLocaleString("de-DE")} Wörter
-                    </p>
-                    <div className="max-h-52 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-foreground/85">
-                      {extractProse(streamText) || "…"}
-                    </div>
-                  </div>
+                  <StreamPreview text={streamText} label={streamLabel} className="mt-3" />
                 ) : null}
 
                 <details open className="mt-1 rounded-xl border border-white/10 bg-white/5 p-3">

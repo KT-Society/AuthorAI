@@ -443,6 +443,7 @@ Write the ~500 word rough draft of this chapter now.`;
     text: stripLeadingHeadings(extractProse(draftContent)),
     label: "rough draft",
     truncated: draftFinish === "length",
+    onDelta,
   });
 }
 
@@ -514,13 +515,15 @@ async function completeProse(
     label: string;
     /** Vom Modell gemeldet: die Antwort lief ins Ausgabelimit. */
     truncated: boolean;
+    /** Live-Vorschau: Textstücke der Fortsetzung (gleiche Prosa, lückenlos). */
+    onDelta?: (text: string) => void;
   },
   depth = 0,
 ): Promise<string> {
   if (!params.truncated || depth >= CONTINUATION_MAX_DEPTH) return params.text;
 
   const tail = params.text.slice(-2000);
-  const { content, finishReason } = await chatCompletionDetailed({
+  const continuationParams = {
     model: params.model,
     system: params.system,
     user: `${languageLock(params.language)}
@@ -535,7 +538,11 @@ END OF THE ${params.label.toUpperCase()} SO FAR (for continuity):
 Finish the paragraph now, entirely in ${params.language}.`,
     maxTokens: 900,
     temperature: 0.7,
-  });
+  };
+  // Mit Callback streamen (die Vorschau läuft lückenlos weiter), sonst normal anfragen.
+  const { content, finishReason } = params.onDelta
+    ? await chatCompletionStream(continuationParams, params.onDelta)
+    : await chatCompletionDetailed(continuationParams);
 
   const appended = extractProse(stripLeadingHeadings(content.trim()));
   if (!appended) return params.text;
@@ -603,7 +610,7 @@ Write the complete ${target}-word chapter now, entirely in ${input.language}.`;
     attempts += 1;
     const remaining = Math.max(300, target - words);
     const tail = text.slice(-2000);
-    const { content, finishReason } = await chatCompletionDetailed({
+    const continuationParams = {
       model: input.model,
       system,
       user: `${languageLock(input.language)}
@@ -617,7 +624,11 @@ END OF THE CHAPTER SO FAR (for continuity):
 Continue now, entirely in ${input.language}.`,
       maxTokens: 8000,
       temperature: 0.85,
-    });
+    };
+    // Mit Callback streamen — sonst endet die Live-Vorschau mitten im Kapitel.
+    const { content, finishReason } = onDelta
+      ? await chatCompletionStream(continuationParams, onDelta)
+      : await chatCompletionDetailed(continuationParams);
 
     const appended = extractProse(stripLeadingHeadings(content.trim()));
     if (!appended) break;
@@ -637,6 +648,7 @@ Continue now, entirely in ${input.language}.`,
     label: "chapter",
     // Nur bei hartem Token-Limit verlängern (siehe completeProse).
     truncated: lastFinish === "length",
+    onDelta,
   });
 }
 
@@ -989,6 +1001,8 @@ Rewrite ONLY this part (~${chunkWords} words) — never the neighbouring parts, 
         text: nextText,
         label: isOnly ? "chapter" : `chapter part ${index + 1}`,
         truncated: true,
+        // Die Fortsetzung gehört zum selben Teil — sie wächst in der Vorschau weiter.
+        onDelta: handlers?.onPartDelta,
       });
       if (nextText.length > chunk.length * PASS_CHUNK_MAX_GROWTH) {
         // Auch die Fortsetzung hat aufgebläht → Original behalten.

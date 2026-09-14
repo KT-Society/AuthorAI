@@ -310,6 +310,11 @@ data: {"type":"error","error":"…"}     ← Fehler nach dem Start (HTTP bleibt 
 **HTTP 400 + JSON**. Liefert der Provider kein SSE, fällt der Server intern auf den normalen
 Aufruf zurück — der Client bekommt dann nur das `done`-Ereignis.
 
+Beim **Ausbau** (`…/expand/stream`) streamt nicht nur die erste Antwort: Der **Continuation-Loop**
+(bis zu 3 Fortsetzungen) und die abschließende Satz-Vervollständigung melden ihre Textstücke über
+denselben Kanal, damit die Vorschau bis zum Kapitelende mitwächst. `targetWords` ist optional und
+nutzt denselben Standard wie `/api/chapter/expand` (`EXPAND_DEFAULT_WORDS`, 4.000).
+
 ### `POST /api/chapter/consistency/stream` und `POST /api/chapter/style/stream`
 
 Streaming-Varianten der beiden Überarbeitungen. Der Server **chunkt** das Kapitel wie bisher

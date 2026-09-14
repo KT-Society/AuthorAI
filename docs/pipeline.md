@@ -25,6 +25,11 @@ Jede Stufe ist **einzeln und wiederholbar**: einzelnes Kapitel („Ausbauen", �
 „Stil") oder als Queue fürs ganze Buch („Alles ausbauen", „Alle Kohärenz", „Alle Stil").
 Queues persistieren **nach jedem Kapitel** und sind damit unterbrechbar/fortsetzbar.
 
+**Während einer Queue:** Das **Job-Center** zeigt den Fortschritt (`3/12`) und den **Live-Stand
+des laufenden Kapitels** — Schritt/Haupt-Info links, Stream-Detail rechts
+(„Kapitel 3 · Teil 2/5 · 1.240 Wörter" bzw. „Kapitel 2 · Ausbau · 2.400 Wörter"). Im Buch-Editor
+und im Assistenten läuft parallel die **Live-Vorschau** mit dem entstehenden Text.
+
 ---
 
 ## 1 · Idee
@@ -93,6 +98,12 @@ Erweitert die Rohfassung zu einem vollständigen Kapitel nach **Craft-Regeln**:
 - **Continuation-Loop:** Modelle (besonders „lite") stoppen gern zu früh. Der Server zählt
   Wörter und fordert bis zu 3× nahtlose Fortsetzungen an, bis ≥ 90 % des Ziels erreicht sind.
 - **Heading-Cleanup:** führende Markdown-Überschriften/`**Kapitel 1**`-Zeilen werden entfernt.
+- **Live-Vorschau (Streaming):** `POST /api/chapter/expand/stream` schickt Textstücke
+  (`delta`), am Ende den fertigen Text (`done`). Gestreamt wird **jede** Modellantwort des
+  Kapitels — der erste Aufruf, die Fortsetzungen des Continuation-Loops und die abschließende
+  Satz-Vervollständigung. Die Vorschau wächst deshalb bis zum Kapitelende mit (nicht nur bis zur
+  ersten Antwort). Gilt für den Einzel-Ausbau **und** für „Alles ausbauen" (dort zusätzlich mit
+  Kapitel-Info und Wortstand, siehe Job-Center).
 - **Aufs Tagesziel:** erzeugte Wörter werden dem Tagesziel/Streak angerechnet.
 
 ---
@@ -138,6 +149,11 @@ Teile werden gesammelt und dedupliziert.
 `part-delta` und `part-done`, am Ende das vollständige Ergebnis mit den Notizen. Die Oberfläche
 zeigt den Text damit beim Entstehen (inkl. „Teil 2/5"). Es ist **derselbe** Code-Pfad — nur mit
 Callback statt ohne — also gelten alle Sicherungen unverändert.
+
+Beide Aufrufer nutzen das: der **Buch-Editor** (Einzelkapitel und „Alle prüfen") und der
+**Assistent** (Schritte „Kohärenz"/„Stil", einzeln und „Alle prüfen"). Auch die automatische
+Fortsetzung eines am Token-Limit abgebrochenen Teils (`completeProse`) meldet ihre Textstücke
+über denselben Callback — die Vorschau reißt also nicht ab.
 
 **Schutzmechanismen** (pro Teil **und** über das Gesamtkapitel)
 
@@ -327,6 +343,10 @@ Modelle werden **pro Stufe** gesetzt (freie OpenRouter-ID). Leer = erbt das Stan
   **vorhandene Buch-ID** erhalten (Update statt Neuanlage).
 - Später im **Buch-Editor** einzeln weitergenerieren (`Rohentwurf`, `Ausbauen`, `Kohärenz`, `Stil`,
   `Fakten-Check`) oder als Queue.
+- **Assistent = Live-Vorschau**: Ausbau (einzeln und „Alle ausbauen"), Kohärenz und Stil laufen im
+  Wizard über dieselben Streaming-Routen wie im Editor; der entstehende Text erscheint im
+  Vorschau-Panel über dem jeweiligen Schritt (Wortstand + „Teil 2/5"), zusätzlich zum lokalen
+  Fortschrittsbalken. Der Rohentwurf-Schritt ist bisher nicht gestreamt.
 - **Schließen ohne Speichern** fragt nach (X / Abbrechen / Escape).
 
 ---
