@@ -277,11 +277,30 @@ function normalizeChapter(entry: unknown, index: number, fallbackTitle: string):
   };
 }
 
-export async function generateStoryboard(input: StoryboardInput): Promise<Storyboard> {
+/**
+ * Callbacks eines gestreamten Storyboard-Entwurfs.
+ *
+ * Der Entwurf ist **keine** Prosa (die Antworten sind JSON) — sinnvoll ist deshalb kein
+ * Text-Delta, sondern der Fortschritt: Phase, fertige Kapitel-Titel und Detail-Batches.
+ */
+export interface StoryboardStreamHandlers {
+  /** Eine Phase beginnt: `outline` (Metadaten + Kapiteltitel) oder `chapters` (Details). */
+  onPhase?: (phase: "outline" | "chapters") => void;
+  /** Die Kapiteltitel stehen fest (nach der Outline) — ab hier live sichtbar. */
+  onTitles?: (titles: string[]) => void;
+  /** Ein Detail-Batch ist fertig (Kapitel-Details). */
+  onBatch?: (done: number, total: number) => void;
+}
+
+export async function generateStoryboard(
+  input: StoryboardInput,
+  handlers?: StoryboardStreamHandlers,
+): Promise<Storyboard> {
   const chapters = clampChapters(input.chapters);
   const language = input.language;
 
   // Phase 1: outline — metadata + exactly N chapter titles.
+  handlers?.onPhase?.("outline");
   const outlineRaw = await chatCompletion({
     model: input.model,
     system: storyArchitectSystem(language, chapters),
@@ -301,9 +320,13 @@ export async function generateStoryboard(input: StoryboardInput): Promise<Storyb
   for (let index = 0; index < chapters; index += 1) {
     titles.push(rawTitles[index]?.trim() || `Kapitel ${index + 1}`);
   }
+  handlers?.onTitles?.(titles);
 
   // Phase 2: detail chapters in batches (keeps every response small).
+  handlers?.onPhase?.("chapters");
+  const totalBatches = Math.max(1, Math.ceil(chapters / BATCH_SIZE));
   const plans: ChapterPlan[] = [];
+  let batchesDone = 0;
   for (let start = 0; start < chapters; start += BATCH_SIZE) {
     const end = Math.min(chapters, start + BATCH_SIZE);
     const batchRaw = await chatCompletion({
@@ -326,6 +349,8 @@ export async function generateStoryboard(input: StoryboardInput): Promise<Storyb
       const entry = byIndex ?? list[index - start];
       plans.push(normalizeChapter(entry, index, titles[index] ?? `Kapitel ${index + 1}`));
     }
+    batchesDone += 1;
+    handlers?.onBatch?.(batchesDone, totalBatches);
   }
 
   return { ...meta, chapters: plans };

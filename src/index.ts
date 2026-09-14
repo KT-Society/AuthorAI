@@ -412,6 +412,38 @@ const server = serve({
       },
     },
 
+    // Streaming-Variante des Storyboard-Entwurfs: Fortschritt je Phase/Batch + Kapiteltitel.
+    "/api/storyboard/stream": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const idea = requiredString(body.idea, "Bitte eine Buchidee eingeben.");
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const chapters = optionalInt(body.chapters, 12);
+          return sseResponse(async (emit) => {
+            const storyboard = await generateStoryboard(
+              {
+                idea,
+                model,
+                language,
+                chapters,
+                seriesContext: optionalString(body.seriesContext),
+              },
+              {
+                onPhase: (phase) => emit({ type: "phase", phase }),
+                onTitles: (titles) => emit({ type: "titles", titles }),
+                onBatch: (done, total) => emit({ type: "batch", done, total }),
+              },
+            );
+            emit({ type: "done", storyboard });
+          });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
     // Streaming-Variante des Rohentwurfs: Textstücke kommen als SSE-Ereignisse.
     "/api/chapter/draft/stream": {
       async POST(req) {

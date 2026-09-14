@@ -71,6 +71,13 @@ konsistent.
 Die Zuordnung erfolgt robust über den 1-basierten `index`, mit positionalem Fallback;
 fehlt ein Eintrag, bleibt der Outline-Titel stehen — **die Kapitelzahl stimmt garantiert**.
 
+**Live-Fortschritt (Streaming):** `POST /api/storyboard/stream` meldet die Phasen statt Text —
+`phase` (Outline bzw. Kapitel-Details), `titles` (sobald die Titelliste feststeht), `batch`
+(Zähler der Detail-Batches) und am Ende das fertige Storyboard (`done`). Text-Deltas gibt es
+bewusst **nicht**: die Antworten sind JSON, rohes JSON als Vorschau wäre wertlos. Der Assistent
+zeigt daraus Phase, Titelliste und einen Batch-Balken. Ohne Streaming-Variante bleibt der Lauf
+unverändert (derselbe Code-Pfad, nur ohne Callbacks).
+
 ---
 
 ## 3 · Rohentwurf (≈ 500 Wörter)
@@ -80,6 +87,9 @@ Kein Feinschliff — Ziel ist Vorwärtsbewegung.
 
 - Prompt: „Write ONLY the chapter prose", ~500 Wörter, Sprache erzwungen.
 - Ergebnis wird im Manuskript als `draft` gespeichert.
+- **Live-Vorschau (Streaming):** `POST /api/chapter/draft/stream` (Textstücke + fertiger Text).
+  Genutzt im **Buch-Editor** und im **Assistenten** (einzeln wie „Alle Rohentwürfe"). Auch hier
+  gilt: eine harte Token-Fortsetzung (`completeProse`) streamt mit.
 
 ---
 
@@ -346,7 +356,8 @@ Modelle werden **pro Stufe** gesetzt (freie OpenRouter-ID). Leer = erbt das Stan
 - **Assistent = Live-Vorschau**: Ausbau (einzeln und „Alle ausbauen"), Kohärenz und Stil laufen im
   Wizard über dieselben Streaming-Routen wie im Editor; der entstehende Text erscheint im
   Vorschau-Panel über dem jeweiligen Schritt (Wortstand + „Teil 2/5"), zusätzlich zum lokalen
-  Fortschrittsbalken. Der Rohentwurf-Schritt ist bisher nicht gestreamt.
+  Fortschrittsbalken. Der **Rohentwurf** (einzeln und „Alle Rohentwürfe") streamt ebenfalls;
+  der **Storyboard-Entwurf** nutzt die Fortschritts-Variante (Phasen, Titelliste, Batch-Zähler).
 - **Schließen ohne Speichern** fragt nach (X / Abbrechen / Escape).
 
 ---

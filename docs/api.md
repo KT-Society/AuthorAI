@@ -396,6 +396,24 @@ Phasen ein, damit die Reihe fortgeführt statt neu erzählt wird.
 
 Garantiert **exakt `chapters` Einträge** (Aufrunden/Auffüllen serverseitig).
 
+### `POST /api/storyboard/stream`
+
+Streaming-Variante des Storyboard-Entwurfs (Server-Sent Events). Gleicher Body und gleiche
+Validierung wie `POST /api/storyboard`; die Antwort ist `text/event-stream` mit **Fortschritt
+statt Text** (die Modellantworten sind JSON — ein Prosa-Delta wäre wertlos):
+
+```
+data: {"type":"phase","phase":"outline"}        ← Metadaten + Kapiteltitel
+data: {"type":"titles","titles":["…","…"]}      ← Titelliste steht fest
+data: {"type":"phase","phase":"chapters"}       ← Kapitel-Details (Batches)
+data: {"type":"batch","done":1,"total":3}       ← ein Detail-Batch ist fertig
+data: {"type":"done","storyboard":{…}}          ← fertiges Storyboard
+data: {"type":"error","error":"…"}              ← Fehler nach dem Start (HTTP bleibt 200)
+```
+
+Fehlende Idee oder fehlendes Model → **HTTP 400 vor dem Stream**. Die nicht-streamende Route
+bleibt unverändert bestehen.
+
 ---
 
 ### `POST /api/chapter/draft`

@@ -62,7 +62,7 @@ import type { ChapterCanonCheck, ChapterContent, Storyboard, WizardStep } from "
 import { fetchConfig } from "@/services/generate";
 import type { AppConfig } from "@/services/generate";
 import { buildCoverPrompt, generateCover } from "@/services/cover";
-import { draftChapter, generateStoryboard, streamPass } from "@/services/story";
+import { streamPass, streamStoryboard } from "@/services/story";
 import type { PassResult } from "@/services/story";
 import { streamJson } from "@/services/stream";
 import { streamCanonCheck, streamCanonRepair } from "@/services/continuity";
@@ -429,7 +429,10 @@ export function BookWizard({
     }
 
     setError(null);
-    setBusy("Storyboard wird entworfen…");
+    setBusy("Storyboard · Outline wird entworfen…");
+    setStreamText(null);
+    setStreamLabel(null);
+    setProgress(null);
     try {
       writeStageModel("storyboard", id);
       writeLanguage(language);
@@ -437,13 +440,29 @@ export function BookWizard({
         MIN_CHAPTERS,
         Math.min(MAX_CHAPTERS, Number.parseInt(chapterCount, 10) || 12),
       );
-      const result = await generateStoryboard({
-        idea: trimmedIdea,
-        model: id,
-        language,
-        chapters: count,
-        seriesContext: seriesData.context,
-      });
+      // Gestreamt: Der Entwurf läuft in zwei Phasen (Outline, dann Kapitel-Details in Batches) —
+      // der Wizard zeigt den Fortschritt und die Titel, sobald sie feststehen.
+      const result = await streamStoryboard(
+        {
+          idea: trimmedIdea,
+          model: id,
+          language,
+          chapters: count,
+          seriesContext: seriesData.context,
+        },
+        {
+          onPhase: (phase) => {
+            setBusy(
+              phase === "outline"
+                ? "Storyboard · Outline wird entworfen…"
+                : "Storyboard · Kapitel-Details werden ausgearbeitet…",
+            );
+            setStreamLabel(phase === "outline" ? "Storyboard · Outline" : "Storyboard · Kapitel");
+          },
+          onTitles: (titles) => setStreamText(titles.join("\n")),
+          onBatch: (done, total) => setProgress({ done, total }),
+        },
+      );
       setStoryboard(result);
       setDrafts(Array(result.chapters.length).fill(""));
       setExpanded(Array(result.chapters.length).fill(""));
@@ -463,6 +482,9 @@ export function BookWizard({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
+      setStreamText(null);
+      setStreamLabel(null);
+      setProgress(null);
       setBusy(null);
     }
   };
@@ -485,8 +507,15 @@ export function BookWizard({
     if (!id || !storyboard) return;
     setError(null);
     setBusy(`Rohentwurf Kapitel ${index + 1}/${chapters.length}…`);
+    setStreamText("");
+    setStreamLabel(`Rohentwurf · Kapitel ${index + 1}/${chapters.length}`);
     try {
-      const draft = await draftChapter({ storyboard, chapterIndex: index, model: id, language, canon: seriesData.canon });
+      // Streaming: Der Rohentwurf ist kurz, die Vorschau zeigt ihn trotzdem beim Entstehen.
+      const draft = await streamJson(
+        "/api/chapter/draft/stream",
+        { storyboard, chapterIndex: index, model: id, language, canon: seriesData.canon },
+        { onDelta: (delta) => setStreamText((prev) => `${prev ?? ""}${delta}`) },
+      );
       setDrafts((prev) => {
         const next = [...prev];
         next[index] = draft;
@@ -496,6 +525,8 @@ export function BookWizard({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
+      setStreamText(null);
+      setStreamLabel(null);
       setBusy(null);
     }
   };
@@ -512,8 +543,14 @@ export function BookWizard({
         continue;
       }
       setBusy(`Rohentwurf ${index + 1}/${total}…`);
+      setStreamText("");
+      setStreamLabel(`Rohentwurf · Kapitel ${index + 1}/${total}`);
       try {
-        const draft = await draftChapter({ storyboard, chapterIndex: index, model: id, language, canon: seriesData.canon });
+        const draft = await streamJson(
+          "/api/chapter/draft/stream",
+          { storyboard, chapterIndex: index, model: id, language, canon: seriesData.canon },
+          { onDelta: (delta) => setStreamText((prev) => `${prev ?? ""}${delta}`) },
+        );
         setDrafts((prev) => {
           const next = [...prev];
           next[index] = draft;
@@ -526,6 +563,8 @@ export function BookWizard({
       }
       setProgress({ done: index + 1, total });
     }
+    setStreamText(null);
+    setStreamLabel(null);
     setBusy(null);
     setProgress(null);
   };
@@ -1039,7 +1078,27 @@ export function BookWizard({
             </div>
           ) : null}
 
-          <StreamPreview text={streamText} label={streamLabel} className="mb-4" />
+          <StreamPreview
+            text={streamText}
+            label={streamLabel}
+            className="mb-4"
+            // Beim Storyboard steht dort keine Prosa, sondern die Kapitelliste.
+            showWords={stepIndex !== 0}
+            render={
+              stepIndex === 0
+                ? (text) => (
+                    <ol className="list-decimal space-y-0.5 pl-5">
+                      {text
+                        .split("\n")
+                        .filter(Boolean)
+                        .map((title, index) => (
+                          <li key={index}>{title}</li>
+                        ))}
+                    </ol>
+                  )
+                : undefined
+            }
+          />
 
           {error ? (
             <div className="mb-4 rounded-xl border border-brand-rose/30 bg-brand-rose/10 px-3 py-2 text-sm text-brand-rose">

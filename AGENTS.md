@@ -97,7 +97,7 @@ src/
 
 | Stufe | Route |
 | --- | --- |
-| Storyboard | `POST /api/storyboard` |
+| Storyboard | `POST /api/storyboard` · Stream (Fortschritt): `POST /api/storyboard/stream` |
 | Rohentwurf | `POST /api/chapter/draft` · Stream: `POST /api/chapter/draft/stream` |
 | Ausbau | `POST /api/chapter/expand` · Stream: `POST /api/chapter/expand/stream` |
 | Kohärenz | `POST /api/chapter/consistency` · Stream: `POST /api/chapter/consistency/stream` |

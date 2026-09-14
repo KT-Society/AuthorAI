@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 
 import { countWords } from "@/data/story";
@@ -14,12 +15,24 @@ export function StreamPreview({
   text,
   label,
   className,
+  showWords = true,
+  render,
 }: {
-  /** Wachsender Rohtext (kann `<TEXT>`-Marker enthalten — wird über `extractProse` gelesen). */
+  /**
+   * Wachsender Rohtext (kann `<TEXT>`-Marker enthalten — wird über `extractProse` gelesen).
+   * Bei gesetztem `render` dient er nur als Auslöser: gerendert wird `render(text)`.
+   */
   text: string | null;
   /** Zusatzinfo links neben dem Wortstand. */
   label?: string | null;
   className?: string;
+  /**
+   * Wortstand anzeigen (Standard). Beim **Storyboard** steht dort keine Prosa, sondern die
+   * Kapitelliste — eine Wortzahl wäre irreführend.
+   */
+  showWords?: boolean;
+  /** Eigene Darstellung (z. B. eine Liste statt Prosa). */
+  render?: (text: string) => ReactNode;
 }) {
   if (text === null) return null;
   const prose = extractProse(text);
@@ -31,11 +44,16 @@ export function StreamPreview({
     >
       <p className="mb-1 inline-flex items-center gap-2 text-[11px] font-semibold text-brand-cyan">
         <Loader2 className="size-3.5 animate-spin" />
-        {label ?? "Live-Vorschau"} ·{" "}
-        <span className="tabular-nums">{words.toLocaleString("de-DE")} Wörter</span>
+        {label ?? "Live-Vorschau"}
+        {showWords ? (
+          <>
+            {" · "}
+            <span className="tabular-nums">{words.toLocaleString("de-DE")} Wörter</span>
+          </>
+        ) : null}
       </p>
       <div className="max-h-52 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-foreground/85">
-        {prose || "…"}
+        {render ? render(text) : prose || "…"}
       </div>
     </div>
   );

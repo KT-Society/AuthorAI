@@ -23,6 +23,47 @@ export async function generateStoryboard(input: StoryboardRequest): Promise<Stor
   return data.storyboard;
 }
 
+export interface StoryboardStreamHandlers {
+  /** Eine Phase des Entwurfs beginnt (`outline` = Metadaten + Titel, `chapters` = Details). */
+  onPhase?: (phase: "outline" | "chapters") => void;
+  /** Die Kapiteltitel stehen fest. */
+  onTitles?: (titles: string[]) => void;
+  /** Ein Detail-Batch ist fertig. */
+  onBatch?: (done: number, total: number) => void;
+}
+
+/**
+ * Gestreamter Storyboard-Entwurf. Die Antworten sind JSON, deshalb gibt es **kein** Text-Delta:
+ * Der Server meldet Phase, Kapiteltitel und Batch-Fortschritt, am Ende das fertige Storyboard.
+ */
+export async function streamStoryboard(
+  input: StoryboardRequest,
+  handlers: StoryboardStreamHandlers = {},
+): Promise<Storyboard> {
+  let storyboard: Storyboard | null = null;
+
+  await streamEvents("/api/storyboard/stream", input, (event) => {
+    if (event.type === "phase" && (event.phase === "outline" || event.phase === "chapters")) {
+      handlers.onPhase?.(event.phase);
+      return;
+    }
+    if (event.type === "titles" && Array.isArray(event.titles)) {
+      handlers.onTitles?.((event.titles as unknown[]).map((title) => String(title)));
+      return;
+    }
+    if (event.type === "batch") {
+      handlers.onBatch?.(Number(event.done ?? 0), Number(event.total ?? 0));
+      return;
+    }
+    if (event.type === "done" && event.storyboard) {
+      storyboard = event.storyboard as Storyboard;
+    }
+  });
+
+  if (!storyboard) throw new Error("Der Server hat kein Storyboard geliefert.");
+  return storyboard;
+}
+
 export interface ChapterRequest {
   storyboard: Storyboard;
   chapterIndex: number;

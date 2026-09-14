@@ -10,6 +10,15 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ### Live-Vorschau überall & Fortschritt im Job-Center
 
+- **Added** **Storyboard-Entwurf mit Live-Fortschritt** (`POST /api/storyboard/stream`): Der
+  Entwurf läuft in zwei Phasen (Outline, dann Kapitel-Details in Batches) — der Assistent nennt
+  jetzt die laufende Phase, zeigt die **Kapiteltitel, sobald sie feststehen**, und füllt den
+  **Batch-Fortschrittsbalken** (z. B. „2/3"). Vorher stand dort nur „Storyboard wird entworfen…".
+  Die Antworten sind JSON, deshalb gibt es bewusst **kein** Text-Delta (rohes JSON als Vorschau
+  wäre wertlos); gemeldet werden `phase`, `titles`, `batch` und am Ende das fertige Storyboard.
+- **Added** **Rohentwurf im Assistenten streamt**: Einzelkapitel und „Alle Rohentwürfe
+  generieren" nutzen jetzt die SSE-Route (`/api/chapter/draft/stream`) und zeigen den Text beim
+  Entstehen („Rohentwurf · Kapitel 2/12"); der Editor tat das schon.
 - **Added** **Live-Text auch beim Ausbau-Queue-Lauf**: **„Alles ausbauen"** schreibt das laufende
   Kapitel jetzt mit, statt nur „Kapitel 3" zu melden — dasselbe Verhalten wie beim Einzel-Ausbau
   (die Vorschau zeigt Wortstand und Kapitel, z. B. „Ausbau · Kapitel 2/7").
@@ -32,7 +41,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   „Alle ausbauen") streamt dort ebenso.
 - **Added** **Gemeinsame Vorschau-Komponente** `StreamPreview`: Wortstand, Schritt-Info und
   wachsender Text in einem Baustein — Buch-Editor und Assistent teilen ihn (vorher war die
-  Vorschau nur im Editor fest verdrahtet).
+  Vorschau nur im Editor fest verdrahtet). Fürs Storyboard zeigt sie eine **Titelliste** statt
+  Prosa (ohne Wortzahl).
 - **Fixed** **Assistent: Ausbau berücksichtigt den Kanon**: „Alle ausbauen" im Wizard schickte
   den Kanon-Block (Fakten + Beziehungen) nicht mit, anders als der Einzel-Ausbau — jetzt tun es
   beide.
