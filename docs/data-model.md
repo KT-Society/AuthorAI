@@ -114,6 +114,12 @@ interface SceneConstraint {
 }
 ```
 
+`sceneMeta` und die Beat-Liste (`storyboard.chapters[i].beats`) sind **parallel**: Index `n` in
+`sceneMeta` gehört zu Beat `n`. Genau diese beiden liest die **Timeline-Prüfung** und schreibt der
+**Timeline-Quick-Fix** (`time`/`setting` in `sceneMeta`, korrigierte Szenen-Texte im Beat) —
+deshalb liegt eine solche Korrektur außerhalb der Kapitel-Version (siehe `roadmap.md`,
+„Szenen-Struktur versionieren").
+
 ### Cover-Text (`src/data/cover.ts`)
 
 ```ts

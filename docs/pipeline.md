@@ -15,11 +15,15 @@ flowchart LR
 | # | Stufe | Model-Stage | Routen | Ergebnis |
 | --- | --- | --- | --- | --- |
 | 1 | Idee | — | — | Textidee + Kapitelzahl |
-| 2 | Storyboard | `storyboard` | `/api/storyboard` | Struktur + Kapitelplan + Welt |
-| 3 | Rohentwurf | `draft` | `/api/chapter/draft` | ~500 Wörter je Kapitel |
-| 4 | Ausbau | `expand` | `/api/chapter/expand` | 3.000–5.000 Wörter je Kapitel |
-| 5 | Kohärenz | `consistency` | `/api/chapter/consistency` | korrigierter Text + Bericht |
-| 6 | Stil | `style` | `/api/chapter/style` | polierter Text + Bericht |
+| 2 | Storyboard | `storyboard` | `/api/storyboard` · Stream (Fortschritt): `/api/storyboard/stream` | Struktur + Kapitelplan + Welt |
+| 3 | Rohentwurf | `draft` | `/api/chapter/draft` · Stream: `/api/chapter/draft/stream` | ~500 Wörter je Kapitel |
+| 4 | Ausbau | `expand` | `/api/chapter/expand` · Stream: `/api/chapter/expand/stream` | 3.000–5.000 Wörter je Kapitel |
+| 5 | Kohärenz | `consistency` | `/api/chapter/consistency` · Stream: `/api/chapter/consistency/stream` | korrigierter Text + Bericht |
+| 6 | Stil | `style` | `/api/chapter/style` · Stream: `/api/chapter/style/stream` | polierter Text + Bericht |
+
+> Die Stufen 2–6 haben **je eine Streaming-Variante**: Prosa-Stufen schicken Textstücke
+> (`delta`), das Storyboard meldet Phasen/Titel/Batches. Beide Wege nutzen **denselben**
+> Server-Code — ohne Streaming nur ohne Callback. Details je Stufe unten.
 
 Jede Stufe ist **einzeln und wiederholbar**: einzelnes Kapitel („Ausbauen", „Kohärenz",
 „Stil") oder als Queue fürs ganze Buch („Alles ausbauen", „Alle Kohärenz", „Alle Stil").

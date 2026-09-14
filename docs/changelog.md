@@ -8,6 +8,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+_Nichts offen — nächste Themen siehe [`roadmap.md`](roadmap.md)._
+
+---
+
+## [0.5.5] — 2026-09-14
+
 ### Timeline: Quick Fix für die Chronologie
 
 - **Added** **Quick Fix im Timeline-Dialog**: Der Knopf neben „Erneut prüfen" schlägt je Kapitel

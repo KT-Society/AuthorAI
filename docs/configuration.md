@@ -15,7 +15,7 @@ Die Datei liegt im Repository-Root und ist **gitignored**. Sie wird serverseitig
 
 | Variable | Alias | Für | Beschreibung |
 | --- | --- | --- | --- |
-| `OPENROUTER_API_KEY` | `OPENROUTER_KEY` | LLM | Alle Textgenerierungen (Storyboard, Ausbau, Prüfungen, Soul) |
+| `OPENROUTER_API_KEY` | `OPENROUTER_KEY` | LLM | Alle Textgenerierungen (Storyboard, Ausbau, Prüfungen, Soul) — **entfällt**, wenn ein eigener Anbieter konfiguriert ist (siehe unten) |
 | `TAVILY_API_KEY` | `TAVILY_KEY` | Recherche | Charakter-Recherche + `/api/research` |
 | `POLLINATIONS_API_KEY` | `POLLINATIONS_TOKEN` | Cover | Bilderzeugung |
 
@@ -61,6 +61,11 @@ kein Default**. Leer = erbt das Standard-Model.
 
 **Setzen:** Einstellungen (Sidebar → „Einstellungen") oder direkt im Buch-Wizard
 (die Leiste zeigt das Model der aktiven Stufe).
+
+> **Ein Model trägt mehr als eine Aufgabe:** Das **Kohärenz**-Model
+> (`authorai.model.consistency`) wird außer für den Kohärenz-Pass auch für **Fakten-Check,
+> Kanon-Quick-Fix, Timeline-Prüfung und Timeline-Quick-Fix** genutzt (Reasoning-Qualität zahlt
+> sich hier aus). Alles andere läuft genau über die Stufe, die im Wizard sichtbar ist.
 
 ---
 
@@ -178,7 +183,7 @@ cd release
 
 | Vorgang | Externer Aufruf |
 | --- | --- |
-| Storyboard, Kapitel, Prüfungen, Timeline, Soul-Scan, Weltenbau-Extraktion | LLM (OpenRouter) |
+| Storyboard, Kapitel, Prüfungen, Timeline, Soul-Scan, Weltenbau-Extraktion | LLM (OpenRouter oder eigener Anbieter) |
 | Recherche (Notiz-Suche, Charakter-Scan) | Tavily |
 | Cover / Cover-Varianten | Pollinations (Varianten: **3 Bilder pro Durchlauf**) |
 | **EPUB / DOCX / Markdown / PDF / Backup** | **keiner — läuft komplett im Browser** |

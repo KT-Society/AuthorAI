@@ -1,7 +1,7 @@
 # AuthorAI — Dokumentation
 
 > **Repository:** [github.com/KT-Society/AuthorAI](https://github.com/KT-Society/AuthorAI)
-> · **Version:** 0.5.0
+> · **Version:** 0.5.5
 
 Willkommen im Handbuch. Hier steht alles, was du brauchst, um AuthorAI zu verstehen,
 zu betreiben und zu erweitern.
@@ -30,9 +30,13 @@ bun run dev     # App auf http://localhost:3000
 ```
 
 1. **Profil** anlegen („Wer schreibt heute?").
-2. **Neues Buch** → Idee eingeben → Model je Schritt setzen.
-3. Pipeline durchlaufen: Storyboard → Rohentwurf → Ausbau → Kohärenz → Stil.
-4. Zwischendurch jederzeit **Zwischenspeichern**; weiter im Buch-Editor.
+2. **Neues Buch** → Idee eingeben → Model je Schritt setzen (optional Anbieter umstellen).
+3. Pipeline durchlaufen: Storyboard → Rohentwurf → Ausbau → Kohärenz → Stil. Lange Ausgaben
+   entstehen **live vor deinen Augen**; Storyboard, Ausbau und Prüfungen zeigen ihren Fortschritt
+   auch im **Job-Center**.
+4. Prüfen und ausbessern: Fakten-Check und **Timeline** finden Widersprüche — beide mit
+   **Quick Fix** samt Diff-Vorschau, geschrieben wird erst nach dem Bestätigen.
+5. Zwischendurch jederzeit **Zwischenspeichern**; weiter im Buch-Editor.
 
 ## Dokumentationslandkarte
 
@@ -64,7 +68,8 @@ bun run dev     # App auf http://localhost:3000
 Bun          Runtime, Server (Bun.serve), Bundler (Bun.build), Test/Skripte
 React 19     UI (Root-App)          ·  React 18 + MUI (promptgen)
 Tailwind v4  Design-System (Root)   ·  shadcn/Radix + lucide
-OpenRouter   Sprachmodelle          ·  Tavily: Recherche  ·  Pollinations: Bilder
+LLM          OpenRouter oder eigener OpenAI-kompatibler Anbieter
+             Tavily: Recherche      ·  Pollinations: Bilder
 SQLite       Pro-Profil-Daten (data/authorai.db)  ·  localStorage: Profile & Einstellungen
 ```
 

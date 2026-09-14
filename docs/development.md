@@ -74,6 +74,31 @@ Für Signierung, Installer und Auslieferung: [`release.md`](release.md)
 3. **Service:** dünner Wrapper in `src/services/*` über `postJson`.
 4. **UI:** View/Dialog konsumiert nur den Service.
 
+**Braucht die Antwort Fortschritt oder Textstücke?** Dann zusätzlich eine **SSE-Variante**:
+
+- Server: `sseResponse(async (emit) => …)` + Handler-Callbacks (`onDelta`, `onPartStart`, …);
+  der Nicht-Streaming-Aufruf bleibt **derselbe Code-Pfad** ohne Callback (siehe `expandChapter`).
+- Route: eigener Handler `…/stream`, Validierung **vor** dem Stream (Fehler dort = HTTP 400).
+- Service: `streamEvents("/api/…/stream", body, handler)` statt `postJson`; das Ergebnis kommt
+  aus dem `done`-Ereignis (siehe `streamPass`, `streamStoryboard`).
+- UI: `StreamPreview` für Text, `Job.detail` für Zähler (siehe unten).
+
+**Faustregel:** Lange **Prosa** streamt `delta` (Rohentwurf, Ausbau, Kohärenz, Stil).
+Kleine **JSON**-Antworten (Fakten-Check-Verdikt, Timeline-Befund, Timeline-Korrektur) bleiben
+ein normaler Aufruf — ein Delta auf JSON wäre wertlos. Ein laufender Batch-Prozess (Storyboard)
+meldet dagegen **Fortschritt** (`phase`/`titles`/`batch`), keinen Text.
+
+### Live-Vorschau & Fortschritt (Konventionen)
+
+| Baustein | Datei | Wofür |
+| --- | --- | --- |
+| `StreamPreview` | `components/dashboard/StreamPreview.tsx` | Wachsender Text + Wortstand + Schritt-Info. `showWords={false}`/`render` für Nicht-Prosa (Storyboard-Titelliste) |
+| `createJobStreamReporter` | `lib/jobs.ts` | Stream-Fortschritt **gedrosselt** in `Job.detail` (erstes Stück sofort, dann ≥ 300 ms; zählt Wörter über den ganzen Text, nicht je Token) |
+
+Regeln: Die Vorschau ist **reine Anzeige** — geschrieben wird erst nach Abschluss (bzw. nach
+Bestätigung im Vorschau-Dialog). Langläufe, die der Nutzer verlassen können soll, gehören als
+**Job** ins Job-Center (Queue über alle Kapitel), kurzlebige Einzelläufe nicht.
+
 ### Neue Pipeline-Stufe (Checkliste)
 
 - [ ] `ModelStage` + Label + Key in `lib/generationSettings.ts`
@@ -151,8 +176,52 @@ import { computeStreak, todayIso, addDays } from "./lib/streak";
 console.log(computeStreak([addDays(todayIso(), -1), todayIso()], todayIso()));
 ```
 
-### Export-Formate prüfen
+### Ohne API-Key testen: lokaler Stub-Provider
 
+Streaming, Fortsetzungs-Schleifen und Fehlerpfade lassen sich **ohne Kosten und ohne echten Key**
+prüfen: ein zweiter Bun-Server im Testskript antwortet OpenAI-kompatibel, und die App wird auf ihn
+umgebogen (Env-Override, siehe [`configuration.md`](configuration.md)):
+
+```bash
+# App gegen den Stub starten (Startzeit variabel) — der Stub läuft im Testskript
+$env:PORT='3099'; $env:AUTHORAI_PROVIDER='custom'
+$env:AUTHORAI_BASE_URL='http://127.0.0.1:4599/v1'; $env:AUTHORAI_API_KEY='test-key'
+bun run src/index.ts
+```
+
+```ts
+// src/tmp-check.ts — Stub: SSE für Streaming-Routen, JSON für den Rest
+const stub = Bun.serve({
+  port: 4599,
+  async fetch(req) {
+    const body = await req.json() as { stream?: boolean };
+    if (body.stream) {
+      const enc = new TextEncoder();
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: "Text " } }] })}\n\n`));
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "length" }] })}\n\n`));
+            c.enqueue(enc.encode("data: [DONE]\n\n"));
+            c.close();
+          },
+        }),
+        { headers: { "Content-Type": "text/event-stream" } },
+      );
+    }
+    return Response.json({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }] });
+  },
+});
+// … fetch gegen http://127.0.0.1:3099/api/… und die Events/Deltas prüfen …
+stub.stop(true);
+```
+
+Zwei Dinge dabei beachten: **immer** über einen eigenen Port testen (`PORT`), damit der
+Entwicklungsserver auf 3000 unberührt bleibt, und den Testserver danach beenden. So kamen die
+Checks für Ausbau-Fortsetzungen, Storyboard-Batches und Timeline-Korrektur zustande — inklusive
+Nachweis, dass Textstücke **wirklich** als `delta` ankommen.
+
+### Export-Formate prüfen
 EPUB und DOCX sind ZIP-Container — nach dem Erzeugen einmal mit einem ZIP-Reader öffnen
 und die Struktur kontrollieren (z. B. PowerShell):
 

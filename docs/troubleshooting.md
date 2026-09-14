@@ -126,6 +126,45 @@ Kapitel anhand der Flags.
 
 ---
 
+## Live-Vorschau & Job-Center
+
+### Vorschau bleibt leer, der Text erscheint erst am Ende
+
+Dann liefert der Anbieter **kein SSE** (oder lehnt `stream: true` ab). Der Server fällt intern auf
+den normalen Aufruf zurück — der Client bekommt nur das `done`-Ereignis. Funktion und Ergebnis sind
+identisch, es fehlt nur das Mitlesen. Prüfen: Anbieter/Endpoint unterstützt Streaming; bei eigenem
+Anbieter die Base-URL kontrollieren (`/chat/completions` wird ergänzt).
+
+### Vorschau endet mitten im Kapitel
+
+Sollte nicht mehr vorkommen: Der Ausbau streamt auch die **Continuation-Runden** (bis zu 3) und die
+abschließende Satz-Vervollständigung mit. Tritt es doch auf, ist die Antwort ins Token-Limit
+gelaufen — dann greift die Fortsetzung, aber bei sehr kleinem Ausgabelimit kann sie mehrfach
+ansetzen; für den Ausbau ein Modell mit größerem Limit wählen.
+
+### Job-Center zeigt „prüft…", aber keinen Wortstand
+
+`Job.detail` schreiben nur die **Queue-Läufe** mit Stream-Anbindung (Ausbau/Prüfungen über alle
+Kapitel im Buch-Editor). Einzelne Läufe und der Assistent zeigen den Fortschritt im Dialog
+(Vorschau + Balken), nicht im Job-Center.
+
+### Storyboard-Stream zeigt keine Titel
+
+Die Titel erscheinen, sobald die **Outline-Phase** fertig ist (Phase 1). Liefert das Modell keine
+`chapterTitles`, füllt der Server mit `Kapitel N` auf — dann erscheinen eben diese Platzhalter
+(Titel im Editor anpassen). Bricht die Phase ab, bleibt der Dialog beim Fehler stehen.
+
+### Timeline-Quick-Fix schlägt nichts vor
+
+- Kein Hinweis im Bericht → nichts zu korrigieren.
+- Das Modell hat nur **unveränderte** Werte gelistet — die wirft der Server bewusst weg, es gibt
+  also nichts zu übernehmen.
+- Der Fix korrigiert **nur die Szenen-Struktur** (Zeit, Schauplatz, Szenen-Text), nicht die Prosa.
+  Widersprüche, die ausschließlich im Fließtext stehen, sieht die Timeline-Prüfung nicht — dafür
+  die **Kohärenz-Prüfung** nutzen.
+
+---
+
 ## Cover
 
 ### Cover fehlt / Bild kaputt

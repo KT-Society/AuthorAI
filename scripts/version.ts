@@ -7,9 +7,9 @@
  *   bun run version:bump 0.4.1 --dry-run  # nur zeigen, nichts schreiben
  *   bun run version:bump 0.4.1 --force    # auch rückwärts (Downgrade)
  *
- * Warum ein Skript: Die Version steht an **sechs** Stellen (siehe docs/release.md).
- * Wird eine vergessen, driften README, Installer und App auseinander. Das Skript schreibt
- * alle Stellen, prüft danach nach und bricht ab, wenn ein Muster nicht mehr passt.
+ * Warum ein Skript: Die Version steht an **sieben** Stellen (siehe docs/release.md).
+ * Wird eine vergessen, driften README, SECURITY, Installer und App auseinander. Das Skript
+ * schreibt alle Stellen, prüft danach nach und bricht ab, wenn ein Muster nicht mehr passt.
  *
  * Bewusst NICHT angefasst: `META_VERSION` (data/author.ts) und `BACKUP_VERSION`
  * (lib/backup.ts) — das sind **Datenformat-Versionen**, keine App-Versionen.
@@ -80,6 +80,16 @@ const TARGETS: Target[] = [
     apply: (content, version) =>
       substitute(content, /(\*\*Version:\*\*\s*)[^\s·]+/, `$1${version}`),
   },
+  {
+    // Support-Matrix in SECURITY.md: nur die **aktuelle** Minor-Linie ist unterstützt.
+    file: "SECURITY.md",
+    what: "Unterstützte Version",
+    apply: (content, version) => {
+      const [major = 0, minor = 0] = version.split(".").map((part) => Number(part) || 0);
+      const line = `${major}.${minor}.x`;
+      return substitute(content, /(\|\s*)\d+\.\d+\.x(\s*\|\s*✅)/, `$1${line}$2`);
+    },
+  },
 ];
 
 function substitute(content: string, pattern: RegExp, replacement: string): string | null {
@@ -144,7 +154,10 @@ function updateChangelog(content: string, version: string): { next: string; chan
     .filter((line) => line.length > 0 && !/^-{3,}$/.test(line));
   if (meaningful.length === 0) return { next: content, changed: false };
 
-  const block = `${heading}\n\n${CHANGELOG_PLACEHOLDER}\n\n---\n\n## [${version}] — ${today()}\n${body.replace(/^\n+/, "")}`;
+  // Leerzeile zwischen Versions-Überschrift und erster Sektion erhalten (wie in den
+  // bestehenden Release-Abschnitten) — `replace(/^\n+/, "")` würde sie sonst entfernen.
+  const section = body.replace(/^\n+/, "");
+  const block = `${heading}\n\n${CHANGELOG_PLACEHOLDER}\n\n---\n\n## [${version}] — ${today()}\n\n${section}`;
   const tail = nextSection === -1 ? "" : rest.slice(nextSection).replace(/^\n/, "");
   return { next: `${content.slice(0, start)}${block}${tail ? `\n${tail}` : ""}`, changed: true };
 }
@@ -167,7 +180,8 @@ if (flags.has("--help") || positional.length === 0) {
     --force     auch rückwärts (Downgrade)
 
   Stellen: package.json · packages/promptgen/package.json · installer/authorai.iss ·
-           installer/authorai.nsi (2×) · README.md · docs/README.md · docs/changelog.md`);
+           installer/authorai.nsi (2×) · README.md · docs/README.md · SECURITY.md ·
+           docs/changelog.md`);
   // Explizite Hilfe ist kein Fehler, ein Aufruf ohne Argumente schon.
   process.exit(flags.has("--help") ? 0 : 1);
 }

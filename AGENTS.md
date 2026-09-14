@@ -121,8 +121,9 @@ Plot-Karten aus dem Storyboard ab (dedupliziert). Details: [`docs/pipeline.md`](
 
 1. `ModelStage` + Label + Key in `lib/generationSettings.ts`
 2. Server-Funktion in `src/server/story.ts`
-3. Route in `src/index.ts` (Validierung + `errorResponse`)
-4. Service in `src/services/story.ts` (`postJson`)
+3. Route in `src/index.ts` (Validierung + `errorResponse`) — **plus** `…/stream`-Variante,
+   wenn die Stufe Prosa liefert oder lange läuft (siehe `docs/development.md`)
+4. Service in `src/services/story.ts` (`postJson`; streaming: `streamEvents`)
 5. `WizardStep` + `STEPS` + Stage-Mapping + Schritt-UI im `BookWizard`
 6. Anzeige im `BookDetailView` (Plates/Buttons), Persistenz der Flags
 
@@ -143,7 +144,7 @@ Doku ist Teil der Lieferung, nicht Nacharbeit. **Vor jedem „fertig"** prüfen,
 | Neue Module, Views, Dialoge, Schichten | `docs/architecture.md` (Modul-/View-Tabellen) |
 | Env-Variablen, Settings-Keys, Modelle | `docs/configuration.md` |
 | Filtern/Suchen/Sortieren, neue Einstellungen | `docs/development.md` bzw. die betroffene Feature-Doku |
-| **Version** | `bun run version:bump <x.y.z>` — schreibt `package.json`, promptgen, Installer, README-Versionszeile und den Changelog-Abschnitt |
+| **Version** | `bun run version:bump <x.y.z>` — schreibt `package.json`, promptgen, beide Installer, README, `docs/README.md`, `SECURITY.md` und den Changelog-Abschnitt |
 | Release, Signierung, Installer | `docs/release.md` |
 | Commands, Checklisten, harte Regeln | **diese Datei** (`AGENTS.md`) |
 

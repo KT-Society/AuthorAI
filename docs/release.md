@@ -41,14 +41,15 @@ bun run version:bump 0.4.1 --dry-run   # nur zeigen, nichts schreiben
 bun run version:bump 0.4.1 --force     # auch rückwärts (Downgrade)
 ```
 
-Das Skript (`scripts/version.ts`) hält sechs Stellen konsistent:
+Das Skript (`scripts/version.ts`) hält **sieben** Stellen konsistent:
 
 1. `package.json` → `version`
 2. `packages/promptgen/package.json` → `version` (Workspace-Paket, gleiche Version)
 3. `installer/authorai.iss` → `#define MyAppVersion`
 4. `installer/authorai.nsi` → `!define APP_VERSION` **und** `VIProductVersion` (`x.y.z.0`)
 5. `README.md` / `docs/README.md` → Versionszeile
-6. `docs/changelog.md` → **[Unreleased] wird zum Release**, oben entsteht ein frischer
+6. `SECURITY.md` → Zeile der **unterstützten Version** (`x.y.x` der aktuellen Minor-Linie)
+7. `docs/changelog.md` → **[Unreleased] wird zum Release**, oben entsteht ein frischer
    Platzhalter (enthält `[Unreleased]` nur den Platzhalter, bleibt das Changelog unberührt —
    es entsteht kein leerer Release)
 
@@ -172,8 +173,10 @@ Grundsatz: **`release/` enthält alles, was der Kunde braucht** — inklusive Li
 
 ## Checkliste vor der Veröffentlichung
 
-- [ ] Versionsnummer in `package.json`, `installer/authorai.iss`, `installer/authorai.nsi`
-      (inkl. `VIProductVersion`) und `docs/changelog.md` gleich
+- [ ] Versionsnummer gleich in `package.json`, `packages/promptgen/package.json`,
+      `installer/authorai.iss`, `installer/authorai.nsi` (inkl. `VIProductVersion`),
+      `README.md`, `docs/README.md`, `SECURITY.md` und `docs/changelog.md`
+      (`bun run version:bump` erledigt alle acht und prüft nach)
 - [ ] `bun run check` grün
 - [ ] `bun run build:binary` ohne Warnungen
 - [ ] Probe-Lauf: Binary in einem **leeren Ordner** starten, `.env` daneben, App öffnet sich

@@ -1,7 +1,7 @@
 # AuthorAI — Dein KI-Buchautor
 
 > **Repository:** [github.com/KT-Society/AuthorAI](https://github.com/KT-Society/AuthorAI)
-> · **Version:** 0.5.0 · **Lizenz:** MIT · **Entwickler:** KT-Society & Echo
+> · **Version:** 0.5.5 · **Lizenz:** MIT · **Entwickler:** KT-Society & Echo
 
 Eine vollständige, lokal laufende **Autoren-Werkbank**: von der Buchidee über Storyboard,
 Rohentwurf und Ausbau bis zu Kohärenz- und Stilprüfung, mit Charakteren, Weltenbau,
@@ -21,18 +21,18 @@ Idee → Storyboard → Rohentwurf (~500 W) → Ausbau (3.000–5.000 W) → Koh
 | Bereich | Was es kann |
 | --- | --- |
 | **Buch-Pipeline** | 6-stufiger, prüfbarer Workflow mit eigenem Model pro Stufe |
-| **Storyboard** | Gechunkte Generierung → garantiert exakt N Kapitel, Language-Lock, Worldbuilding |
+| **Storyboard** | Gechunkte Generierung → garantiert exakt N Kapitel, Language-Lock, Worldbuilding, Live-Fortschritt (Phase + Titel) |
 | **Ausbau** | Ziel 3.000–5.000 Wörter pro Kapitel, Continuation-Loop, Craft-Regeln (Pacing, Show-don't-tell, Foreshadowing) |
 | **Kohärenz-Pass** | Logik-/Kontinuitätsprüfung gegen Nachbarkapitel + Foreshadowing, mit Prüfbericht |
 | **Stil-Pass** | Satzbau, Rhythmus, Grammatik, Sprachgebrauch — inhaltlich unverändert |
 | **Kontinuität** | Kanon aus Fakten & Beziehungen (inkl. Beziehungs-Arc) — verbindlich für alle Pässe; Fakten-Check + Quick Fix |
-| **Live-Vorschau** | Streaming für Rohentwurf, Ausbau, Kohärenz, Stil, Fakten-Check und Extraktion; Hintergrund-Jobs im Job-Center |
+| **Live-Vorschau** | Streaming für Rohentwurf, Ausbau, Kohärenz, Stil, Fakten-Check und Extraktion — inkl. Fortsetzungen; Job-Center mit Live-Stand („Teil 2/5 · 1.240 Wörter") |
 | **Charaktere** | Aus dem Storyboard automatisch angelegt, editierbar, **Soul-Scan** (12 Sektionen) |
 | **Weltenbau** | Orte, Fraktionen, Magie, Artefakte, Lore — automatisch + per Extraktion |
 | **Plot-Board** | Kapitel als Karten, Akt/Status, Board-Ansicht |
 | **Recherche** | Notizen + echte Tavily-Suche |
 | **Szenen** | Beats je Kapitel editierbar mit POV/Schauplatz/Zeit/**Wortziel** — verbindlich für Generierung und Prüfung |
-| **Timeline** | Zeitangaben der Szenen gegen die Kapitelreihenfolge prüfen (Bericht) |
+| **Timeline** | Zeitangaben der Szenen gegen die Kapitelreihenfolge prüfen — mit strukturierten Befunden und **Quick Fix** (korrigiert Szenen-Zeit/Schauplatz/Text nach Diff-Vorschau) |
 | **Export** | EPUB (mit Cover), DOCX für Lektorat, Markdown, sauberes PDF über den Reader |
 | **Backup** | Alle Profildaten als JSON exportieren/importieren |
 | **Covers** | Pollinations (`flux.1-schnell`), Varianten, Text-Presets, Front-/Back-Cover, persistierte Text-Layer |
@@ -111,7 +111,7 @@ bun run --cwd packages/promptgen dev
 Secrets liegen in der **Root-`.env`** und werden ausschließlich **serverseitig** gelesen.
 
 ```dotenv
-OPENROUTER_API_KEY=sk-or-v1-...      # erforderlich (LLM)
+OPENROUTER_API_KEY=sk-or-v1-...      # erforderlich (LLM) — entfällt bei eigenem Anbieter
 TAVILY_API_KEY=tvly-...              # erforderlich (Recherche)
 POLLINATIONS_API_KEY=sk_...          # erforderlich (Cover)
 ```
@@ -125,9 +125,16 @@ PROMPTGEN_DEFAULT_LANGUAGE=German
 PORT=3001                            # promptgen (Root nutzt 3000)
 ```
 
+**Anbieter:** In den Einstellungen lässt sich statt **OpenRouter** ein **eigener
+OpenAI-kompatibler Anbieter** (Base-URL + API-Key, „Verbindung testen") verwenden — der Key
+liegt dann serverseitig in der Datenbank und nie im Browser. Für Standalone/Skripte gibt es
+den Env-Override `AUTHORAI_PROVIDER` / `AUTHORAI_BASE_URL` / `AUTHORAI_API_KEY`.
+
 Modelle werden **pro Stufe** in der App gesetzt (Einstellungen → „Model pro Schritt"):
-`Storyboard`, `Rohentwurf`, `Ausbau`, `Kohärenz`, `Stil` — freie OpenRouter-Model-ID,
-kein Dropdown, kein Default. Leer = erbt das Standard-Model.
+`Storyboard`, `Rohentwurf`, `Ausbau`, `Kohärenz`, `Stil` — freie Model-ID des aktiven
+Anbieters, kein Dropdown, kein Default. Leer = erbt das Standard-Model.
+Das **Kohärenz**-Model trägt zusätzlich Fakten-Check, Kanon-Quick-Fix, Timeline-Prüfung und
+Timeline-Quick-Fix.
 
 → Details: [`docs/configuration.md`](docs/configuration.md)
 
