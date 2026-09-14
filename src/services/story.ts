@@ -3,7 +3,7 @@
  * Talks only to the local Bun server; keys never reach the browser.
  */
 
-import type { SceneConstraint, Storyboard, StoryCharacter, StoryWorld } from "@/data/story";
+import type { SceneConstraint, Storyboard, StoryCharacter, StoryWorld, WorldItem } from "@/data/story";
 
 import { postJson } from "./http";
 import { streamEvents } from "./stream";
@@ -276,17 +276,12 @@ export interface TimelineRepairResult {
 }
 
 /**
- * Quick Fix der Timeline: korrigiert die **Struktur** (Szenen-Zeit/Schauplatz/Text), die die
- * Chronologie-Prüfung liest. Der Server prüft die Nummern gegen die echten Kapitel/Szenen und
- * meldet nur tatsächliche Änderungen zurück.
+ * Mappt rohe Kapitel-Fix-Objekte (Modellantwort) auf `TimelineRepairFix`. Wird für das
+ * Endergebnis **und** für die Live-Objekte des Streams genutzt — so verhalten sich beide gleich.
  */
-export async function repairTimeline(input: TimelineRepairRequest): Promise<TimelineRepairResult> {
-  const data = await postJson<{ fixes?: unknown[]; notes?: unknown[] }>(
-    "/api/timeline/repair",
-    input,
-  );
+function asTimelineRepairFixes(value: unknown): TimelineRepairFix[] {
   const fixes: TimelineRepairFix[] = [];
-  for (const entry of Array.isArray(data.fixes) ? data.fixes : []) {
+  for (const entry of Array.isArray(value) ? value : []) {
     const item = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
     const chapter = Number.parseInt(String(item.chapter ?? ""), 10);
     if (!Number.isFinite(chapter) || chapter <= 0) continue;
@@ -309,10 +304,90 @@ export async function repairTimeline(input: TimelineRepairRequest): Promise<Time
       fixes.push({ chapter, note: typeof item.note === "string" ? item.note : "", scenes });
     }
   }
+  return fixes;
+}
+
+/**
+ * Quick Fix der Timeline: korrigiert die **Struktur** (Szenen-Zeit/Schauplatz/Text), die die
+ * Chronologie-Prüfung liest. Der Server prüft die Nummern gegen die echten Kapitel/Szenen und
+ * meldet nur tatsächliche Änderungen zurück.
+ */
+export async function repairTimeline(input: TimelineRepairRequest): Promise<TimelineRepairResult> {
+  const data = await postJson<{ fixes?: unknown[]; notes?: unknown[] }>(
+    "/api/timeline/repair",
+    input,
+  );
   return {
-    fixes,
+    fixes: asTimelineRepairFixes(data.fixes),
     notes: Array.isArray(data.notes) ? data.notes.map((note) => String(note)) : [],
   };
+}
+
+export interface TimelineStreamHandlers {
+  /** Ein Befund, sobald das Modell ihn geschrieben hat (live, vor der Endvalidierung). */
+  onFinding?: (finding: TimelineFinding) => void;
+}
+
+/**
+ * Gestreamte Timeline-Prüfung: Die Befunde treffen einzeln ein — bei langen Büchern ist der
+ * Gesamtlauf spürbar, so sieht man die Hinweise schon während der Prüfung. Verbindlich ist die
+ * normalisierte Liste aus dem Abschluss.
+ */
+export async function streamTimelineCheck(
+  input: TimelineRequest,
+  handlers: TimelineStreamHandlers = {},
+): Promise<TimelineResult> {
+  let result: TimelineResult | null = null;
+
+  await streamEvents("/api/timeline/check/stream", input, (event) => {
+    if (event.type === "finding" && event.finding) {
+      const finding = asTimelineFindings([event.finding])[0];
+      if (finding) handlers.onFinding?.(finding);
+      return;
+    }
+    if (event.type === "done") {
+      result = {
+        summary: typeof event.summary === "string" ? event.summary : "",
+        findings: asTimelineFindings(event.findings),
+      };
+    }
+  });
+
+  if (!result) throw new Error("Der Server hat kein Prüfergebnis geliefert.");
+  return result;
+}
+
+export interface TimelineRepairStreamHandlers {
+  /** Ein vorgeschlagenes Kapitel (live, noch unvalidiert). */
+  onChapter?: (fix: TimelineRepairFix) => void;
+}
+
+/**
+ * Gestreamte Timeline-Korrektur: die Vorschau füllt sich Kapitel für Kapitel. Verbindlich ist
+ * das validierte Ergebnis aus dem Abschluss (unbekannte Nummern und Unverändertes fallen dort weg).
+ */
+export async function streamTimelineRepair(
+  input: TimelineRepairRequest,
+  handlers: TimelineRepairStreamHandlers = {},
+): Promise<TimelineRepairResult> {
+  let result: TimelineRepairResult | null = null;
+
+  await streamEvents("/api/timeline/repair/stream", input, (event) => {
+    if (event.type === "chapter") {
+      const [fix] = asTimelineRepairFixes([event.raw]);
+      if (fix) handlers.onChapter?.(fix);
+      return;
+    }
+    if (event.type === "done") {
+      result = {
+        fixes: asTimelineRepairFixes(event.fixes),
+        notes: Array.isArray(event.notes) ? event.notes.map((note) => String(note)) : [],
+      };
+    }
+  });
+
+  if (!result) throw new Error("Der Server hat keine Korrektur geliefert.");
+  return result;
 }
 
 export interface WorldExtractRequest {
@@ -327,6 +402,44 @@ export async function extractWorld(input: WorldExtractRequest): Promise<StoryWor
   const data = await postJson<{ world?: StoryWorld }>("/api/world/extract", input);
   if (!data.world) throw new Error("Leere Weltenbau-Antwort vom Server.");
   return data.world;
+}
+
+/** Kategorie-Schlüssel des Weltenbaus, wie der Stream sie meldet. */
+export type WorldStreamCategory = keyof StoryWorld;
+
+export interface WorldStreamHandlers {
+  /** Ein Vorschlag, sobald das Modell ihn geschrieben hat (live, vor Dedupe/Validierung). */
+  onEntry?: (category: WorldStreamCategory, entry: WorldItem) => void;
+}
+
+/**
+ * Gestreamte Weltenbau-Extraktion: Die Vorschläge wachsen live in den Review-Dialog. Verbindlich
+ * ist das Welt-Objekt aus dem Abschluss (normalisiert und ohne Dubletten).
+ */
+export async function streamWorldExtract(
+  input: WorldExtractRequest,
+  handlers: WorldStreamHandlers = {},
+): Promise<StoryWorld> {
+  let world: StoryWorld | null = null;
+
+  await streamEvents("/api/world/extract/stream", input, (event) => {
+    if (event.type === "entry") {
+      const category = event.category as WorldStreamCategory;
+      const name = typeof event.name === "string" ? event.name.trim() : "";
+      if (!name) return;
+      handlers.onEntry?.(category, {
+        name,
+        description: typeof event.description === "string" ? event.description : "",
+      });
+      return;
+    }
+    if (event.type === "done" && event.world) {
+      world = event.world as StoryWorld;
+    }
+  });
+
+  if (!world) throw new Error("Der Server hat keinen Weltenbau geliefert.");
+  return world;
 }
 
 export interface CharacterExtractRequest {
@@ -347,4 +460,40 @@ export async function extractCharacters(
     input,
   );
   return Array.isArray(data.characters) ? data.characters : [];
+}
+
+export interface CharacterStreamHandlers {
+  /** Eine Figur, sobald das Modell sie geschrieben hat (live, vor Dedupe/Validierung). */
+  onCharacter?: (character: StoryCharacter) => void;
+}
+
+/**
+ * Gestreamte Figuren-Extraktion: Die gefundenen Figuren treffen einzeln ein. Verbindlich ist die
+ * Liste aus dem Abschluss (normalisiert, ohne bereits getrackte Namen).
+ */
+export async function streamCharactersExtract(
+  input: CharacterExtractRequest,
+  handlers: CharacterStreamHandlers = {},
+): Promise<StoryCharacter[]> {
+  let characters: StoryCharacter[] | null = null;
+
+  await streamEvents("/api/characters/extract/stream", input, (event) => {
+    if (event.type === "character" && event.character) {
+      const raw = event.character as Record<string, unknown>;
+      const name = typeof raw.name === "string" ? raw.name.trim() : "";
+      if (!name) return;
+      handlers.onCharacter?.({
+        name,
+        role: typeof raw.role === "string" ? raw.role : "",
+        description: typeof raw.description === "string" ? raw.description : "",
+      });
+      return;
+    }
+    if (event.type === "done") {
+      characters = Array.isArray(event.characters) ? (event.characters as StoryCharacter[]) : [];
+    }
+  });
+
+  if (!characters) throw new Error("Der Server hat keine Figuren geliefert.");
+  return characters;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Sparkles, UserRound, X } from "lucide-react";
+import { Check, Loader2, Sparkles, UserRound, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,22 +15,27 @@ import { Badge } from "./primitives";
 export function CharacterExtractDialog({
   open,
   candidates,
+  running = false,
   bookTitle,
   onClose,
   onAccept,
 }: {
   open: boolean;
   candidates: StoryCharacter[];
+  /** Läuft die Ableitung noch? Dann treffen die Figuren live ein. */
+  running?: boolean;
   bookTitle: string;
   onClose: () => void;
   onAccept: (accepted: StoryCharacter[]) => void;
 }) {
   const [rejected, setRejected] = useState<Set<string>>(new Set());
 
-  // Bei jedem Öffnen: alle Vorschläge vorausgewählt.
+  // Nur beim Öffnen zurücksetzen — bei einem Effekt auf `[open, candidates]` würde jeder live
+  // eintreffende Vorschlag die Auswahl des Nutzers verwerfen.
   useEffect(() => {
-    if (open) setRejected(new Set());
-  }, [open, candidates]);
+    if (!open) return;
+    setRejected(new Set());
+  }, [open]);
 
   const selected = useMemo(
     () => candidates.filter((candidate) => !rejected.has(candidate.name)),
@@ -52,7 +57,11 @@ export function CharacterExtractDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-      onClick={onClose}
+      onClick={() => {
+        // Während des Sammelns gesperrt: sonst pusht der laufende Stream weiter und öffnet
+        // den Dialog sofort wieder.
+        if (!running) onClose();
+      }}
     >
       <div
         className="glass-strong float-in flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl p-6"
@@ -67,6 +76,7 @@ export function CharacterExtractDialog({
               <h2 className="text-lg font-semibold tracking-tight">Figuren aus dem Manuskript</h2>
               <p className="text-xs text-muted-foreground">
                 {candidates.length} Vorschläge{bookTitle ? ` · ${bookTitle}` : ""}
+                {running ? " · sammelt…" : ""}
               </p>
             </div>
           </div>
@@ -75,6 +85,7 @@ export function CharacterExtractDialog({
             size="icon-sm"
             className="rounded-lg text-muted-foreground hover:text-foreground"
             onClick={onClose}
+            disabled={running}
           >
             <X className="size-4" />
           </Button>
@@ -82,7 +93,9 @@ export function CharacterExtractDialog({
 
         <div className="mt-5 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
-            Bereits getrackte Figuren sind ausgefiltert. Abwählen, was nicht ins Figuren-Register soll.
+            {running
+              ? "Die Figuren treffen live ein — am Ende wird gefiltert und validiert."
+              : "Bereits getrackte Figuren sind ausgefiltert. Abwählen, was nicht ins Figuren-Register soll."}
           </p>
           <button
             type="button"
@@ -94,7 +107,12 @@ export function CharacterExtractDialog({
         </div>
 
         <div className="mt-3 flex-1 space-y-2 overflow-y-auto pr-1">
-          {candidates.map((candidate) => {
+          {running && candidates.length === 0 ? (
+            <p className="flex items-center gap-2 rounded-xl border border-brand-violet/20 bg-brand-violet/5 px-3.5 py-3 text-xs text-brand-violet">
+              <Loader2 className="size-3.5 animate-spin" />
+              Sammelt Figuren…
+            </p>
+          ) : null}          {candidates.map((candidate) => {
             const isSelected = !rejected.has(candidate.name);
             return (
               <button
@@ -144,12 +162,13 @@ export function CharacterExtractDialog({
               variant="ghost"
               className="rounded-xl text-muted-foreground hover:text-foreground"
               onClick={onClose}
+              disabled={running}
             >
               Abbrechen
             </Button>
             <Button
               onClick={() => onAccept(selected)}
-              disabled={selected.length === 0}
+              disabled={running || selected.length === 0}
               className="rounded-xl bg-gradient-to-r from-brand-violet to-brand-indigo px-5 font-semibold text-white disabled:opacity-50"
             >
               {selected.length} übernehmen

@@ -8,7 +8,46 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
-_Nichts offen — nächste Themen siehe [`roadmap.md`](roadmap.md)._
+### Live-Vorschläge für Prüfungen und Extraktionen
+
+- **Added** **Vier weitere Routen streamen jetzt live**: `POST /api/timeline/check`,
+  `POST /api/timeline/repair`, `POST /api/world/extract` und `POST /api/characters/extract`
+  haben je eine `…/stream`-Variante. Das Modell liefert dafür **JSONL** (ein Objekt pro Zeile),
+  der Server meldet jedes fertige Objekt sofort und am Ende die **validierte** Fassung. Wirkung:
+  Die Timeline zeigt ihre Befunde während der Prüfung (bei langen Büchern ist der Gesamtlauf
+  spürbar), der Quick Fix füllt die Vorschau Kapitel für Kapitel, und die Review-Dialoge von
+  Weltenbau und Figuren füllen sich live, statt bis zum Ende auf einen Spinner zu schauen.
+  Ursache: Diese vier Läufe waren die letzten Einzelaufrufe über große Eingaben — alles andere
+  (Prosa, Storyboard, Fakten-Check, Kontinuitäts-Extraktion) streamte bereits.
+- **Added** **Gemeinsamer JSONL-Baustein** (`src/server/jsonl.ts`): tolerantes Zeilen-Parsing
+  (Modelle schmuggeln gern Fences, Kommas oder Klammern mit), Puffer über Textstück-Grenzen und
+  der Formatblock für Stream-Prompts. Die Kontinuitäts-Extraktion nutzt ihn jetzt ebenfalls —
+  vorher lag derselbe Parser privat in `continuity.ts`.
+- **Changed** **Prompts ohne Drift**: Für jede der vier Routen liegt der Auftrag samt Feldregeln
+  in **einem** geteilten Brief (`timelineCheckBrief`, `timelineRepairBrief`, `worldBrief`,
+  `characterExtractBrief`); die JSON- und die JSONL-Variante hängen nur ihr Ausgabeformat an.
+  Damit können Prüf- und Stream-Variante nicht mehr auseinanderlaufen.
+- **Added** **Fallback bleibt** — schickt das Modell statt JSONL ein einzelnes JSON-Dokument
+  (oder Prosa mit JSON darin), antwortet die Route wie bisher; geprüft im Integrationstest.
+- **Fixed** **Live-Wachstum verwirft keine Auswahl mehr**: Die Review-Dialoge von Weltenbau und
+  Figuren setzten ihre Auswahl bei **jedem** neuen Vorschlag zurück (Effekt auf
+  `[open, candidates]`) — beim Streaming hätte das jede Nutzerentscheidung gelöscht. Sie
+  reagieren jetzt nur noch auf das Öffnen, und neu eintreffende Vorschläge erhalten wie bisher
+  die Vorauswahl (ähnliche bleiben abgewählt). Die Timeline-Korrektur-Vorschau merkt sich
+  entsprechend **abgewählte** statt ausgewählter Kapitel.
+- **Added** **Sperren während des Sammelns**: Solange Vorschläge eintreffen, sind Übernehmen,
+  Verwerfen, Abbrechen und Escape gesperrt — geschrieben wird erst gegen die validierte Fassung,
+  nicht gegen halbfertige Live-Objekte.
+- **Fixed** **„Das Weltenbau-JSON war ungültig" / „invalid JSON (Figuren-Extraktion)" trotz
+  korrekter Modellantwort**: Bei Anbietern **ohne echten SSE-Strom** (Antwort kommt als normales
+  JSON oder der Stream ist leer) fiel `chatCompletionStream` still auf einen normalen Aufruf
+  zurück und rief den Callback **nicht** — der JSONL-Sammler blieb leer, und die Route versuchte
+  anschließend, die JSONL-Antwort als **ein** JSON-Dokument zu parsen. Das Modell war unschuldig,
+  die Antwort landete nur im Papierkorb. Zwei Korrekturen: (1) der Rückfall auf den normalen
+  Aufruf bedient den Callback jetzt mit dem fertigen Text (gilt für **alle** Stream-Routen —
+  auch Prosa-Vorschauen funktionieren damit ohne SSE), (2) die vier JSONL-Routen verarbeiten den
+  fertigen Text notfalls **nachträglich** durch denselben Zeilen-Parser
+  (`consumeJsonlText`), bevor sie auf ein JSON-Dokument zurückfallen.
 
 ---
 

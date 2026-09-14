@@ -33,13 +33,17 @@ import { runResearch } from "./server/research";
 import {
   checkConsistency,
   checkTimeline,
+  checkTimelineStream,
   draftChapter,
   expandChapter,
   extractCharacters,
+  extractCharactersStream,
   extractWorld,
+  extractWorldStream,
   generateStoryboard,
   refineStyle,
   repairTimeline,
+  repairTimelineStream,
   checkConsistencyStream,
   refineStyleStream,
 } from "./server/story";
@@ -687,6 +691,33 @@ const server = serve({
       },
     },
 
+    // Timeline-Prüfung, gestreamt: jeder Befund kommt als Ereignis, sobald das Modell ihn hat.
+    "/api/timeline/check/stream": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const input = {
+            storyboard,
+            scenesByChapter: asSceneMatrix(body.scenesByChapter),
+            canon: optionalString(body.canon),
+            model,
+            language,
+          };
+          return sseResponse(async (emit) => {
+            const result = await checkTimelineStream(input, {
+              onFinding: (finding) => emit({ type: "finding", finding }),
+            });
+            emit({ type: "done", ...result });
+          });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
     // Quick Fix der Timeline: korrigiert die Struktur (Szenen-Zeit/Schauplatz/Text) der Befunde.
     "/api/timeline/repair": {
       async POST(req) {
@@ -708,6 +739,87 @@ const server = serve({
             language,
           });
           return Response.json(result);
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Weltenbau-Extraktion, gestreamt: jeder fertige Vorschlag kommt, sobald das Modell ihn hat.
+    "/api/world/extract/stream": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const knownEntries = asKnownWorldEntries(body.knownEntries);
+          const input = { storyboard, model, language, knownEntries };
+          return sseResponse(async (emit) => {
+            const world = await extractWorldStream(input, {
+              onEntry: (entry) => emit({ type: "entry", ...entry }),
+            });
+            emit({ type: "done", world });
+          });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Figuren-Extraktion, gestreamt: eine Figur pro Ereignis, am Ende die validierte Liste.
+    "/api/characters/extract/stream": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const bookTitle = typeof body.bookTitle === "string" ? body.bookTitle.trim() : "";
+          const genre =
+            typeof body.genre === "string" && body.genre.trim() ? body.genre.trim() : undefined;
+          const chapters = asManuscriptChapters(body.chapters);
+          const knownCharacters = Array.isArray(body.knownCharacters)
+            ? body.knownCharacters.filter((name): name is string => typeof name === "string")
+            : [];
+          const input = { bookTitle, genre, chapters, knownCharacters, model, language };
+          return sseResponse(async (emit) => {
+            const characters = await extractCharactersStream(input, {
+              onCharacter: (character) => emit({ type: "character", character }),
+            });
+            emit({ type: "done", characters });
+          });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Timeline-Korrektur, gestreamt: ein Ereignis pro vorgeschlagenem Kapitel (live, unvalidiert).
+    "/api/timeline/repair/stream": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const storyboard = asStoryboard(body.storyboard);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const findings = asTimelineFindings(body.findings);
+          if (findings.length === 0) {
+            throw new ApiError("Keine Timeline-Befunde für die Korrektur.", 400);
+          }
+          const input = {
+            storyboard,
+            scenesByChapter: asSceneMatrix(body.scenesByChapter),
+            findings,
+            canon: optionalString(body.canon),
+            model,
+            language,
+          };
+          return sseResponse(async (emit) => {
+            const result = await repairTimelineStream(input, {
+              onChapter: (raw) => emit({ type: "chapter", raw }),
+            });
+            emit({ type: "done", ...result });
+          });
         } catch (err) {
           return errorResponse(err);
         }

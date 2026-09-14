@@ -21,7 +21,7 @@ import { manuscriptOf } from "@/lib/bookManuscript";
 import { dedupeCharacters, findMatchingCharacter } from "@/lib/characterMatch";
 import { readLanguage, readStageModel } from "@/lib/generationSettings";
 import { showToast } from "@/lib/toast";
-import { extractCharacters } from "@/services/story";
+import { streamCharactersExtract } from "@/services/story";
 
 import { CharacterCard } from "./CharacterCard";
 import { CharacterEditorDialog } from "./CharacterEditorDialog";
@@ -89,26 +89,47 @@ export function CharactersView({
     }
     setExtractError(null);
     setExtractBusy(true);
+    // Dialog sofort öffnen — die Figuren treffen live ein.
+    setCandidates([]);
+    const live: StoryCharacter[] = [];
     try {
       const known = [
         ...characters.map((character) => character.name),
         ...(book.storyboard?.characters ?? []).map((entry) => entry.name),
       ];
-      const found = await extractCharacters({
-        bookTitle: book.title,
-        genre: book.storyboard?.genre,
-        chapters,
-        knownCharacters: known,
-        model,
-        language: readLanguage() ?? "German",
-      });
-      if (found.length === 0) {
+      const found = await streamCharactersExtract(
+        {
+          bookTitle: book.title,
+          genre: book.storyboard?.genre,
+          chapters,
+          knownCharacters: known,
+          model,
+          language: readLanguage() ?? "German",
+        },
+        {
+          onCharacter: (character) => {
+            // Namen gegen Vorhandenes und gegen die Live-Liste prüfen — kein doppelter Vorschlag.
+            const taken = new Set(live.map((entry) => entry.name.toLowerCase()));
+            if (taken.has(character.name.toLowerCase())) return;
+            live.push(character);
+            setCandidates([...live]);
+          },
+        },
+      );
+      // Abschluss: validierte Liste. Live gefundene Figuren bleiben erhalten, sofern der Server
+      // sie auch bestätigt (gleiche Namen) — so geht die Auswahl des Nutzers nicht verloren.
+      const confirmedNames = new Set(found.map((character) => character.name.toLowerCase()));
+      const confirmed = live.filter((character) => confirmedNames.has(character.name.toLowerCase()));
+      const final = live.length === 0 ? found : confirmed;
+      if (final.length === 0) {
+        setCandidates(null);
         setExtractError("Keine neuen Figuren gefunden (alles bereits vorhanden).");
         return;
       }
-      setCandidates(found);
+      setCandidates(final);
     } catch (err) {
       setExtractError(err instanceof Error ? err.message : "Unbekannter Fehler.");
+      setCandidates(live.length > 0 ? [...live] : null);
     } finally {
       setExtractBusy(false);
     }
@@ -351,6 +372,7 @@ export function CharactersView({
       <CharacterExtractDialog
         open={candidates !== null}
         candidates={candidates ?? []}
+        running={extractBusy}
         bookTitle={books.find((book) => book.id === extractBookId)?.title ?? ""}
         onClose={() => setCandidates(null)}
         onAccept={acceptCandidates}

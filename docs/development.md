@@ -84,9 +84,31 @@ Für Signierung, Installer und Auslieferung: [`release.md`](release.md)
 - UI: `StreamPreview` für Text, `Job.detail` für Zähler (siehe unten).
 
 **Faustregel:** Lange **Prosa** streamt `delta` (Rohentwurf, Ausbau, Kohärenz, Stil).
-Kleine **JSON**-Antworten (Fakten-Check-Verdikt, Timeline-Befund, Timeline-Korrektur) bleiben
-ein normaler Aufruf — ein Delta auf JSON wäre wertlos. Ein laufender Batch-Prozess (Storyboard)
-meldet dagegen **Fortschritt** (`phase`/`titles`/`batch`), keinen Text.
+Kleine **JSON**-Antworten ohne Fortschritt (Timeline-Befund, Timeline-Korrektur) bleiben normale
+Aufrufe — ein Delta auf JSON wäre wertlos; sollen sie live zeigen, was sie finden, nutzen sie das
+**JSONL-Muster** (unten). Ein laufender Batch-Prozess (Storyboard) meldet dagegen **Fortschritt**
+(`phase`/`titles`/`batch`), keinen Text.
+
+### JSONL-Muster (Listen live melden)
+
+Für Antworten, die aus **vielen gleichartigen Objekten** bestehen (Befunde, Figuren, Welt-Einträge,
+Fakten), gibt es statt eines JSON-Dokuments eine JSONL-Variante: ein Objekt pro Zeile.
+
+- Server: `createJsonlConsumer(handle)` aus `src/server/jsonl.ts` an `chatCompletionStream` hängen
+  — `push` puffert über Textstück-Grenzen, `flush` verarbeitet den Rest. Der Prompt bekommt den
+  Formatblock aus `jsonlFormatBlock(...)`.
+- **Auftrag und Feldregeln gehören in einen geteilten Brief** (`timelineCheckBrief`, `worldBrief`, …),
+  den JSON- und JSONL-Prompt gemeinsam nutzen — sonst driften die Varianten auseinander.
+- **Am Ende immer dieselbe Normalisierung** wie im Nicht-Streaming-Weg laufen lassen (ein
+  `…Result(parsed, input)`-Helfer), damit Live- und Endfassung identisch streng sind. Live-Objekte
+  sind **roh und unvalidiert** — die Oberfläche darf erst gegen den `done`-Inhalt schreiben.
+- Fallback-Kette einbauen: **live** sammeln → kam nichts an (Anbieter ohne echte Textstücke),
+  den fertigen Text mit `consumeJsonlText(content, …)` **nachträglich** durch denselben Parser
+  schicken → erst zuletzt wie bisher ein JSON-Dokument parsen. Live gemeldete Objekte dabei
+  **nicht** doppelt verarbeiten (Replay nur, wenn live nichts ankam).
+- Regel für die Streaming-Schicht: Ein Rückfall auf den normalen Aufruf muss den Callback
+  **trotzdem** bedienen (siehe `chatCompletionStream`), sonst laufen JSONL-Sammler und
+  Prosa-Vorschauen ins Leere.
 
 ### Live-Vorschau & Fortschritt (Konventionen)
 
@@ -98,6 +120,12 @@ meldet dagegen **Fortschritt** (`phase`/`titles`/`batch`), keinen Text.
 Regeln: Die Vorschau ist **reine Anzeige** — geschrieben wird erst nach Abschluss (bzw. nach
 Bestätigung im Vorschau-Dialog). Langläufe, die der Nutzer verlassen können soll, gehören als
 **Job** ins Job-Center (Queue über alle Kapitel), kurzlebige Einzelläufe nicht.
+
+**Review-Dialoge mit live wachsender Liste** (Weltenbau, Figuren, Timeline-Korrektur): Die Auswahl
+des Nutzers muss das Wachstum überleben. Ein Effekt auf `[open, candidates]`, der die Auswahl neu
+setzt, löscht sie bei jedem eintreffenden Vorschlag — deshalb nur auf `[open]` reagieren und
+Vorauswahlen (z. B. „ähnlich zu Vorhandenem") je **neuem** Eintrag einmalig anwenden. Während
+gesammelt wird: Übernehmen/Verwerfen/Escape sperren (`running`-Prop).
 
 ### Neue Pipeline-Stufe (Checkliste)
 

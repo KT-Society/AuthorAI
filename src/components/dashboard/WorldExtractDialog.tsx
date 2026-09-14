@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Check, Globe2, Sparkles, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Globe2, Loader2, Sparkles, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -31,23 +31,48 @@ export interface WorldCandidate {
 export function WorldExtractDialog({
   open,
   candidates,
+  running = false,
   bookTitle,
   onClose,
   onAccept,
 }: {
   open: boolean;
   candidates: WorldCandidate[];
+  /** Läuft die Ableitung noch? Dann wachsen die Vorschläge live hinein. */
+  running?: boolean;
   bookTitle: string;
   onClose: () => void;
   onAccept: (accepted: WorldEntry[]) => void;
 }) {
   const [rejected, setRejected] = useState<Set<string>>(new Set());
+  /** IDs, die schon einmal bewertet wurden (Vorauswahl darf nur einmal greifen). */
+  const seenRef = useRef<Set<string>>(new Set());
 
-  // Bei jedem Öffnen: neue Vorschläge vorausgewählt, ähnliche abgewählt.
+  // Beim Öffnen: alles zurücksetzen.
   useEffect(() => {
-    if (open) {
-      setRejected(new Set(candidates.filter((item) => item.similarTo).map((item) => item.entry.id)));
-    }
+    if (!open) return;
+    seenRef.current = new Set();
+    setRejected(new Set());
+  }, [open]);
+
+  /**
+   * Danach nur noch **neue** Vorschläge vorab abwählen (ähnlich/bereits vorhanden).
+   *
+   * Wichtig für das Streaming: ein Effekt auf `[open, candidates]`, der `rejected` komplett neu
+   * setzt, würde bei jedem live eintreffenden Vorschlag die Auswahl des Nutzers verwerfen.
+   */
+  useEffect(() => {
+    if (!open) return;
+    const fresh = candidates.filter((item) => !seenRef.current.has(item.entry.id));
+    if (fresh.length === 0) return;
+    for (const item of fresh) seenRef.current.add(item.entry.id);
+    const preselect = fresh.filter((item) => item.similarTo).map((item) => item.entry.id);
+    if (preselect.length === 0) return;
+    setRejected((prev) => {
+      const next = new Set(prev);
+      for (const id of preselect) next.add(id);
+      return next;
+    });
   }, [open, candidates]);
 
   const selected = useMemo(
@@ -73,7 +98,11 @@ export function WorldExtractDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-      onClick={onClose}
+      onClick={() => {
+        // Während des Sammelns gesperrt: sonst pusht der laufende Stream weiter und öffnet
+        // den Dialog sofort wieder.
+        if (!running) onClose();
+      }}
     >
       <div
         className="glass-strong float-in flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl p-6"
@@ -88,6 +117,7 @@ export function WorldExtractDialog({
               <h2 className="text-lg font-semibold tracking-tight">Weltenbau aus Storyboard</h2>
               <p className="text-xs text-muted-foreground">
                 {candidates.length} Vorschläge{bookTitle ? ` · ${bookTitle}` : ""}
+                {running ? " · sammelt…" : ""}
               </p>
             </div>
           </div>
@@ -96,6 +126,7 @@ export function WorldExtractDialog({
             size="icon-sm"
             className="rounded-lg text-muted-foreground hover:text-foreground"
             onClick={onClose}
+            disabled={running}
           >
             <X className="size-4" />
           </Button>
@@ -103,11 +134,13 @@ export function WorldExtractDialog({
 
         <div className="mt-5 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
-            {duplicates > 0
-              ? duplicates === 1
-                ? "1 Vorschlag ähnelt bereits vorhandenen Einträgen und ist abgewählt."
-                : `${duplicates} Vorschläge ähneln bereits vorhandenen Einträgen und sind abgewählt.`
-              : "Neue Vorschläge sind vorausgewählt."}
+            {running
+              ? "Die Vorschläge treffen live ein — am Ende werden Dubletten gefiltert."
+              : duplicates > 0
+                ? duplicates === 1
+                  ? "1 Vorschlag ähnelt bereits vorhandenen Einträgen und ist abgewählt."
+                  : `${duplicates} Vorschläge ähneln bereits vorhandenen Einträgen und sind abgewählt.`
+                : "Neue Vorschläge sind vorausgewählt."}
           </p>
           <button
             type="button"
@@ -119,6 +152,12 @@ export function WorldExtractDialog({
         </div>
 
         <div className="mt-3 flex-1 space-y-2 overflow-y-auto pr-1">
+          {running && candidates.length === 0 ? (
+            <p className="flex items-center gap-2 rounded-xl border border-brand-cyan/20 bg-brand-cyan/5 px-3.5 py-3 text-xs text-brand-cyan">
+              <Loader2 className="size-3.5 animate-spin" />
+              Sammelt Vorschläge…
+            </p>
+          ) : null}
           {candidates.map(({ entry, similarTo }) => {
             const isSelected = !rejected.has(entry.id);
             return (
@@ -174,12 +213,13 @@ export function WorldExtractDialog({
               variant="ghost"
               className="rounded-xl text-muted-foreground hover:text-foreground"
               onClick={onClose}
+              disabled={running}
             >
               Abbrechen
             </Button>
             <Button
               onClick={() => onAccept(selected)}
-              disabled={selected.length === 0}
+              disabled={running || selected.length === 0}
               className="rounded-xl bg-gradient-to-r from-brand-cyan to-brand-indigo px-5 font-semibold text-white disabled:opacity-50"
             >
               {selected.length} übernehmen

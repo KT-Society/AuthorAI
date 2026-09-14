@@ -24,12 +24,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 import type { Book } from "@/data/author";
-import { WORLD_CATEGORIES, entriesFromStoryWorld } from "@/data/world";
+import type { StoryWorld } from "@/data/story";
+import { WORLD_CATEGORIES, entriesFromStoryWorld, entryFromWorldItem } from "@/data/world";
 import type { WorldCategory, WorldEntry } from "@/data/world";
 import { readLanguage, readStageModel } from "@/lib/generationSettings";
 import { showToast } from "@/lib/toast";
-import { dedupeWorldEntries, findMatchingEntry } from "@/lib/worldMatch";
-import { extractWorld } from "@/services/story";
+import { dedupeWorldEntries, findMatchingEntry, normalizeWorldTitle } from "@/lib/worldMatch";
+import { streamWorldExtract } from "@/services/story";
 
 import { Badge, EmptyState, Panel, ViewHeader } from "./primitives";
 import { WORLD_CATEGORY_TONE, WorldExtractDialog } from "./WorldExtractDialog";
@@ -70,6 +71,25 @@ export function WorldView({
 
   const bookTitle = (id?: string) => books.find((book) => book.id === id)?.title;
 
+  /**
+   * Baut Review-Vorschläge aus einem fertigen Welt-Objekt — inklusive Dublettenschutz gegen
+   * Vorhandenes und gegen sich selbst. Nur nötig, wenn **nichts** live ankam (das Modell hat
+   * statt JSONL ein JSON-Dokument geliefert).
+   */
+  const buildCandidates = (world: StoryWorld, bookId: string): WorldCandidate[] => {
+    const prepared: WorldCandidate[] = [];
+    for (const candidate of entriesFromStoryWorld(world, bookId)) {
+      const match =
+        findMatchingEntry(candidate, entries) ??
+        findMatchingEntry(
+          candidate,
+          prepared.map((item) => item.entry),
+        );
+      prepared.push(match ? { entry: candidate, similarTo: match.title } : { entry: candidate });
+    }
+    return prepared;
+  };
+
   const runExtract = async () => {
     const book = books.find((item) => item.id === deriveBookId);
     if (!book?.storyboard) {
@@ -83,35 +103,61 @@ export function WorldView({
     }
     setError(null);
     setBusy(true);
+    // Dialog sofort öffnen — die Vorschläge wachsen live hinein.
+    setCandidates([]);
+    const prepared: WorldCandidate[] = [];
     try {
-      const world = await extractWorld({
-        storyboard: book.storyboard,
-        model,
-        language: readLanguage() ?? "German",
-        knownEntries: entries
-          .filter((entry) => (entry.bookId ?? "") === book.id)
-          .map((entry) => ({ title: entry.title, category: entry.category })),
-      });
+      const knownEntries = entries
+        .filter((entry) => (entry.bookId ?? "") === book.id)
+        .map((entry) => ({ title: entry.title, category: entry.category }));
 
-      // Vorschläge gegen Vorhandenes UND gegen sich selbst prüfen (Dublettenschutz).
-      const prepared: WorldCandidate[] = [];
-      for (const candidate of entriesFromStoryWorld(world, book.id)) {
-        const match =
-          findMatchingEntry(candidate, entries) ??
-          findMatchingEntry(
-            candidate,
-            prepared.map((item) => item.entry),
-          );
-        prepared.push(match ? { entry: candidate, similarTo: match.title } : { entry: candidate });
-      }
+      const world = await streamWorldExtract(
+        {
+          storyboard: book.storyboard,
+          model,
+          language: readLanguage() ?? "German",
+          knownEntries,
+        },
+        {
+          onEntry: (category, item) => {
+            const entry = entryFromWorldItem(category, item, book.id);
+            if (!entry.title) return;
+            // Vorschläge gegen Vorhandenes UND gegen sich selbst prüfen (Dublettenschutz).
+            const match =
+              findMatchingEntry(entry, entries) ??
+              findMatchingEntry(
+                entry,
+                prepared.map((item) => item.entry),
+              );
+            prepared.push(match ? { entry, similarTo: match.title } : { entry });
+            setCandidates([...prepared]);
+          },
+        },
+      );
 
-      if (prepared.length === 0) {
+      // Abschluss: Der Server hat dedupliziert. Die **live erzeugten** Einträge behalten (so
+      // bleiben IDs und damit die Auswahl des Nutzers stabil) und nur die weglassen, die es im
+      // validierten Ergebnis nicht mehr gibt.
+      const validKeys = new Set(
+        entriesFromStoryWorld(world, book.id).map(
+          (entry) => `${entry.category}:${normalizeWorldTitle(entry.title)}`,
+        ),
+      );
+      const confirmed = prepared.filter((item) =>
+        validKeys.has(`${item.entry.category}:${normalizeWorldTitle(item.entry.title)}`),
+      );
+      // Nichts live angekommen? Dann aus dem validierten Welt-Objekt bauen.
+      const final = prepared.length === 0 ? buildCandidates(world, book.id) : confirmed;
+
+      if (final.length === 0) {
+        setCandidates(null);
         setError("Keine neuen Welteneinträge gefunden (alles bereits vorhanden).");
         return;
       }
-      setCandidates(prepared);
+      setCandidates(final);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
+      setCandidates(prepared.length > 0 ? [...prepared] : null);
     } finally {
       setBusy(false);
     }
@@ -374,6 +420,7 @@ export function WorldView({
       <WorldExtractDialog
         open={candidates !== null}
         candidates={candidates ?? []}
+        running={busy}
         bookTitle={books.find((book) => book.id === deriveBookId)?.title ?? ""}
         onClose={() => setCandidates(null)}
         onAccept={acceptCandidates}

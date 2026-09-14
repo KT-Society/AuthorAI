@@ -90,6 +90,7 @@ Soul-Prompt.
 
 Leitet benannte Figuren aus dem **Manuskript** ab — inklusive Figuren, die erst beim Schreiben
 auftauchen und im Storyboard nie standen. Bereits getrackte Namen werden serverseitig gefiltert.
+Live-Variante: `POST /api/characters/extract/stream` (JSONL, siehe Abschnitt „Streaming für Prüfungen & Extraktionen").
 
 **Request**
 
@@ -414,6 +415,30 @@ data: {"type":"error","error":"…"}              ← Fehler nach dem Start (HTT
 Fehlende Idee oder fehlendes Model → **HTTP 400 vor dem Stream**. Die nicht-streamende Route
 bleibt unverändert bestehen.
 
+### Streaming für Prüfungen & Extraktionen (JSONL)
+
+Vier Routen haben eine `…/stream`-Variante, die das Modell um **JSONL** bittet (ein Objekt pro
+Zeile). Jeder fertige Eintrag kommt sofort als eigenes Ereignis, am Ende folgt die **validierte**
+Fassung — identisch zum Nicht-Streaming-Ergebnis (gleiche Normalisierung, Filterung, Dedupe).
+
+```json
+data: {"type":"finding","finding":{"chapter":2,"scene":1,"issue":"…","fix":"…"}}
+data: {"type":"done","summary":"…","findings":[ … ]}
+```
+
+| Route | Ereignisse | `done`-Feld |
+| --- | --- | --- |
+| `POST /api/timeline/check/stream` | `finding` (je Befund) | `summary`, `findings` |
+| `POST /api/timeline/repair/stream` | `chapter` (`raw`: Kapitel-Vorschlag) | `fixes`, `notes` |
+| `POST /api/world/extract/stream` | `entry` (`category`, `name`, `description`) | `world` |
+| `POST /api/characters/extract/stream` | `character` (`{name, role, description}`) | `characters` |
+
+Body und Validierung entsprechen exakt der jeweiligen Nicht-Streaming-Route. Die **Live-Objekte
+sind Rohdaten des Modells** und damit ungeprüft (z. B. kann eine genannte Szene außerhalb des
+Kapitels liegen oder ein Kapitel fehlen); verbindlich ist ausschließlich der `done`-Inhalt.
+Liefert das Modell trotzdem ein einzelnes JSON-Dokument, greift derselbe Weg wie ohne Streaming
+(dann kommen nur `done`-Ereignisse).
+
 ---
 
 ### `POST /api/chapter/draft`
@@ -515,6 +540,7 @@ Chronologische Prüfung über alle Kapitel/Szenen (nutzt konzeptionell das Kohä
 `findings` ist leer, wenn die Chronologie konsistent ist. `chapter`/`scene` sind **1-basiert**,
 `chapter: 0` heißt „nicht zuordenbar", `scene` fehlt bei kapitelweiten Problemen. Antworten mit
 reinen Strings werden weiterhin akzeptiert (die Kapitelnummer wird dann aus dem Text gelesen).
+Live-Variante: `POST /api/timeline/check/stream` (JSONL, Befunde einzeln — siehe Abschnitt „Streaming für Prüfungen & Extraktionen").
 
 ### `POST /api/timeline/repair`
 
@@ -549,6 +575,7 @@ meldet **nur tatsächliche Änderungen** zurück.
 In `scenes` stehen **nur die geänderten Felder** — fehlt `time`, bleibt die Zeit; fehlt `text`,
 bleibt der Szenen-Text. Unbekannte Kapitel/Szenen und unveränderte Werte werden verworfen (leeres
 `fixes` = nichts zu tun). Keine Befunde oder fehlendes Model → **HTTP 400** (vor dem Modell-Aufruf).
+Live-Variante: `POST /api/timeline/repair/stream` (JSONL, ein Ereignis je Kapitel — siehe Abschnitt „Streaming für Prüfungen & Extraktionen").
 
 ---
 
@@ -559,6 +586,7 @@ bleibt der Szenen-Text. Unbekannte Kapitel/Szenen und unveränderte Werte werden
 Leitet Orte, Fraktionen, Magie, Artefakte und Lore aus einem vorhandenen Storyboard ab.
 Bereits getrackte Einträge (optional in `knownEntries`) schickt der Server ins Modell und filtert
 sie zusätzlich aus der Antwort — so entstehen bei wiederholten Scans keine Dubletten.
+Live-Variante: `POST /api/world/extract/stream` (JSONL, Vorschlag für Vorschlag — siehe Abschnitt „Streaming für Prüfungen & Extraktionen").
 
 ```json
 {

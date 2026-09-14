@@ -169,8 +169,12 @@ export async function chatCompletionStream(
     throw new ApiError(await providerError(endpoint.label, response), 502);
   }
   if (!response.body) {
-    // Kein Stream verfügbar → normaler Aufruf (ohne Vorschau).
-    return chatCompletionDetailed({ ...options, cache: false });
+    // Kein Stream verfügbar → normaler Aufruf. Wichtig: Der Callback muss **trotzdem** bedient
+    // werden — sonst sehen JSONL-Sammler (Prüfungen/Extraktionen) nichts, obwohl die Antwort
+    // vollständig vorliegt, und Prosa-Vorschauen blieben leer.
+    const result = await chatCompletionDetailed({ ...options, cache: false });
+    if (result.content) onDelta(result.content);
+    return result;
   }
 
   const reader = response.body.getReader();
@@ -217,8 +221,12 @@ export async function chatCompletionStream(
   if (buffer.trim().length > 0) consume(buffer);
 
   if (content.trim().length === 0) {
-    // Stream war leer (Provider ohne SSE-Inhalt) → normaler Aufruf.
-    return chatCompletionDetailed({ ...options, cache: false });
+    // Stream war leer (Provider ohne SSE-Inhalt, z. B. normales JSON statt `data:`-Rahmen) →
+    // normaler Aufruf. Auch hier den Callback bedienen, damit alle Konsumenten denselben
+    // „Strom" sehen (ein Stück am Ende) und nichts verloren geht.
+    const result = await chatCompletionDetailed({ ...options, cache: false });
+    if (result.content) onDelta(result.content);
+    return result;
   }
   return { content, finishReason };
 }

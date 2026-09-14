@@ -212,7 +212,9 @@ jede gelistete Figur in ihrer Szene auftreten lassen und das Wortziel berücksic
 **Timeline-Prüfung** (`POST /api/timeline/check`) liest dieselben Angaben für das ganze Buch
 und meldet chronologische Probleme (Rückwärtssprünge, unplausible Reise-/Vorbereitungszeiten,
 Tag/Nacht, Daten/Dauern, fehlende Zeiten). Ergebnis: Kurzfassung + Befundliste im Dialog.
-Sie nutzt das **Kohärenz-Model**.
+Sie nutzt das **Kohärenz-Model**. Gestreamt über `…/check/stream`: **JSONL**, ein Befund pro
+Zeile — die Hinweise erscheinen live im Dialog, während geprüft wird (der Lauf liest das ganze
+Buch und dauert entsprechend).
 
 Befunde sind **strukturiert** (`{ chapter, scene, issue, fix }`, 1-basiert; `chapter: 0` =
 nicht zuordenbar). Das ist die Grundlage für die Markierung der betroffenen Kapitel **und** für die
@@ -230,6 +232,10 @@ automatisch neu. **Kein** Versions-Snapshot: die Kapitel-Version enthält nur Ro
 der Fix ändert aber die Struktur — die Sicherung ist die Vorschau.
 Probleme, die der Check **nicht** sieht: Widersprüche, die nur im Fließtext stehen (dafür ist die
 Kohärenz-Prüfung da).
+
+Gestreamt über `…/repair/stream` (JSONL, ein Kapitel pro Zeile): Die Vorschau öffnet sofort und
+füllt sich, Kapitel für Kapitel. Die Live-Objekte sind **ungeprüft** — Übernehmen ist deshalb bis
+zum Ende gesperrt; verbindlich ist die validierte Fassung des Abschlusses.
 
 ---
 
@@ -328,8 +334,14 @@ werden in der jeweiligen Ansicht angestoßen und nutzen das **Storyboard-Modell*
 
 | Ableitung | Quelle | Route | Ergebnis |
 | --- | --- | --- | --- |
-| **Weltenbau** | Storyboard | `POST /api/world/extract` | Orte, Fraktionen, Magie, Artefakte, Lore |
-| **Figuren** | **Manuskript** | `POST /api/characters/extract` | benannte Figuren (Name, Rolle, Beschreibung) |
+| **Weltenbau** | Storyboard | `POST /api/world/extract` · Stream: `/api/world/extract/stream` | Orte, Fraktionen, Magie, Artefakte, Lore |
+| **Figuren** | **Manuskript** | `POST /api/characters/extract` · Stream: `/api/characters/extract/stream` | benannte Figuren (Name, Rolle, Beschreibung) |
+
+**Live-Vorschläge:** Beide Routen haben eine JSONL-Stream-Variante. Der Review-Dialog öffnet
+sofort und füllt sich, während das Modell arbeitet („sammelt…"); jeder Vorschlag kommt einzeln,
+am Ende ersetzt die **validierte** Fassung die Live-Liste (gleiche Filterung und Dedupe wie im
+Nicht-Streaming-Weg). Übernehmen ist bis dahin gesperrt — geschrieben wird nie ein ungeprüfter
+Zwischenstand.
 
 **Warum Figuren aus dem Manuskript?** Die Storyboard-Figuren entstehen aus der *Idee* — Figuren,
 die erst beim Schreiben auftauchen (Nebenfiguren, Auftraggeber, Gegenspieler), kennt es nicht.

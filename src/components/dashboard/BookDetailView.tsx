@@ -83,8 +83,13 @@ import { buildEpub } from "@/lib/epub";
 import { buildMarkdown } from "@/lib/markdown";
 import { buildPdf } from "@/lib/pdf";
 import { buildCoverPrompt, deleteCover, generateCover } from "@/services/cover";
-import { checkTimeline, repairTimeline, streamPass } from "@/services/story";
-import type { PassResult, TimelineFinding, TimelineResult } from "@/services/story";
+import { streamTimelineCheck, streamTimelineRepair, streamPass } from "@/services/story";
+import type {
+  PassResult,
+  TimelineFinding,
+  TimelineRepairFix,
+  TimelineResult,
+} from "@/services/story";
 import { checkCanon, streamCanonCheck, streamCanonRepair } from "@/services/continuity";
 import type {
   CanonCheckResult,
@@ -1283,42 +1288,35 @@ export function BookDetailView({
     return model;
   };
 
-  const runTimelineCheck = async (): Promise<TimelineResult> => {
+  /**
+   * Timeline-Prüfung, gestreamt: Befunde erscheinen live im Dialog. `onFinding` reicht sie
+   * sofort hoch; das zurückgegebene (normalisierte) Ergebnis ersetzt am Ende die Live-Liste.
+   */
+  const runTimelineCheck = async (handlers: {
+    onFinding: (finding: TimelineFinding) => void;
+  }): Promise<TimelineResult> => {
     if (!book.storyboard) {
       throw new Error("Kein Storyboard vorhanden — Timeline-Prüfung nicht möglich.");
     }
-    return checkTimeline({
-      storyboard: book.storyboard,
-      scenesByChapter: manuscript.map((_, index) => scenesFor(index)),
-      model: timelineModel(),
-      language,
-      canon,
-    });
+    return streamTimelineCheck(
+      {
+        storyboard: book.storyboard,
+        scenesByChapter: manuscript.map((_, index) => scenesFor(index)),
+        model: timelineModel(),
+        language,
+        canon,
+      },
+      { onFinding: handlers.onFinding },
+    );
   };
 
-  /**
-   * Timeline-Quick-Fix: Der Server korrigiert die **Struktur** (Szenen-Zeit/Schauplatz/Text) —
-   * genau die Daten, die die Prüfung liest. Hier wird **nichts** geschrieben: der Dialog zeigt
-   * daraus die Vorschau; erst `applyTimelineRepairs` übernimmt die bestätigten Kapitel.
-   */
-  const runTimelineRepair = async (
-    findings: TimelineFinding[],
-  ): Promise<TimelineRepairChange[]> => {
-    if (!book.storyboard) {
-      throw new Error("Kein Storyboard vorhanden — Timeline-Korrektur nicht möglich.");
-    }
-    const scenesByChapter = manuscriptRef.current.map((_, index) => scenesFor(index));
-    const result = await repairTimeline({
-      storyboard: book.storyboard,
-      scenesByChapter,
-      findings,
-      model: timelineModel(),
-      language,
-      canon,
-    });
-
+  /** Baut aus einem (validierten **oder** live eingetroffenen) Fix die Vorschau-Änderung. */
+  const toTimelineChanges = (
+    fixes: TimelineRepairFix[],
+    scenesByChapter: SceneConstraint[][],
+  ): TimelineRepairChange[] => {
     const changes: TimelineRepairChange[] = [];
-    for (const fix of result.fixes) {
+    for (const fix of fixes) {
       const chapterIndex = fix.chapter - 1;
       const chapter = manuscriptRef.current[chapterIndex];
       if (!chapter) continue;
@@ -1351,8 +1349,41 @@ export function BookDetailView({
         });
       }
     }
-    if (result.notes.length > 0) showToast(result.notes[0]!, "info");
     return changes;
+  };
+
+  /**
+   * Timeline-Quick-Fix: Der Server korrigiert die **Struktur** (Szenen-Zeit/Schauplatz/Text) —
+   * genau die Daten, die die Prüfung liest. Hier wird **nichts** geschrieben: der Dialog zeigt
+   * daraus die Vorschau (live füllend); erst `applyTimelineRepairs` übernimmt bestätigte Kapitel.
+   */
+  const runTimelineRepair = async (
+    findings: TimelineFinding[],
+    handlers: { onChapter: (change: TimelineRepairChange) => void },
+  ): Promise<TimelineRepairChange[]> => {
+    if (!book.storyboard) {
+      throw new Error("Kein Storyboard vorhanden — Timeline-Korrektur nicht möglich.");
+    }
+    const scenesByChapter = manuscriptRef.current.map((_, index) => scenesFor(index));
+    const result = await streamTimelineRepair(
+      {
+        storyboard: book.storyboard,
+        scenesByChapter,
+        findings,
+        model: timelineModel(),
+        language,
+        canon,
+      },
+      {
+        onChapter: (fix) => {
+          const [change] = toTimelineChanges([fix], scenesByChapter);
+          if (change) handlers.onChapter(change);
+        },
+      },
+    );
+
+    if (result.notes.length > 0) showToast(result.notes[0]!, "info");
+    return toTimelineChanges(result.fixes, scenesByChapter);
   };
 
   /**

@@ -7,6 +7,7 @@
 
 import { ApiError } from "@promptgen/server/api";
 
+import { createJsonlConsumer, jsonlFormatBlock } from "./jsonl";
 import {
   FACT_KINDS,
   RELATION_KINDS,
@@ -300,22 +301,6 @@ export interface ContinuityItemEvent {
   raw: Record<string, unknown>;
 }
 
-/** Streift Aufzählungs-/Array-Reste ab, damit auch halb-JSONL noch lesbar ist. */
-function parseStreamLine(raw: string): Record<string, unknown> | null {
-  const line = raw
-    .trim()
-    .replace(/^```(?:json)?/i, "")
-    .replace(/^[,[\]]+/, "")
-    .replace(/[,\]]+$/, "")
-    .trim();
-  if (!line.startsWith("{")) return null;
-  try {
-    return JSON.parse(line) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
 /** Ordnet eine Zeile als Fakt oder Beziehung ein. */
 function classifyItem(obj: Record<string, unknown>): ContinuityItemEvent | null {
   const tag = typeof obj.t === "string" ? obj.t : typeof obj.kind === "string" ? "" : "";
@@ -332,12 +317,11 @@ function classifyItem(obj: Record<string, unknown>): ContinuityItemEvent | null 
 function continuityStreamSystem(language: string): string {
   return `${continuitySystem(language)}
 
-STREAMING FORMAT — CRITICAL:
-Instead of one JSON document, output **one JSON object per line** (JSONL, newline-delimited):
-{"t":"fact","entity":"…","entityType":"character","kind":"history","statement":"…","establishedIn":"Kapitel 2","hard":false}
-{"t":"relation","from":"…","to":"…","kind":"distrust","intensity":-0.6,"note":"…","secret":false,"establishedIn":"Kapitel 5"}
-Rules: no array brackets, no commas between lines, one object per line, nothing else on the line.
-Write each object as soon as you are sure about it, then continue with the next line.`;
+${jsonlFormatBlock(
+    language,
+    `{"t":"fact","entity":"…","entityType":"character","kind":"history","statement":"…","establishedIn":"Kapitel 2","hard":false}
+{"t":"relation","from":"…","to":"…","kind":"distrust","intensity":-0.6,"note":"…","secret":false,"establishedIn":"Kapitel 5"}`,
+  )}`;
 }
 
 /** Extrahiert live: jedes fertige JSONL-Objekt wird sofort gemeldet und am Ende gemeinsam validiert. */
@@ -347,17 +331,14 @@ export async function extractContinuityStream(
 ): Promise<ExtractedContinuity> {
   const facts: unknown[] = [];
   const relations: unknown[] = [];
-  let buffer = "";
 
-  const consumeLine = (line: string) => {
-    const parsed = parseStreamLine(line);
-    if (!parsed) return;
+  const consumer = createJsonlConsumer((parsed) => {
     const item = classifyItem(parsed);
     if (!item) return;
     if (item.type === "fact") facts.push(parsed);
     else relations.push(parsed);
     handlers.onItem?.(item);
-  };
+  });
 
   const { content } = await chatCompletionStream(
     {
@@ -369,17 +350,9 @@ Extract the facts and relationships now as JSONL (one object per line), entirely
       maxTokens: 4000,
       temperature: 0.3,
     },
-    (delta) => {
-      buffer += delta;
-      let newline = buffer.indexOf("\n");
-      while (newline !== -1) {
-        consumeLine(buffer.slice(0, newline));
-        buffer = buffer.slice(newline + 1);
-        newline = buffer.indexOf("\n");
-      }
-    },
+    consumer.push,
   );
-  if (buffer.trim().length > 0) consumeLine(buffer);
+  consumer.flush();
 
   // Nichts als JSONL erkannt? Dann hat das Modell normales JSON geliefert → damit arbeiten.
   if (facts.length === 0 && relations.length === 0) {

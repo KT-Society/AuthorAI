@@ -322,11 +322,19 @@ Zusätzlich erzeugt die Shell bei Änderungen **Notifications** und erhöht die 
 - **Lokale Datenbank, kein Cloud-Store:** Inhalte liegen nutzer-lokal in SQLite; es gibt
   keine Konten und kein Sync.
 - **Streaming, wo es zählt:** lange Antworten (Rohentwurf, Ausbau, Kohärenz, Stil) und
-  Analysen (Fakten-Check, Extraktion) laufen als SSE mit Live-Vorschau; beim Ausbau streamen
-  **auch** die Fortsetzungen des Continuation-Loops, damit die Vorschau bis zum Kapitelende
-  mitwächst. Das Job-Center nennt für den laufenden Stream zusätzlich Teil und Wortstand
-  (`Job.detail`, gedrosselt geschrieben). Erzeugt wird weiterhin robust, unterbrechbar und pro
-  Kapitel persistiert.
+  Analysen (Fakten-Check, Extraktion von Figuren, Welt und Kontinuität) laufen als SSE mit
+  Live-Vorschau; beim Ausbau streamen **auch** die Fortsetzungen des Continuation-Loops, damit
+  die Vorschau bis zum Kapitelende mitwächst. Das Job-Center nennt für den laufenden Stream
+  zusätzlich Teil und Wortstand (`Job.detail`, gedrosselt geschrieben). Erzeugt wird weiterhin
+  robust, unterbrechbar und pro Kapitel persistiert.
+- **Zwei Streaming-Muster:** *Prosa* kommt als `delta`-Strom (Rohentwurf, Ausbau, Pässe);
+  *Listen* (Befunde, Vorschläge, Korrekturen) kommen als **JSONL** — ein Objekt pro Zeile, das
+  der Server sofort weiterreicht (`server/jsonl.ts`) und am Ende als validierte Fassung liefert.
+  Rohes JSON als Vorschau wäre wertlos, deshalb schicken diese Routen **keine** Text-Deltas.
+- **Anbieter ohne SSE:** `chatCompletionStream` holt die Antwort dann über einen normalen Aufruf
+  nach und bedient den Callback mit **einem** Stück (`server/llm.ts`). Dadurch funktionieren
+  Vorschauen und JSONL-Sammler auch dort; die JSONL-Routen verarbeiten den fertigen Text
+  zusätzlich nachträglich, bevor sie auf ein JSON-Dokument zurückfallen.
 - **Modellabhängige Qualität:** Länge/Sprache hängen vom Modell ab; der Server fängt das
   mit Continuation-Loops, Language-Lock und Prüfberichten ab (siehe `pipeline.md`).
 - **Meta (Einstellungen) sind geräteweit**, nicht pro Profil.

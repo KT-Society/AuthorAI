@@ -26,9 +26,16 @@ export function TimelineDialog({
 }: {
   open: boolean;
   entries: TimelineEntry[];
-  onCheck: () => Promise<TimelineResult>;
-  /** Quick Fix: liefert die vorgeschlagenen Änderungen — geschrieben wird erst nach Bestätigung. */
-  onRepair?: (findings: TimelineFinding[]) => Promise<TimelineRepairChange[]>;
+  /** Prüft die Chronologie — `onFinding` meldet jeden Befund, sobald er eintrifft. */
+  onCheck: (handlers: { onFinding: (finding: TimelineFinding) => void }) => Promise<TimelineResult>;
+  /**
+   * Quick Fix: liefert die vorgeschlagenen Änderungen — geschrieben wird erst nach Bestätigung.
+   * `onChapter` meldet jeden Vorschlag live, während das Modell arbeitet.
+   */
+  onRepair?: (
+    findings: TimelineFinding[],
+    handlers: { onChapter: (change: TimelineRepairChange) => void },
+  ) => Promise<TimelineRepairChange[]>;
   /** Schreibt die bestätigten Kapitel-Korrekturen. */
   onApplyRepairs?: (changes: TimelineRepairChange[]) => void;
   onClose: () => void;
@@ -48,7 +55,15 @@ export function TimelineDialog({
   const run = () => {
     setBusy(true);
     setError(null);
-    onCheck()
+    // Leeres Ergebnis vorlegen: die Befunde wachsen dann live hinein.
+    setResult({ summary: "", findings: [] });
+    onCheck({
+      onFinding: (finding) =>
+        setResult((prev) => ({
+          summary: prev?.summary ?? "",
+          findings: [...(prev?.findings ?? []), finding],
+        })),
+    })
       .then((value) => setResult(value))
       .catch((err) => setError(err instanceof Error ? err.message : "Unbekannter Fehler."))
       .finally(() => setBusy(false));
@@ -78,20 +93,29 @@ export function TimelineDialog({
   const findings = result?.findings ?? [];
   const isFlagged = (chapterNumber: number) => findings.some((f) => f.chapter === chapterNumber);
 
-  /** Quick Fix starten: Vorschlag holen, nichts schreiben. */
+  /** Quick Fix starten: Vorschau sofort öffnen, Vorschläge live einsammeln — nichts schreiben. */
   const startRepair = async () => {
     if (!onRepair || findings.length === 0) return;
     setRepairing(true);
     setError(null);
+    setPending([]);
     try {
-      const changes = await onRepair(findings);
+      const changes = await onRepair(findings, {
+        onChapter: (change) =>
+          setPending((prev) => (prev ?? []).some((item) => item.chapterIndex === change.chapterIndex)
+            ? prev
+            : [...(prev ?? []), change]),
+      });
       if (changes.length === 0) {
+        setPending(null);
         showToast("Keine Änderung vorgeschlagen — bitte einen Blick auf die Hinweise werfen.", "info");
       } else {
+        // Verbindlich ist die validierte Fassung aus dem Abschluss.
         setPending(changes);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
+      setPending(null);
     } finally {
       setRepairing(false);
     }
@@ -107,7 +131,7 @@ export function TimelineDialog({
     showToast(
       chosen.length === 1
         ? `Timeline-Korrektur in Kapitel ${chosen[0]!.chapterIndex + 1} übernommen`
-        :       `Timeline-Korrektur in ${chosen.length} Kapiteln übernommen`,
+        : `Timeline-Korrektur in ${chosen.length} Kapiteln übernommen`,
       "ok",
     );
     // Direkt nachprüfen: zeigt, was jetzt noch offen ist.
@@ -172,7 +196,7 @@ export function TimelineDialog({
                 <>
                   <p className="mb-2 inline-flex items-center gap-2 text-xs font-semibold text-brand-amber">
                     <AlertTriangle className="size-3.5" />
-                    {findings.length} Hinweis(e)
+                    {findings.length} Hinweis(e){busy ? " · sammelt…" : ""}
                   </p>
                   <ul className="space-y-1.5 text-sm">
                     {findings.map((finding, index) => (
@@ -193,7 +217,7 @@ export function TimelineDialog({
                     ))}
                   </ul>
                 </>
-              ) : (
+              ) : busy ? null : (
                 <p className="inline-flex items-center gap-2 text-sm text-brand-emerald">
                   <CheckCircle2 className="size-4" />
                   {result.summary || "Keine Widersprüche gefunden."}
@@ -274,6 +298,7 @@ export function TimelineDialog({
       <TimelineRepairPreviewDialog
         open={Boolean(pending)}
         changes={pending ?? []}
+        running={repairing}
         onApply={applyPending}
         onDiscard={discardPending}
       />

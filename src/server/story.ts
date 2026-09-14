@@ -41,6 +41,7 @@ import {
 import { extractProse, looksTruncated } from "../lib/prose";
 import { filterNoOpNotes } from "../lib/passNotes";
 import { normalizeWorldTitle } from "../lib/worldMatch";
+import { consumeJsonlText, createJsonlConsumer, jsonlFormatBlock } from "./jsonl";
 
 export interface StoryboardInput {
   idea: string;
@@ -1210,7 +1211,8 @@ function timelineListing(storyboard: Storyboard, scenesByChapter: SceneConstrain
     .join("\n\n");
 }
 
-function timelineSystem(language: string): string {
+/** Prüfauftrag + Feldregeln — von JSON- und JSONL-Variante **geteilt** (kein Auseinanderdriften). */
+function timelineCheckBrief(language: string): string {
   return `You are a continuity editor specialised in chronology.
 ${languageLock(language)}
 
@@ -1221,6 +1223,17 @@ TASK: check the chapter/scene timeline for contradictions and impossibilities:
 - ages, dates or durations that do not add up
 - scenes whose stated time is missing or clashes with the chapter summary
 
+FIELDS:
+- chapter: the 1-based chapter number from the listing. Use 0 ONLY if the problem cannot be tied to one chapter.
+- scene: the 1-based scene number inside that chapter, or null when the problem spans scenes.
+- issue: one short, concrete sentence naming what contradicts what (mention the numbers).
+- fix: the concrete repair in the timeline data (which time/setting/order must change) — not prose advice.
+- summary: one sentence about the overall chronology; if it is consistent, say so explicitly.
+`;
+}
+
+function timelineSystem(language: string): string {
+  return `${timelineCheckBrief(language)}
 Respond ONLY with a single valid JSON object:
 {
   "summary": string,
@@ -1229,12 +1242,30 @@ Respond ONLY with a single valid JSON object:
   ]
 }
 Rules:
-- chapter: the 1-based chapter number from the listing. Use 0 ONLY if the problem cannot be tied to one chapter.
-- scene: the 1-based scene number inside that chapter, or null when the problem spans scenes.
-- issue: one short, concrete sentence naming what contradicts what (mention the numbers).
-- fix: the concrete repair in the timeline data (which time/setting/order must change) — not prose advice.
 - If the chronology is consistent, findings MUST be an empty array and the summary should say so.
 - All text in ${language}.`;
+}
+
+function timelineStreamSystem(language: string): string {
+  return `${timelineCheckBrief(language)}
+${jsonlFormatBlock(
+    language,
+    `{"t":"finding","chapter":2,"scene":1,"issue":"…","fix":"…"}
+{"t":"summary","summary":"…"}`,
+  )}
+Rules:
+- One line per problem: {"t":"finding","chapter":…,"scene":…,"issue":…,"fix":…}.
+- Emit the summary as the LAST line: {"t":"summary","summary":"…"}.
+- If the chronology is consistent, emit ONLY that summary line.
+- All text in ${language}.`;
+}
+
+/** Ergebnis-Normalisierung, die **beide** Wege (JSON und JSONL) verwenden. */
+function timelineResult(parsed: Record<string, unknown>): TimelineResult {
+  return {
+    summary: str(parsed.summary),
+    findings: normalizeTimelineFindings(parsed.findings),
+  };
 }
 
 export async function checkTimeline(input: TimelineInput): Promise<TimelineResult> {
@@ -1259,10 +1290,72 @@ export async function checkTimeline(input: TimelineInput): Promise<TimelineResul
   }
 
   const parsed = parseJson(content, "Timeline");
-  return {
-    summary: str(parsed.summary),
-    findings: normalizeTimelineFindings(parsed.findings),
+  return timelineResult(parsed);
+}
+
+export interface TimelineStreamHandlers {
+  /** Ein fertiger Befund, sobald das Modell ihn geschrieben hat (live, noch nicht endgültig). */
+  onFinding?: (finding: TimelineFinding) => void;
+}
+
+/**
+ * Gestreamte Timeline-Prüfung: Das Modell liefert **eine JSON-Zeile pro Befund**, dadurch
+ * erscheinen die Hinweise live im Dialog, statt erst nach dem (bei langen Büchern spürbaren)
+ * Gesamtlauf. Am Ende kommt die normalisierte Fassung — dieselbe wie im Nicht-Streaming-Weg.
+ *
+ * Liefert das Modell trotzdem ein einzelnes JSON-Dokument, fällt der Server darauf zurück.
+ */
+export async function checkTimelineStream(
+  input: TimelineInput,
+  handlers: TimelineStreamHandlers = {},
+): Promise<TimelineResult> {
+  const listing = timelineListing(input.storyboard, input.scenesByChapter);
+  const rawFindings: unknown[] = [];
+  let summary = "";
+
+  /** `live` unterscheidet die Live-Meldung von der Nachverarbeitung des fertigen Textes. */
+  const collect = (parsed: Record<string, unknown>, live: boolean) => {
+    if (typeof parsed.issue === "string" && parsed.issue.trim()) {
+      rawFindings.push(parsed);
+      if (live) {
+        const finding = normalizeTimelineFindings([parsed])[0];
+        if (finding) handlers.onFinding?.(finding);
+      }
+      return;
+    }
+    if (typeof parsed.summary === "string" && parsed.summary.trim()) {
+      summary = parsed.summary.trim();
+    }
   };
+
+  const consumer = createJsonlConsumer((parsed) => collect(parsed, true));
+
+  const { content, finishReason } = await chatCompletionStream(
+    {
+      model: input.model,
+      system: timelineStreamSystem(input.language),
+      user: `TIMELINE:\n${listing}${input.canon?.trim() ? `\n\n${input.canon.trim()}` : ""}\n\nCheck the chronology now as JSONL (one object per line), entirely in ${input.language}.`,
+      maxTokens: 4000,
+      temperature: 0.3,
+    },
+    consumer.push,
+  );
+  consumer.flush();
+
+  if (finishReason === "length") {
+    throw new ApiError(
+      "Die Timeline-Prüfung wurde vom Token-Limit abgeschnitten. Bitte erneut versuchen oder ein Modell mit größerem Ausgabelimit wählen.",
+      502,
+    );
+  }
+
+  // Kam nichts live an (Provider ohne echte Textstücke)? Dann den fertigen Text nachverarbeiten.
+  if (rawFindings.length === 0 && summary.length === 0) {
+    consumeJsonlText(content, (parsed) => collect(parsed, false));
+  }
+
+  if (rawFindings.length === 0) return timelineResult(parseJson(content, "Timeline"));
+  return { summary, findings: normalizeTimelineFindings(rawFindings) };
 }
 
 /* ─────────────────────── timeline quick fix (Chronologie) ─────────────────────── */
@@ -1300,7 +1393,8 @@ export interface TimelineRepairResult {
   notes: string[];
 }
 
-function timelineRepairSystem(language: string): string {
+/** Korrekturauftrag + Regeln — von JSON- und JSONL-Variante **geteilt**. */
+function timelineRepairBrief(language: string): string {
   return `You are a continuity editor repairing chronology in a story plan.
 ${languageLock(language)}
 
@@ -1318,7 +1412,26 @@ RULES:
 - Do NOT reorder, add or delete scenes, and do NOT change the story's outcome.
 - Keep the wording of a repaired scene as close to the original as possible.
 - Lists in the scene text stay lists; keep the same language and style.
+`;
+}
 
+/** Die zu reparierenden Probleme als Text — Prüfung und Korrektur nutzen dieselbe Aufbereitung. */
+function timelineProblemList(findings: TimelineFinding[]): string {
+  return findings
+    .map((finding, index) => {
+      const where = [
+        finding.chapter > 0 ? `Kapitel ${finding.chapter}` : "Kapitel unbekannt",
+        finding.scene ? `Szene ${finding.scene}` : "",
+      ]
+        .filter(Boolean)
+        .join(", ");
+      return `${index + 1}. [${where}] PROBLEM: ${finding.issue}${finding.fix ? `\n   FIX: ${finding.fix}` : ""}`;
+    })
+    .join("\n");
+}
+
+function timelineRepairSystem(language: string): string {
+  return `${timelineRepairBrief(language)}
 Respond ONLY with a single valid JSON object:
 {
   "chapters": [
@@ -1335,47 +1448,29 @@ Rules:
 - All text in ${language}.`;
 }
 
+function timelineRepairStreamSystem(language: string): string {
+  return `${timelineRepairBrief(language)}
+${jsonlFormatBlock(
+    language,
+    `{"chapter":1,"note":"…","scenes":[{"scene":2,"time":"Tag 3"}]}
+{"t":"note","text":"…"}`,
+  )}
+Rules:
+- One line per repaired chapter: {"chapter":…,"note":…,"scenes":[{"scene":…,"time":…,"setting":…,"text":…}]}.
+- chapter / scene are the 1-based numbers from the listing below.
+- List a scene ONLY if you change it, and omit every field that stays the same.
+- Unrepairable problems go out as a final {"t":"note","text":"…"} line (optional).
+- All text in ${language}.`;
+}
+
 /**
- * Quick Fix für die Timeline: korrigiert die **Struktur** (Szenen-Zeit/Schauplatz/Text), die die
- * Chronologie-Prüfung liest — nicht die Prosa.
- *
- * Bewusst **ein** JSON-Aufruf: die Korrektur ist klein (ein paar Labels/Zeilen), und die Prüfung
- * liest die Struktur, nicht den Fließtext. Ergebnis wird gegen die echten Kapitel/Szenen geprüft:
- * unbekannte Nummern fliegen raus, unveränderte Werte werden gar nicht erst gemeldet.
+ * Validiert die Modellantwort gegen die echten Kapitel/Szenen und behält nur **echte**
+ * Änderungen. Beide Wege (JSON und JSONL) laufen hier durch — so sind sie garantiert gleich streng.
  */
-export async function repairTimeline(input: TimelineRepairInput): Promise<TimelineRepairResult> {
-  if (input.findings.length === 0) return { fixes: [], notes: [] };
-
-  const listing = timelineListing(input.storyboard, input.scenesByChapter);
-  const problemList = input.findings
-    .map((finding, index) => {
-      const where = [
-        finding.chapter > 0 ? `Kapitel ${finding.chapter}` : "Kapitel unbekannt",
-        finding.scene ? `Szene ${finding.scene}` : "",
-      ]
-        .filter(Boolean)
-        .join(", ");
-      return `${index + 1}. [${where}] PROBLEM: ${finding.issue}${finding.fix ? `\n   FIX: ${finding.fix}` : ""}`;
-    })
-    .join("\n");
-
-  const { content, finishReason } = await chatCompletionDetailed({
-    model: input.model,
-    system: timelineRepairSystem(input.language),
-    user: `TIMELINE:\n${listing}${input.canon?.trim() ? `\n\n${input.canon.trim()}` : ""}\n\nPROBLEMS TO REPAIR:\n${problemList}\n\nReturn the repair JSON now, entirely in ${input.language}.`,
-    json: true,
-    maxTokens: 3000,
-    temperature: 0.2,
-  });
-
-  if (finishReason === "length") {
-    throw new ApiError(
-      "Die Timeline-Korrektur wurde vom Token-Limit abgeschnitten. Bitte erneut versuchen oder ein Modell mit größerem Ausgabelimit wählen.",
-      502,
-    );
-  }
-
-  const parsed = parseJson(content, "Timeline-Korrektur");
+function timelineRepairResult(
+  parsed: Record<string, unknown>,
+  input: TimelineRepairInput,
+): TimelineRepairResult {
   const rawChapters = Array.isArray(parsed.chapters) ? parsed.chapters : [];
   const fixes: TimelineRepairFix[] = [];
 
@@ -1413,6 +1508,102 @@ export async function repairTimeline(input: TimelineRepairInput): Promise<Timeli
   return { fixes, notes: strArray(parsed.notes) };
 }
 
+/**
+ * Quick Fix für die Timeline: korrigiert die **Struktur** (Szenen-Zeit/Schauplatz/Text), die die
+ * Chronologie-Prüfung liest — nicht die Prosa.
+ *
+ * Bewusst **ein** JSON-Aufruf: die Korrektur ist klein (ein paar Labels/Zeilen), und die Prüfung
+ * liest die Struktur, nicht den Fließtext.
+ */
+export async function repairTimeline(input: TimelineRepairInput): Promise<TimelineRepairResult> {
+  if (input.findings.length === 0) return { fixes: [], notes: [] };
+
+  const listing = timelineListing(input.storyboard, input.scenesByChapter);
+  const problemList = timelineProblemList(input.findings);
+
+  const { content, finishReason } = await chatCompletionDetailed({
+    model: input.model,
+    system: timelineRepairSystem(input.language),
+    user: `TIMELINE:\n${listing}${input.canon?.trim() ? `\n\n${input.canon.trim()}` : ""}\n\nPROBLEMS TO REPAIR:\n${problemList}\n\nReturn the repair JSON now, entirely in ${input.language}.`,
+    json: true,
+    maxTokens: 3000,
+    temperature: 0.2,
+  });
+
+  if (finishReason === "length") {
+    throw new ApiError(
+      "Die Timeline-Korrektur wurde vom Token-Limit abgeschnitten. Bitte erneut versuchen oder ein Modell mit größerem Ausgabelimit wählen.",
+      502,
+    );
+  }
+
+  return timelineRepairResult(parseJson(content, "Timeline-Korrektur"), input);
+}
+
+export interface TimelineRepairStreamHandlers {
+  /** Ein vorgeschlagenes Kapitel, sobald es fertig ist (live, noch **unvalidiert**). */
+  onChapter?: (raw: Record<string, unknown>) => void;
+}
+
+/**
+ * Gestreamte Timeline-Korrektur: **eine JSON-Zeile pro Kapitel**. Die Vorschau kann damit schon
+ * öffnen und füllen, während das Modell arbeitet.
+ *
+ * Die Live-Objekte sind Rohdaten des Modells — verbindlich ist das Ergebnis dieser Funktion,
+ * das dieselbe Prüfung gegen die echten Kapitel/Szenen durchläuft wie der Nicht-Streaming-Weg.
+ */
+export async function repairTimelineStream(
+  input: TimelineRepairInput,
+  handlers: TimelineRepairStreamHandlers = {},
+): Promise<TimelineRepairResult> {
+  if (input.findings.length === 0) return { fixes: [], notes: [] };
+
+  const listing = timelineListing(input.storyboard, input.scenesByChapter);
+  const problemList = timelineProblemList(input.findings);
+  const rawChapters: unknown[] = [];
+  const notes: string[] = [];
+
+  const collect = (parsed: Record<string, unknown>, live: boolean) => {
+    if (positiveInt(parsed.chapter)) {
+      rawChapters.push(parsed);
+      if (live) handlers.onChapter?.(parsed);
+      return;
+    }
+    if (typeof parsed.text === "string" && parsed.text.trim()) notes.push(parsed.text.trim());
+  };
+
+  const consumer = createJsonlConsumer((parsed) => collect(parsed, true));
+
+  const { content, finishReason } = await chatCompletionStream(
+    {
+      model: input.model,
+      system: timelineRepairStreamSystem(input.language),
+      user: `TIMELINE:\n${listing}${input.canon?.trim() ? `\n\n${input.canon.trim()}` : ""}\n\nPROBLEMS TO REPAIR:\n${problemList}\n\nReturn the repair now as JSONL (one object per line), entirely in ${input.language}.`,
+      maxTokens: 3000,
+      temperature: 0.2,
+    },
+    consumer.push,
+  );
+  consumer.flush();
+
+  if (finishReason === "length") {
+    throw new ApiError(
+      "Die Timeline-Korrektur wurde vom Token-Limit abgeschnitten. Bitte erneut versuchen oder ein Modell mit größerem Ausgabelimit wählen.",
+      502,
+    );
+  }
+
+  // Kam nichts live an (Provider ohne echte Textstücke)? Dann den fertigen Text nachverarbeiten.
+  if (rawChapters.length === 0 && notes.length === 0) {
+    consumeJsonlText(content, (parsed) => collect(parsed, false));
+  }
+
+  if (rawChapters.length === 0) {
+    return timelineRepairResult(parseJson(content, "Timeline-Korrektur"), input);
+  }
+  return timelineRepairResult({ chapters: rawChapters, notes }, input);
+}
+
 /* ───────────────────────────── world extraction ───────────────────────────── */
 
 export interface WorldExtractInput {
@@ -1445,21 +1636,14 @@ CHAPTERS:
 ${chapters}`;
 }
 
-function worldSystem(language: string): string {
+/** Extraktionsauftrag + Regeln des Weltenbaus — von JSON- und JSONL-Variante **geteilt**. */
+function worldBrief(language: string): string {
   return `You are a worldbuilding editor.
 ${languageLock(language)}
 
 TASK: from the storyboard below, extract the worldbuilding it actually contains.
 Cover locations, factions, magic/technology systems, important artifacts/objects, and lore/history.
 
-Respond ONLY with a single valid JSON object:
-{
-  "locations": [{ "name": string, "description": string }],
-  "factions": [{ "name": string, "description": string }],
-  "magic": [{ "name": string, "description": string }],
-  "artifacts": [{ "name": string, "description": string }],
-  "lore": [{ "name": string, "description": string }]
-}
 Rules:
 - Use the EXACT names the storyboard already uses. Never rename or embellish them.
 - Only include concepts the storyboard actually supports. 2-4 per category is normal —
@@ -1470,6 +1654,222 @@ Rules:
   not the same name, and not a rephrasing of it.
 - name: short (2-5 words); description: 1-2 sentences.
 - Everything in ${language}.`;
+}
+
+function worldSystem(language: string): string {
+  return `${worldBrief(language)}
+
+Respond ONLY with a single valid JSON object:
+{
+  "locations": [{ "name": string, "description": string }],
+  "factions": [{ "name": string, "description": string }],
+  "magic": [{ "name": string, "description": string }],
+  "artifacts": [{ "name": string, "description": string }],
+  "lore": [{ "name": string, "description": string }]
+}`;
+}
+
+function worldStreamSystem(language: string): string {
+  return `${worldBrief(language)}
+
+Respond ONLY with one JSON object per line (JSONL), one per concept:
+{"category":"Ort","name":"…","description":"…"}
+{"category":"Fraktion","name":"…","description":"…"}
+{"category":"Magie","name":"…","description":"…"}
+{"category":"Artefakt","name":"…","description":"…"}
+{"category":"Lore","name":"…","description":"…"}
+
+${jsonlFormatBlock(language, `{"category":"Ort","name":"…","description":"…"}`)}
+Rules:
+- category MUST be one of: Ort, Fraktion, Magie, Artefakt, Lore.
+- Skip empty categories entirely — do not emit placeholder lines.`;
+}
+
+/** Ordnet eine JSONL-Zeile einer Welt-Kategorie zu (deutsche wie englische Schreibweise). */
+function worldCategoryOf(value: unknown): keyof StoryWorld | null {
+  const key = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (key === "ort" || key === "locations" || key === "location") return "locations";
+  if (key === "fraktion" || key === "factions" || key === "faction") return "factions";
+  if (key === "magie" || key === "magic") return "magic";
+  if (key === "artefakt" || key === "artifacts" || key === "artifact") return "artifacts";
+  if (key === "lore") return "lore";
+  return null;
+}
+
+export interface WorldStreamHandlers {
+  /** Ein fertiger Vorschlag (live, noch nicht dedupliziert/validiert). */
+  onEntry?: (entry: { category: keyof StoryWorld; name: string; description: string }) => void;
+}
+
+/**
+ * Gestreamte Weltenbau-Extraktion: **eine JSON-Zeile pro Konzept**, damit der Review-Dialog
+ * öffnet und die Vorschläge live hineinwachsen. Das Ergebnis am Ende ist identisch zum
+ * Nicht-Streaming-Weg (gleiche Normalisierung + Dublettenfilter).
+ */
+export async function extractWorldStream(
+  input: WorldExtractInput,
+  handlers: WorldStreamHandlers = {},
+): Promise<StoryWorld> {
+  const known = worldKnownList(input);
+  const knownBlock = known.map((entry) => `- [${entry.category}] ${entry.title}`).join("\n");
+  const collected: StoryWorld = { locations: [], factions: [], magic: [], artifacts: [], lore: [] };
+
+  const collect = (parsed: Record<string, unknown>, live: boolean) => {
+    const category = worldCategoryOf(parsed.category);
+    if (!category) return;
+    const name = str(parsed.name);
+    if (!name) return;
+    const description = str(parsed.description);
+    (collected[category] as WorldItem[]).push({ name, description });
+    if (live) handlers.onEntry?.({ category, name, description });
+  };
+
+  const consumer = createJsonlConsumer((parsed) => collect(parsed, true));
+
+  const { content } = await chatCompletionStream(
+    {
+      model: input.model,
+      system: worldStreamSystem(input.language),
+      user: `${storyboardOutline(input.storyboard)}
+
+ALREADY TRACKED (do not return these — not as duplicates, not rephrased):
+${knownBlock || "- (none)"}
+
+Extract only the worldbuilding that is missing so far, as JSONL (one object per line), entirely in ${input.language}.`,
+      maxTokens: 3500,
+      temperature: 0.5,
+    },
+    consumer.push,
+  );
+  consumer.flush();
+
+  // Kam nichts live an (Provider ohne echte Textstücke)? Dann den fertigen Text nachverarbeiten.
+  let world = normalizeWorld(collected);
+  if (worldEntryCount(world) === 0) {
+    consumeJsonlText(content, (parsed) => collect(parsed, false));
+    world = normalizeWorld(collected);
+  }
+  // Immer noch nichts? Dann hat das Modell ein normales JSON-Dokument geliefert.
+  if (worldEntryCount(world) === 0) {
+    return dedupeWorldResponse(normalizeWorld(parseJson(content, "Weltenbau")), known);
+  }
+  return dedupeWorldResponse(world, known);
+}
+
+/** Anzahl der Einträge über alle Welt-Kategorien. */
+function worldEntryCount(world: StoryWorld): number {
+  return (
+    world.locations.length +
+    world.factions.length +
+    world.magic.length +
+    world.artifacts.length +
+    world.lore.length
+  );
+}
+
+/** Extraktionsauftrag + Regeln der Figuren — von JSON- und JSONL-Variante **geteilt**. */
+function characterExtractBrief(language: string): string {
+  return `You are a continuity editor building a story bible from a finished manuscript.
+${languageLock(language)}
+
+TASK: find every NAMED figure that actually appears in the manuscript excerpts below.
+A "figure" is any named character, creature, deity, AI or personified being — major or minor —
+that the text refers to by name (speaking, acting, being described, or being remembered).
+
+Rules:
+- ONLY figures supported by the text. Never invent names, roles or facts.
+- name: exactly as written in the manuscript.
+- role: short and concrete — the figure's function in THIS story
+  (e.g. "Protagonist", "Antagonist", "Verbündeter", "Auftraggeber", "Nebenfigur").
+- description: 1-2 sentences strictly grounded in the excerpts (function, relation to others, traits).
+- Skip the narrator, unnamed groups ("die Wachen" without a name) and mere mentions of places.
+- Skip every name listed under ALREADY TRACKED.
+- Order by importance, most important first.
+- Every string value MUST be in ${language}.`;
+}
+
+function characterExtractSystem(language: string): string {
+  return `${characterExtractBrief(language)}
+
+Respond ONLY with a single valid JSON object:
+{ "characters": [{ "name": string, "role": string, "description": string }] }`;
+}
+
+function characterExtractStreamSystem(language: string): string {
+  return `${characterExtractBrief(language)}
+
+${jsonlFormatBlock(language, `{"name":"…","role":"Protagonist","description":"…"}`)}`;
+}
+
+export interface CharacterStreamHandlers {
+  /** Eine fertige Figur (live, noch nicht dedupliziert/validiert). */
+  onCharacter?: (character: StoryCharacter) => void;
+}
+
+/**
+ * Gestreamte Figuren-Extraktion: **eine JSON-Zeile pro Figur**, damit der Review-Dialog die
+ * gefundenen Figuren live zeigt. Das Ergebnis entspricht der Nicht-Streaming-Variante
+ * (gleiche Normalisierung inkl. Filter gegen bereits getrackte Namen).
+ */
+export async function extractCharactersStream(
+  input: CharacterExtractInput,
+  handlers: CharacterStreamHandlers = {},
+): Promise<StoryCharacter[]> {
+  const digest = manuscriptDigest(input.chapters);
+  if (!digest.trim()) {
+    throw new ApiError(
+      "Kein Manuskript-Text vorhanden, aus dem Figuren abgeleitet werden könnten.",
+      400,
+    );
+  }
+
+  const rawCharacters: unknown[] = [];
+  const collect = (parsed: Record<string, unknown>, live: boolean) => {
+    const name = str(parsed.name);
+    if (!name) return;
+    rawCharacters.push(parsed);
+    if (live) {
+      handlers.onCharacter?.({
+        name,
+        role: str(parsed.role, "Figur"),
+        description: str(parsed.description),
+      });
+    }
+  };
+
+  const consumer = createJsonlConsumer((parsed) => collect(parsed, true));
+
+  const { content, finishReason } = await chatCompletionStream(
+    {
+      model: input.model,
+      system: characterExtractStreamSystem(input.language),
+      user: `${characterExtractUser(input, digest)}
+
+Extract the named figures now as JSONL (one object per line), entirely in ${input.language}.`,
+      maxTokens: 4000,
+      temperature: 0.4,
+    },
+    consumer.push,
+  );
+  consumer.flush();
+
+  if (finishReason === "length") {
+    throw new ApiError(
+      "Die Figuren-Extraktion wurde vom Token-Limit abgeschnitten. Bitte ein Modell mit größerem Kontext wählen oder erneut versuchen.",
+      502,
+    );
+  }
+
+  // Kam nichts live an (Provider ohne echte Textstücke)? Dann den fertigen Text nachverarbeiten.
+  if (rawCharacters.length === 0) {
+    consumeJsonlText(content, (parsed) => collect(parsed, false));
+  }
+
+  const parsed =
+    rawCharacters.length > 0
+      ? { characters: rawCharacters }
+      : parseJson(content, "Figuren-Extraktion");
+  return normalizeExtractedCharacters(parsed, input.knownCharacters);
 }
 
 /** Alle bereits bekannten Einträge (Liste + Storyboard-Welt), dedupliziert. */
@@ -1613,29 +2013,6 @@ export function normalizeExtractedCharacters(
     });
   }
   return result;
-}
-
-function characterExtractSystem(language: string): string {
-  return `You are a continuity editor building a story bible from a finished manuscript.
-${languageLock(language)}
-
-TASK: find every NAMED figure that actually appears in the manuscript excerpts below.
-A "figure" is any named character, creature, deity, AI or personified being — major or minor —
-that the text refers to by name (speaking, acting, being described, or being remembered).
-
-Respond ONLY with a single valid JSON object:
-{ "characters": [{ "name": string, "role": string, "description": string }] }
-
-Rules:
-- ONLY figures supported by the text. Never invent names, roles or facts.
-- name: exactly as written in the manuscript.
-- role: short and concrete — the figure's function in THIS story
-  (e.g. "Protagonist", "Antagonist", "Verbündeter", "Auftraggeber", "Nebenfigur").
-- description: 1-2 sentences strictly grounded in the excerpts (function, relation to others, traits).
-- Skip the narrator, unnamed groups ("die Wachen" without a name) and mere mentions of places.
-- Skip every name listed under ALREADY TRACKED.
-- Order by importance, most important first.
-- Every string value MUST be in ${language}.`;
 }
 
 function characterExtractUser(

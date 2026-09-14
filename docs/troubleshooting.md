@@ -131,9 +131,19 @@ Kapitel anhand der Flags.
 ### Vorschau bleibt leer, der Text erscheint erst am Ende
 
 Dann liefert der Anbieter **kein SSE** (oder lehnt `stream: true` ab). Der Server fällt intern auf
-den normalen Aufruf zurück — der Client bekommt nur das `done`-Ereignis. Funktion und Ergebnis sind
-identisch, es fehlt nur das Mitlesen. Prüfen: Anbieter/Endpoint unterstützt Streaming; bei eigenem
-Anbieter die Base-URL kontrollieren (`/chat/completions` wird ergänzt).
+den normalen Aufruf zurück und liefert das Ergebnis dann als **ein** Textstück an die Vorschau —
+Funktion und Ergebnis sind identisch, es fehlt nur das Mitlesen während der Generierung. Prüfen:
+Anbieter/Endpoint unterstützt Streaming; bei eigenem Anbieter die Base-URL kontrollieren
+(`/chat/completions` wird ergänzt).
+
+### „…-JSON war ungültig" / „invalid JSON (…)", obwohl das Modell korrekt geantwortet hat
+
+Früher möglich, wenn der Anbieter keinen echten Stream liefert: Der Server fiel still auf einen
+normalen Aufruf zurück, die Live-Sammler blieben leer, und die JSONL-Antwort wurde anschließend
+fälschlich als **ein** JSON-Dokument geparst. Behoben — der Rückfall bedient den Callback, und die
+Routen verarbeiten den fertigen Text notfalls nachträglich zeilenweise. Bleibt es, die
+Server-Konsole ansehen: dort steht der Anfang der Antwort (`[story] invalid JSON (…): …`); ist er
+JSONL oder Prosa statt JSON, bitte melden.
 
 ### Vorschau endet mitten im Kapitel
 
@@ -162,6 +172,20 @@ Die Titel erscheinen, sobald die **Outline-Phase** fertig ist (Phase 1). Liefert
 - Der Fix korrigiert **nur die Szenen-Struktur** (Zeit, Schauplatz, Szenen-Text), nicht die Prosa.
   Widersprüche, die ausschließlich im Fließtext stehen, sieht die Timeline-Prüfung nicht — dafür
   die **Kohärenz-Prüfung** nutzen.
+
+### „Übernehmen" bleibt grau / der Dialog lässt sich nicht schließen
+
+Das ist während des **Sammelns** so gewollt: Solange Vorschläge eintreffen (Timeline-Korrektur,
+Weltenbau, Figuren), sind Übernehmen, Verwerfen, Abbrechen und Escape gesperrt — geschrieben wird
+erst gegen die vom Server validierte Fassung, nie gegen halbfertige Live-Objekte. Warten, bis der
+Spinner verschwindet; danach ist der Dialog wieder bedienbar.
+
+### Nach dem Sammeln ändert sich die Vorschlagsliste
+
+Während des Sammelns siehst du die **rohen** Vorschläge des Modells; am Ende ersetzt die
+**validierte** Fassung sie (Dubletten und bereits getrackte Einträge fallen weg). Bereits
+gefundene Einträge bleiben dabei erhalten — deine Abwahl bleibt bestehen, neu hinzugekommene
+sind vorausgewählt.
 
 ---
 

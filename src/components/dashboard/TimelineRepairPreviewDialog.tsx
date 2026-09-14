@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCheck, X } from "lucide-react";
+import { CheckCheck, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { diffStats, diffWords } from "@/lib/diff";
@@ -41,29 +41,36 @@ function label(value: string | undefined): string {
 export function TimelineRepairPreviewDialog({
   open,
   changes,
+  running = false,
   onApply,
   onDiscard,
 }: {
   open: boolean;
   changes: TimelineRepairChange[];
+  /** Läuft die Korrektur noch? Dann treffen die Kapitel live ein — geschrieben wird danach. */
+  running?: boolean;
   onApply: (chapterIndices: number[]) => void;
   onDiscard: () => void;
 }) {
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  /**
+   * Abgewählte Kapitel statt ausgewählter: So bleiben Entscheidungen des Nutzers erhalten,
+   * wenn während des Streams neue Kapitel eintreffen (die sind dann vorausgewählt).
+   */
+  const [excluded, setExcluded] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!open) return;
-    setSelected(new Set(changes.map((change) => change.chapterIndex)));
-  }, [open, changes]);
+    setExcluded(new Set());
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onDiscard();
+      if (event.key === "Escape" && !running) onDiscard();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onDiscard]);
+  }, [open, running, onDiscard]);
 
   /** Text-Diffs vorberechnen (nur für Szenen, deren Text sich ändert). */
   const diffs = useMemo(() => {
@@ -80,8 +87,13 @@ export function TimelineRepairPreviewDialog({
 
   if (!open) return null;
 
+  const selected = changes
+    .map((change) => change.chapterIndex)
+    .filter((chapterIndex) => !excluded.has(chapterIndex));
+
   const toggle = (chapterIndex: number) => {
-    setSelected((prev) => {
+    if (running) return;
+    setExcluded((prev) => {
       const next = new Set(prev);
       if (next.has(chapterIndex)) next.delete(chapterIndex);
       else next.add(chapterIndex);
@@ -95,7 +107,7 @@ export function TimelineRepairPreviewDialog({
       onClick={(event) => {
         // Nicht bis zum darunterliegenden Timeline-Dialog durchreichen.
         event.stopPropagation();
-        onDiscard();
+        if (!running) onDiscard();
       }}
     >
       <div
@@ -110,9 +122,11 @@ export function TimelineRepairPreviewDialog({
             <div>
               <h2 className="text-lg font-semibold tracking-tight">Timeline-Korrektur</h2>
               <p className="text-xs text-muted-foreground">
-                {changes.length === 1
-                  ? "1 Kapitel würde in der Szenen-Struktur geändert — noch nicht geschrieben"
-                  : `${changes.length} Kapitel würden in der Szenen-Struktur geändert — noch nicht geschrieben`}
+                {running
+                  ? "Die Kapitel treffen live ein — am Ende prüft der Server die Vorschläge."
+                  : changes.length === 1
+                    ? "1 Kapitel würde in der Szenen-Struktur geändert — noch nicht geschrieben"
+                    : `${changes.length} Kapitel würden in der Szenen-Struktur geändert — noch nicht geschrieben`}
               </p>
             </div>
           </div>
@@ -121,14 +135,21 @@ export function TimelineRepairPreviewDialog({
             size="icon-sm"
             className="rounded-lg text-muted-foreground hover:text-foreground"
             onClick={onDiscard}
+            disabled={running}
           >
             <X className="size-4" />
           </Button>
         </div>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+          {running && changes.length === 0 ? (
+            <p className="flex items-center gap-2 rounded-xl border border-brand-cyan/20 bg-brand-cyan/5 px-4 py-3 text-sm text-brand-cyan">
+              <Loader2 className="size-4 animate-spin" />
+              Korrektur wird vorbereitet…
+            </p>
+          ) : null}
           {changes.map((change) => {
-            const isSelected = selected.has(change.chapterIndex);
+            const isSelected = selected.includes(change.chapterIndex);
             return (
               <div
                 key={change.chapterIndex}
@@ -223,16 +244,21 @@ export function TimelineRepairPreviewDialog({
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-white/10 p-4">
-          <Button variant="outline" className="glass rounded-lg border-white/10" onClick={onDiscard}>
+          <Button
+            variant="outline"
+            className="glass rounded-lg border-white/10"
+            onClick={onDiscard}
+            disabled={running}
+          >
             Verwerfen
           </Button>
           <Button
             className="rounded-lg bg-gradient-to-r from-brand-emerald to-brand-cyan font-semibold text-white disabled:opacity-50"
-            disabled={selected.size === 0}
-            onClick={() => onApply([...selected])}
+            disabled={running || selected.length === 0}
+            onClick={() => onApply(selected)}
           >
             <CheckCheck className="size-3.5" />
-            Übernehmen ({selected.size})
+            Übernehmen ({selected.length})
           </Button>
         </div>
       </div>

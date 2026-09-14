@@ -26,13 +26,13 @@ Idee → Storyboard → Rohentwurf (~500 W) → Ausbau (3.000–5.000 W) → Koh
 | **Kohärenz-Pass** | Logik-/Kontinuitätsprüfung gegen Nachbarkapitel + Foreshadowing, mit Prüfbericht |
 | **Stil-Pass** | Satzbau, Rhythmus, Grammatik, Sprachgebrauch — inhaltlich unverändert |
 | **Kontinuität** | Kanon aus Fakten & Beziehungen (inkl. Beziehungs-Arc) — verbindlich für alle Pässe; Fakten-Check + Quick Fix |
-| **Live-Vorschau** | Streaming für Rohentwurf, Ausbau, Kohärenz, Stil, Fakten-Check und Extraktion — inkl. Fortsetzungen; Job-Center mit Live-Stand („Teil 2/5 · 1.240 Wörter") |
+| **Live-Vorschau** | Streaming für Rohentwurf, Ausbau, Kohärenz, Stil, Fakten-Check und Extraktionen — inkl. Fortsetzungen; Timeline-Befunde, Figuren- und Welt-Vorschläge treffen einzeln ein; Job-Center mit Live-Stand („Teil 2/5 · 1.240 Wörter") |
 | **Charaktere** | Aus dem Storyboard automatisch angelegt, editierbar, **Soul-Scan** (12 Sektionen) |
 | **Weltenbau** | Orte, Fraktionen, Magie, Artefakte, Lore — automatisch + per Extraktion |
 | **Plot-Board** | Kapitel als Karten, Akt/Status, Board-Ansicht |
 | **Recherche** | Notizen + echte Tavily-Suche |
 | **Szenen** | Beats je Kapitel editierbar mit POV/Schauplatz/Zeit/**Wortziel** — verbindlich für Generierung und Prüfung |
-| **Timeline** | Zeitangaben der Szenen gegen die Kapitelreihenfolge prüfen — mit strukturierten Befunden und **Quick Fix** (korrigiert Szenen-Zeit/Schauplatz/Text nach Diff-Vorschau) |
+| **Timeline** | Zeitangaben der Szenen gegen die Kapitelreihenfolge prüfen — Befunde erscheinen live, mit **Quick Fix** (korrigiert Szenen-Zeit/Schauplatz/Text nach Diff-Vorschau) |
 | **Export** | EPUB (mit Cover), DOCX für Lektorat, Markdown, sauberes PDF über den Reader |
 | **Backup** | Alle Profildaten als JSON exportieren/importieren |
 | **Covers** | Pollinations (`flux.1-schnell`), Varianten, Text-Presets, Front-/Back-Cover, persistierte Text-Layer |

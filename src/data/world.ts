@@ -36,6 +36,25 @@ export function entriesFromStoryWorld(world: StoryWorld, bookId: string): WorldE
   return entries;
 }
 
+/** Konvertiert einen einzelnen Vorschlag (Kategorie-Key + Name/Beschreibung) in einen Eintrag. */
+export function entryFromWorldItem(
+  category: keyof StoryWorld,
+  item: { name: string; description: string },
+  bookId: string,
+  tags: string[] = ["Storyboard"],
+): WorldEntry {
+  return {
+    id: `world-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    title: item.name.trim(),
+    category:
+      STORY_WORLD_CATEGORIES.find((entry) => entry.key === category)?.category ?? "Lore",
+    bookId,
+    description: item.description.trim(),
+    tags,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export interface WorldEntry {
   id: string;
   title: string;
