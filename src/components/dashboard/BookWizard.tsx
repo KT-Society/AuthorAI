@@ -263,13 +263,11 @@ export function BookWizard({
     };
   }, [series, seriesId, books, characters, worlds, facts, relations]);
 
-  if (!open) return null;
-
   const languages = config?.languages?.length ? config.languages : FALLBACK_LANGUAGES;
   const languageOptions = languages.includes(language) ? languages : [language, ...languages];
   const chapters = storyboard?.chapters ?? [];
 
-  /* ── Fakten-Check im Assistenten (letzter Schritt) ─────────────────────── */
+  /* ── Fakten-Check im Assistenten (letzter Schritt) ────────────────────── */
 
   /** Kanon-Block aus allen Fakten/Beziehungen des Projekts (im Assistenten ohne Buch-Scoping). */
   const canonForWizard = useMemo(() => {
@@ -293,6 +291,13 @@ export function BookWizard({
         .filter((entry) => entry.text.length > 0),
     [expanded, storyboard],
   );
+
+  /**
+   * **Nach** allen Hooks: Der Wizard wird in der Dashboard-Ansicht dauerhaft gemountet
+   * (`open={dialogOpen}`) — ein früher Return über den Hooks würde die Anzahl der Hooks
+   * beim Öffnen ändern (React-Fehler „Rendered more hooks than during the previous render").
+   */
+  if (!open) return null;
 
   const wizardCheckModel = (): string => {
     const model = models.consistency;
