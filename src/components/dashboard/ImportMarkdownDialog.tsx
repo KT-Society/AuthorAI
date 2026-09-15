@@ -304,9 +304,11 @@ export function ImportMarkdownDialog({
 
               <p className="text-[11px] leading-relaxed text-muted-foreground">
                 Nach dem Import ist das Buch ein normales Projekt: bearbeiten, Kohärenz/Stil prüfen,
-                Fakten-Check. Figuren- und Welt-Daten leitest du anschließend in den Ansichten
-                <span className="text-foreground/80"> „Charaktere"</span> bzw.
-                <span className="text-foreground/80"> „Weltenbau"</span> ab — daraus entsteht der Kanon.
+                Fakten-Check. Im Buch leiten dann <span className="text-foreground/80">„Storyboard
+                ableiten"</span> (Meta-Angaben, Figurenliste, Kapitel-Kurzfassungen) und
+                <span className="text-foreground/80"> „Szenen ableiten"</span> (Beats mit Zeit,
+                Schauplatz, POV) die Struktur aus dem Text ab — daraus entsteht auch der Kanon
+                (Figuren und Weltenbau leitest du zusätzlich in den jeweiligen Ansichten ab).
               </p>
             </>
           ) : null}

@@ -429,6 +429,27 @@ export function Dashboard({
     }
   };
 
+  /**
+   * Übernimmt ein **abgeleitetes Storyboard** (z. B. für ein importiertes Buch) und zieht daraus
+   * wie beim Anlegen eines Buchs fehlende Charaktere, Welteneinträge und Plot-Karten nach —
+   * sonst bliebe das abgeleitete Personal bis zum nächsten Profilstart unsichtbar.
+   */
+  const applyDerivedStoryboard = (book: Book) => {
+    updateBook(book);
+    setCharacters((prev) => {
+      const additions = collectMissingCharacters([book], prev);
+      return additions.length > 0 ? [...additions, ...prev] : prev;
+    });
+    setWorlds((prev) => {
+      const additions = collectMissingWorld([book], prev);
+      return additions.length > 0 ? [...additions, ...prev] : prev;
+    });
+    setPlotCards((prev) => {
+      const additions = collectMissingPlot([book], prev);
+      return additions.length > 0 ? [...additions, ...prev] : prev;
+    });
+  };
+
   const startCreate = () => {
     setOpenBookId(null);
     setActiveNav("dashboard");
@@ -592,6 +613,7 @@ export function Dashboard({
               onUpdate={updateBook}
               onDelete={deleteBook}
               onWordsWritten={addWords}
+              onStoryboardDerived={applyDerivedStoryboard}
             />
             ) : activeNav === "library" ? (
               <LibraryView

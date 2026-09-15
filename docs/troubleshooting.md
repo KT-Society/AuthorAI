@@ -216,6 +216,31 @@ Inline-Auszeichnung wird entfernt (`**fett**` → `fett`, Links → Beschriftung
 **innerhalb** von Namen bleiben absichtlich stehen (`Neo_Kyoto`), weil sie sonst als Kursiv-Marker
 gelesen würden.
 
+### „Storyboard ableiten" / „Szenen ableiten" ist ausgegraut
+
+Beide brauchen **Manuskript-Text** (mindestens ein Kapitel mit Rohtext oder Ausbau) und eine
+**Model-ID für „Storyboard"** in den Einstellungen. Ohne beides passiert nichts — der Knopf bleibt
+entsprechend inaktiv.
+
+### Die Ableitung erfindet Angaben
+
+Sollte nicht: Der Auftrag verbietet Erfindungen, und was der Text nicht hergibt, bleibt leer. Wenn
+ein Feld trotzdem geraten wirkt, liegt es am Modell — ein stärkeres Modell für „Storyboard"
+einstellen und erneut ableiten (das überschreibt nach Rückfrage).
+
+### Ableitung bricht mit „vom Token-Limit abgeschnitten" ab
+
+Sollte nicht mehr vorkommen: Die Storyboard-Ableitung läuft **gechunkt** (Metadaten + Figuren,
+dann Kapitel in Batches à 8), die Szenen-Ableitung zerlegt lange Kapitel in Teile von ~2.500
+Wörtern. Tritt es doch auf, ist die **Eingabe** zu groß für das Modell — dann ein Modell mit
+größerem Kontext wählen (oder bei der Szenen-Ableitung das Kapitel vorher teilen).
+
+### „Szenen ableiten" überschreibt meine Beats
+
+Gewollt, aber angekündigt: Die Ableitung **ersetzt** die Beat-Liste des Kapitels (und setzt Zeit/
+Schauplatz/POV neu). Vorher kopieren, wenn die alten Beats erhalten bleiben sollen — ein
+Versions-Snapshot gibt es hier nicht (Beats/Szenen-Metadaten liegen außerhalb der Kapitel-Version).
+
 ---
 
 ## Cover

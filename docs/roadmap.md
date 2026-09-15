@@ -13,6 +13,10 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 - **Drei-Wege-Vergleich**: „aktuell ↔ vor Kohärenz ↔ vor Stil" in einer kombinierten Ansicht
 
 ### Import & Austausch (Anschlüsse an den Markdown-Import)
+- **Figuren je Szene ableiten**: Die Szenen-Ableitung liefert Beat, Zeit, Schauplatz und POV —
+  wer in der Szene vorkommt, fehlt noch (das Feld `beatCharacters` bleibt leer)
+- **Ableitung als Vorschau**: „Storyboard/Szenen ableiten" schreibt direkt (mit Rückfrage beim
+  Überschreiben) — ein Diff wie bei Kanon und Timeline wäre der bequemere Weg
 - **DOCX-Import**: Autoren liefern oft `.docx` — Überschriften und Absätze aus dem Word-XML lesen
   (die ZIP-Bausteine für den Export liegen schon im Repo)
 - **Mehrere Dateien in einem Zug**: einen Stapel Manuskripte importieren und als **Reihe** anlegen

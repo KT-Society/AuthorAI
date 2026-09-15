@@ -1606,6 +1606,427 @@ export async function repairTimelineStream(
 
 /* ───────────────────────────── world extraction ───────────────────────────── */
 
+/* ───────────────── Storyboard & Szenen aus Manuskript ableiten ───────────────── */
+
+export interface StoryboardDeriveInput {
+  /** Titel des Buchs (Rückfall, wenn das Manuskript keinen hergibt). */
+  title: string;
+  genre?: string;
+  chapters: { title: string; text: string }[];
+  model: string;
+  language: string;
+  /** Verbindlicher Reihen-Kontext (bei Mehrbändern). */
+  seriesContext?: string;
+}
+
+/** Kapitelplan-Angaben, die aus dem Text stammen (leer = nicht belegbar). */
+export interface DerivedChapterPlan {
+  index: number;
+  summary: string;
+  pov: string;
+  setting: string;
+  foreshadowing: string[];
+}
+
+export interface StoryboardDeriveResult {
+  meta: {
+    title: string;
+    subtitle: string;
+    genre: string;
+    logline: string;
+    synopsis: string;
+    themes: string[];
+    tone: string;
+    pov: string;
+  };
+  characters: StoryCharacter[];
+  chapters: DerivedChapterPlan[];
+}
+
+function storyboardDeriveMetaSystem(language: string): string {
+  return `You are a story editor. A FINISHED manuscript is given; you reconstruct its story bible.
+${languageLock(language)}
+
+TASK (part 1 of 2): derive the book's METADATA and its CAST from the manuscript excerpts.
+
+Rules:
+- ONLY what the text supports. NEVER invent names, places, themes or plot.
+- Leave a field as an empty string ("") when the excerpts give no basis — an honest empty field
+  beats a guess. An empty list is a valid answer.
+- logline: one sentence. synopsis: 3-5 sentences. themes: 2-4 short keywords. tone: a few words.
+- pov: the prevailing narrative voice (e.g. "dritte Person, Aria", "Ich-Erzählung").
+- characters: every named figure that carries the story (protagonist, antagonist, allies,
+  mentors); name exactly as written, role short and concrete, description 1-2 sentences.
+
+${jsonlFormatBlock(
+    language,
+    `{"t":"meta","title":"…","subtitle":"…","genre":"…","logline":"…","synopsis":"…","themes":["…"],"tone":"…","pov":"…"}
+{"t":"character","name":"…","role":"Protagonistin","description":"…"}`,
+  )}
+Rules:
+- Emit EXACTLY ONE meta line (first), then one character line per figure.
+- All text in ${language}.`;
+}
+
+function storyboardDeriveChaptersSystem(language: string): string {
+  return `You are a story editor. A FINISHED manuscript is given; you reconstruct its chapter plan.
+${languageLock(language)}
+
+TASK (part 2 of 2): for EACH chapter in the given batch, write its chapter-plan entry.
+
+Rules:
+- ONLY what the text supports. NEVER invent plot. Use the names the text uses.
+- summary: 1-2 concrete sentences (who does what, where it leads). No marketing tone.
+- pov: the narrative voice of that chapter (e.g. "dritte Person, Aria"), "" if unclear.
+- setting: the chapter's main location, "" if the text never says.
+- foreshadowing: short list of things the chapter plants for later; [] if none.
+- Cover EVERY chapter of the batch, in the given order, even where the excerpt is short.
+
+${jsonlFormatBlock(
+    language,
+    `{"chapter":3,"summary":"…","pov":"…","setting":"…","foreshadowing":["…"]}`,
+  )}
+Rules:
+- One line per chapter, "chapter" is the 1-based number from the listing.
+- All text in ${language}.`;
+}
+
+export interface StoryboardDeriveHandlers {
+  /** Vor dem ersten Aufruf: wie viele Kapitel und Batches anstehen. */
+  onStart?: (info: { chapters: number; batches: number }) => void;
+  /** Phase 1 (Meta + Figuren) oder Phase 2 (Kapitel-Batches) beginnt. */
+  onPhase?: (phase: "meta" | "chapters") => void;
+  onMeta?: (meta: StoryboardDeriveResult["meta"]) => void;
+  onCharacter?: (character: StoryCharacter) => void;
+  /** Ein Kapitelplan, sobald das Modell ihn geschrieben hat (live, vor der Endprüfung). */
+  onChapter?: (plan: DerivedChapterPlan) => void;
+  /** Fortschritt der Kapitel-Batches. */
+  onBatch?: (done: number, total: number) => void;
+}
+
+/** Normalisiert die Meta-Zeile der Ableitung. */
+function deriveMetaFrom(
+  raw: Record<string, unknown>,
+  input: StoryboardDeriveInput,
+): StoryboardDeriveResult["meta"] {
+  return {
+    title: str(raw.title) || input.title,
+    subtitle: str(raw.subtitle),
+    genre: str(raw.genre) || input.genre || "",
+    logline: str(raw.logline),
+    synopsis: str(raw.synopsis),
+    themes: strArray(raw.themes).slice(0, 6),
+    tone: str(raw.tone),
+    pov: str(raw.pov),
+  };
+}
+
+/** Normalisiert eine Kapitel-Zeile (JSONL) bzw. ein Kapitel-Objekt (JSON-Rückfall). */
+function deriveChapterFrom(raw: Record<string, unknown>, index: number): DerivedChapterPlan {
+  return {
+    index,
+    summary: str(raw.summary),
+    pov: str(raw.pov),
+    setting: str(raw.setting),
+    foreshadowing: strArray(raw.foreshadowing),
+  };
+}
+
+/**
+ * Leitet Storyboard-Angaben aus einem **fertigen Manuskript** ab (Gegenrichtung zur Generierung).
+ *
+ * **Gechunkt und gestreamt**, aus zwei Gründen:
+ *
+ * 1. Ein Aufruf mit allen Kapiteln läuft bei längeren Büchern ins Ausgabelimit (genau das passierte
+ *    in der Praxis). Deshalb zwei Phasen wie bei der Storyboard-*Generierung*: Phase 1 liefert
+ *    Metadaten + Figurenliste, Phase 2 die Kapitelpläne in Batches à `BATCH_SIZE`.
+ * 2. Beide Phasen antworten als **JSONL** — Figuren und Kapitel treffen einzeln ein und werden
+ *    sofort gemeldet, statt am Ende als ein Block.
+ */
+export async function deriveStoryboardStream(
+  input: StoryboardDeriveInput,
+  handlers: StoryboardDeriveHandlers = {},
+): Promise<StoryboardDeriveResult> {
+  const planned = input.chapters.map((chapter, index) => ({
+    index,
+    title: chapter.title.trim() || `Kapitel ${index + 1}`,
+    text: chapter.text,
+  }));
+  if (planned.length === 0) {
+    throw new ApiError(
+      "Kein Manuskript-Text vorhanden, aus dem sich ein Storyboard ableiten ließe.",
+      400,
+    );
+  }
+
+  const budget = excerptBudget(planned.length);
+  const totalBatches = Math.max(1, Math.ceil(planned.length / BATCH_SIZE));
+  handlers.onStart?.({ chapters: planned.length, batches: totalBatches });
+
+  // ── Phase 1: Meta + Figuren ────────────────────────────────────────────────
+  handlers.onPhase?.("meta");
+  const metaRaw: Record<string, unknown> = {};
+  const characterLines: unknown[] = [];
+  let metaSeen = false;
+
+  const metaConsumer = createJsonlConsumer((parsed) => {
+    if (typeof parsed.t === "string" && parsed.t === "character") {
+      characterLines.push(parsed);
+      const [character] = normalizeExtractedCharacters({ characters: [parsed] });
+      if (character) handlers.onCharacter?.(character);
+      return;
+    }
+    // Die Meta-Zeile trägt kein `t` — erkennbar an den Metadaten-Feldern. Sie kommt zuerst,
+    // also wird sie auch zuerst gemeldet.
+    if (!metaSeen && (typeof parsed.title === "string" || typeof parsed.genre === "string")) {
+      Object.assign(metaRaw, parsed);
+      metaSeen = true;
+      handlers.onMeta?.(deriveMetaFrom(metaRaw, input));
+    }
+  });
+
+  const metaCall = await chatCompletionStream(
+    {
+      model: input.model,
+      system: storyboardDeriveMetaSystem(input.language),
+      user: `BOOK TITLE (working title): ${input.title || "(untitled)"}
+GENRE (optional, may be wrong): ${input.genre || "(unknown)"}${input.seriesContext?.trim() ? `\n\n${input.seriesContext.trim()}` : ""}
+
+MANUSCRIPT EXCERPTS (one per chapter, in reading order; chapter numbers matter):
+${manuscriptDigest(planned)}
+
+Derive the metadata and the cast now as JSONL, entirely in ${input.language}.`,
+      maxTokens: 2500,
+      temperature: 0.3,
+    },
+    metaConsumer.push,
+  );
+  metaConsumer.flush();
+
+  // Nichts als JSONL? Dann hat das Modell ein JSON-Dokument geliefert.
+  if (!metaSeen && characterLines.length === 0) {
+    const parsed = parseJson(metaCall.content, "Storyboard-Ableitung");
+    const fallback = asRecord(parsed.meta);
+    if (Object.keys(fallback).length > 0) {
+      Object.assign(metaRaw, fallback);
+      metaSeen = true;
+    }
+    if (Array.isArray(parsed.characters)) {
+      for (const entry of parsed.characters) characterLines.push(entry);
+    }
+  }
+
+  const meta = deriveMetaFrom(metaRaw, input);
+  // Nur melden, wenn die Meta-Zeile nicht schon live gemeldet wurde (JSON-Rückfall).
+  if (!metaSeen) handlers.onMeta?.(meta);
+
+  // ── Phase 2: Kapitelpläne in Batches ──────────────────────────────────────
+  handlers.onPhase?.("chapters");
+  const plans = new Map<number, DerivedChapterPlan>();
+  const titleList = planned.map((chapter) => `${chapter.index + 1}. ${chapter.title}`).join("\n");
+  // Zähler explizit führen: `floor(end / BATCH_SIZE)` meldet den letzten (kürzeren) Batch sonst
+  // wieder mit der Nummer des vorherigen.
+  let batchesDone = 0;
+
+  for (let start = 0; start < planned.length; start += BATCH_SIZE) {
+    const batch = planned.slice(start, start + BATCH_SIZE);
+    const batchConsumer = createJsonlConsumer((parsed) => {
+      const number = positiveInt(parsed.chapter);
+      if (!number) return;
+      const plan = deriveChapterFrom(parsed, number - 1);
+      plans.set(number, plan);
+      handlers.onChapter?.(plan);
+    });
+
+    const batchCall = await chatCompletionStream(
+      {
+        model: input.model,
+        system: storyboardDeriveChaptersSystem(input.language),
+        user: `BOOK: ${meta.title || input.title}${meta.genre ? ` · ${meta.genre}` : ""}${
+          meta.logline ? `\nLOGLINE: ${meta.logline}` : ""
+        }${meta.synopsis ? `\nSYNOPSIS: ${meta.synopsis}` : ""}
+
+ALL CHAPTERS (for the arc):
+${titleList}
+
+CHAPTERS OF THIS BATCH:
+${batch.map((chapter) => chapterExcerpt(chapter.title, chapter.text, budget)).join("\n\n")}
+
+Write the chapter-plan entries for THIS BATCH now as JSONL (one line per chapter), entirely in ${input.language}.`,
+        maxTokens: 2200,
+        temperature: 0.3,
+      },
+      batchConsumer.push,
+    );
+    batchConsumer.flush();
+
+    // JSON-Rückfall je Batch: liefert das Modell ein Dokument statt Zeilen.
+    const received = batch.filter((chapter) => plans.has(chapter.index + 1)).length;
+    if (received === 0) {
+      const parsed = parseJson(batchCall.content, "Storyboard-Ableitung");
+      const list = Array.isArray(parsed.chapters) ? parsed.chapters : [];
+      for (const entry of list) {
+        const item = asRecord(entry);
+        const number = positiveInt(item.chapter);
+        if (!number) continue;
+        const plan = deriveChapterFrom(item, number - 1);
+        plans.set(number, plan);
+        handlers.onChapter?.(plan);
+      }
+    }
+
+    batchesDone += 1;
+    handlers.onBatch?.(batchesDone, totalBatches);
+  }
+
+  return {
+    meta,
+    characters: normalizeExtractedCharacters({ characters: characterLines }).slice(0, 40),
+    // Lücken bleiben leer: Was das Modell nicht geliefert hat, wird nicht ersetzt.
+    chapters: planned.map(
+      (chapter) => plans.get(chapter.index + 1) ?? deriveChapterFrom({}, chapter.index),
+    ),
+  };
+}
+
+export interface SceneDeriveInput {
+  chapterTitle: string;
+  /** Voller Kapiteltext. */
+  text: string;
+  /** Kapitel-Kurzfassung als Kontext (optional). */
+  hint?: string;
+  model: string;
+  language: string;
+}
+
+/** Eine aus dem Text gelesene Szene. */
+export interface DerivedScene {
+  /** Kurze Beat-Zeile (Vorgabe für die Pipeline, nicht die Prosa selbst). */
+  text: string;
+  time: string;
+  setting: string;
+  pov: string;
+}
+
+/** Wortbudget eines Szenen-Teils. Größer als bei den Pässen: die Antwort ist klein. */
+const SCENE_CHUNK_WORDS = 2500;
+
+function scenesDeriveSystem(language: string): string {
+  return `You are a story editor splitting a finished chapter (or a part of one) into its scenes.
+${languageLock(language)}
+
+A scene is a continuous stretch of action in one place and time. A new scene starts when the
+place, the time or the focus changes (a jump, a cut, a new conversation in a new room).
+
+Rules:
+- Cover the WHOLE given text in reading order — first scene to last, nothing left out.
+- 3-10 scenes for a normal chapter. A part of a chapter has fewer (2-5): do not compress, just
+  report the scenes of THIS text.
+- text: ONE short line per scene, present tense, max 25 words — a plan line, not prose.
+  Name who acts and what changes, e.g. "Aria erreicht den Hafen und findet das Schiff verlassen."
+- time: only if the text states it ("am nächsten Morgen", "drei Tage später"); otherwise "".
+- setting: the place of that scene, using the text's names; "" if it never says.
+- pov: the viewpoint of that scene if it changes or is clear; otherwise "".
+- NEVER invent plot, names or places. No spoilers, no interpretation, no quotes of prose.
+
+${jsonlFormatBlock(language, `{"text":"…","time":"…","setting":"…","pov":"…"}`)}
+Rules: one line per scene, in order; all text in ${language}.`;
+}
+
+export interface SceneDeriveHandlers {
+  /** Vor dem ersten Aufruf: in wie viele Teile das Kapitel zerlegt wurde. */
+  onStart?: (info: { parts: number }) => void;
+  /** Fortschritt der Teile (lange Kapitel). */
+  onPart?: (done: number, total: number) => void;
+  /** Eine Szene, sobald das Modell sie geschrieben hat (live, vor der Endprüfung). */
+  onScene?: (scene: DerivedScene) => void;
+}
+
+/**
+ * Leitet die Szenen **eines Kapitels** aus seiner Prosa ab.
+ *
+ * **Gechunkt:** Sehr lange Kapitel werden in Teile von ~`SCENE_CHUNK_WORDS` Wörtern zerlegt
+ * (absatzsicher über `splitIntoChunks`), sonst läuft die Eingabe bei Ausnahme-Kapiteln aus dem
+ * Kontext. **Gestreamt:** Das Modell liefert eine JSON-Zeile pro Szene, damit die Beats einzeln
+ * eintreffen (und bei mehrteiligen Kapiteln der Fortschritt sichtbar ist).
+ */
+export async function deriveScenesStream(
+  input: SceneDeriveInput,
+  handlers: SceneDeriveHandlers = {},
+): Promise<DerivedScene[]> {
+  const text = input.text.trim();
+  if (!text) {
+    throw new ApiError(
+      "Dieses Kapitel hat keinen Text, aus dem sich Szenen ableiten ließen.",
+      400,
+    );
+  }
+
+  const parts = splitIntoChunks(text, SCENE_CHUNK_WORDS);
+  handlers.onStart?.({ parts: parts.length });
+
+  const scenes: DerivedScene[] = [];
+  const seen = new Set<string>();
+
+  /** Nimmt eine Szene auf — `live` steuert nur, ob sie gemeldet wird (JSON-Rückfall: nein). */
+  const collect = (raw: Record<string, unknown>, live: boolean) => {
+    const line = str(raw.text);
+    if (!line) return;
+    // Über Teil-Grenzen kann dieselbe Szene zweimal beschrieben werden → gleiche Zeile nicht doppeln.
+    const key = line.trim().toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    const scene: DerivedScene = {
+      text: line,
+      time: str(raw.time),
+      setting: str(raw.setting),
+      pov: str(raw.pov),
+    };
+    scenes.push(scene);
+    if (live) handlers.onScene?.(scene);
+  };
+
+  for (const [index, part] of parts.entries()) {
+    const partLabel =
+      parts.length > 1
+        ? ` (part ${index + 1} of ${parts.length} — continue the list, do not repeat earlier scenes)`
+        : "";
+    const before = scenes.length;
+    const consumer = createJsonlConsumer((parsed) => collect(parsed, true));
+
+    const call = await chatCompletionStream(
+      {
+        model: input.model,
+        system: scenesDeriveSystem(input.language),
+        user: `${input.hint?.trim() ? `CHAPTER SUMMARY (context, may be incomplete):\n${input.hint.trim()}\n\n` : ""}CHAPTER: ${input.chapterTitle || "(untitled)"}${partLabel}
+
+TEXT:
+${part}
+
+Split this text into scenes now as JSONL (one object per line), entirely in ${input.language}.`,
+        maxTokens: 2000,
+        temperature: 0.2,
+      },
+      consumer.push,
+    );
+    consumer.flush();
+
+    // Nichts als JSONL für diesen Teil? Dann hat das Modell ein JSON-Dokument geliefert.
+    if (scenes.length === before) {
+      const parsed = parseJson(call.content, "Szenen-Ableitung");
+      const list = Array.isArray(parsed.scenes) ? parsed.scenes : [];
+      for (const entry of list) collect(asRecord(entry), false);
+    }
+
+    handlers.onPart?.(index + 1, parts.length);
+  }
+
+  if (scenes.length === 0) {
+    throw new ApiError("Das Modell hat keine Szenen geliefert — bitte erneut versuchen.", 502);
+  }
+  return scenes;
+}
+
 export interface WorldExtractInput {
   storyboard: Storyboard;
   model: string;
@@ -1966,25 +2387,36 @@ const EXTRACT_TOTAL_CHARS = 60000;
  * beschrieben); das Gesamtbudget wird gleichmäßig auf alle Kapitel verteilt, damit
  * auch spät auftauchende Figuren erfasst werden.
  */
+/** Zeichenbudget je Kapitel für Digest- und Batch-Eingaben. */
+function excerptBudget(chapterCount: number): number {
+  return Math.max(
+    EXTRACT_MIN_CHAPTER_CHARS,
+    Math.min(
+      EXTRACT_MAX_CHAPTER_CHARS,
+      Math.floor(EXTRACT_TOTAL_CHARS / Math.max(1, chapterCount)),
+    ),
+  );
+}
+
+/** Ein Kapitel als Auszug (Anfang, mit `[…]`-Marke wenn gekürzt) — Basis für Digest und Batches. */
+function chapterExcerpt(title: string, text: string, budgetChars: number): string {
+  const trimmed = text.trim();
+  const slice = trimmed.slice(0, budgetChars);
+  const clipped = slice.length < trimmed.length;
+  return `### ${title.trim() || "Kapitel"}\n${slice}${clipped ? "\n[…]" : ""}`;
+}
+
 export function manuscriptDigest(
   chapters: { title: string; text: string }[],
 ): string {
   const nonEmpty = chapters.filter((chapter) => chapter.text.trim().length > 0);
   if (nonEmpty.length === 0) return "";
 
-  const perChapter = Math.max(
-    EXTRACT_MIN_CHAPTER_CHARS,
-    Math.min(EXTRACT_MAX_CHAPTER_CHARS, Math.floor(EXTRACT_TOTAL_CHARS / nonEmpty.length)),
-  );
-
+  const budget = excerptBudget(nonEmpty.length);
   return nonEmpty
-    .map((chapter, index) => {
-      const text = chapter.text.trim();
-      const slice = text.slice(0, perChapter);
-      const clipped = slice.length < text.length;
-      const title = chapter.title.trim() || `Kapitel ${index + 1}`;
-      return `### ${title}\n${slice}${clipped ? "\n[…]" : ""}`;
-    })
+    .map((chapter, index) =>
+      chapterExcerpt(chapter.title.trim() || `Kapitel ${index + 1}`, chapter.text, budget),
+    )
     .join("\n\n");
 }
 

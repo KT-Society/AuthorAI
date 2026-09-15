@@ -34,6 +34,8 @@ import {
   checkConsistency,
   checkTimeline,
   checkTimelineStream,
+  deriveScenesStream,
+  deriveStoryboardStream,
   draftChapter,
   expandChapter,
   extractCharacters,
@@ -826,6 +828,85 @@ const server = serve({
       },
     },
 
+    // Storyboard-Angaben aus einem fertigen Manuskript ableiten (Import/Gegenrichtung).
+    "/api/storyboard/derive/stream": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const title = typeof body.title === "string" ? body.title.trim() : "";
+          const genre =
+            typeof body.genre === "string" && body.genre.trim() ? body.genre.trim() : undefined;
+const chapters = asManuscriptChapters(body.chapters);
+          // Vor dem Stream validieren: kein Manuskript-Text ist ein Aufrufer-Fehler, kein Stream-Fall.
+          if (chapters.length === 0) {
+            throw new ApiError(
+              "Kein Manuskript-Text vorhanden, aus dem sich ein Storyboard ableiten ließe.",
+              400,
+            );
+          }
+          return sseResponse(async (emit) => {
+            const result = await deriveStoryboardStream(
+              {
+                title,
+                genre,
+                chapters,
+                model,
+                language,
+                seriesContext: optionalString(body.seriesContext),
+              },
+              {
+                onStart: (info) => emit({ type: "start", ...info }),
+                onPhase: (phase) => emit({ type: "phase", phase }),
+                onMeta: (meta) => emit({ type: "meta", meta }),
+                onCharacter: (character) => emit({ type: "character", character }),
+                onChapter: (plan) => emit({ type: "chapter", plan }),
+                onBatch: (done, total) => emit({ type: "batch", done, total }),
+              },
+            );
+            emit({ type: "done", ...result });
+          });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Szenen eines Kapitels aus seiner Prosa ableiten.
+    "/api/chapter/scenes/stream": {
+      async POST(req) {
+        try {
+          const body = await readJson(req);
+          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
+          const language = optionalLanguage(body.language);
+          const text = typeof body.text === "string" ? body.text : "";
+          if (!text.trim()) {
+            throw new ApiError("Kein Kapiteltext für die Szenen-Ableitung.", 400);
+          }
+          return sseResponse(async (emit) => {
+            const scenes = await deriveScenesStream(
+              {
+                chapterTitle: typeof body.chapterTitle === "string" ? body.chapterTitle.trim() : "",
+                text,
+                hint: optionalString(body.hint),
+                model,
+                language,
+              },
+              {
+                onStart: (info) => emit({ type: "start", ...info }),
+                onPart: (done, total) => emit({ type: "part", done, total }),
+                onScene: (scene) => emit({ type: "scene", scene }),
+              },
+            );
+            emit({ type: "done", scenes });
+          });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
     // Worldbuilding extraction from an existing storyboard.
     "/api/world/extract": {
       async POST(req) {
@@ -1226,3 +1307,4 @@ console.log("");
 if (isStandaloneBinary() && process.env.AUTHORAI_OPEN !== "0") {
   openInBrowser(baseUrl);
 }
+

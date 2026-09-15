@@ -53,6 +53,20 @@ füttert die Prüf-Prompts, Wortzahlen und Ziel-Wörter sind berechnet, und Figu
 Kanon lassen sich wie gewohnt ableiten. Ohne erkennbare Struktur wird der Text **ein** Kapitel
 plus Hinweis — verloren geht nichts.
 
+**Struktur nachleiten** (im Buch-Editor, für alles, was der Import nicht wissen kann):
+
+| Aktion | Was sie tut | Route |
+| --- | --- | --- |
+| **„Storyboard ableiten"** | Meta-Angaben (Titel, Genre, Logline, Synopsis, Themen, Ton, POV), **Figurenliste** und je Kapitel Kurzfassung/POV/Schauplatz/Foreshadowing aus dem Manuskript | `POST /api/storyboard/derive/stream` |
+| **„Szenen ableiten"** | Beats mit Zeit, Schauplatz und POV je Kapitel — einzeln im Szenen-Bereich oder für **alle** Kapitel als Job im Job-Center | `POST /api/chapter/scenes/stream` |
+
+Beides nutzt das **Storyboard-Model**, ist **gechunkt** (Meta/Figuren, dann Kapitel in Batches à 8;
+lange Kapitel in Teile von ~2.500 Wörtern) und **gestreamt** — Metadaten, Figuren, Kapitel und
+Szenen treffen einzeln in der Live-Vorschau ein, der Fortschritt steht im Job-Center. Überschrieben
+wird nur nach Rückfrage, und geraten wird nicht: Was der Text nicht hergibt, bleibt leer. Die
+abgeleiteten Figuren landen wie beim Anlegen eines Buchs in „Charaktere", „Weltenbau" und im
+Plot-Board.
+
 ---
 
 ## 1 · Idee
@@ -419,3 +433,4 @@ Modelle werden **pro Stufe** gesetzt (freie OpenRouter-ID). Leer = erbt das Stan
 - Klare, deutsche Fehlermeldungen aus dem Server (`ApiError` → HTTP-Status + `{ error }`).
 - Abgebrochene Queues melden die Kapitelnummer; bereits fertige Kapitel bleiben erhalten.
 - Fehlende Keys/Modelle werden vor dem Aufruf geprüft und benannt.
+

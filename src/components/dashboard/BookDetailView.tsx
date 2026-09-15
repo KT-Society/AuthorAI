@@ -13,6 +13,7 @@ import {
   Hourglass,
   Image as ImageIcon,
   Layers,
+  ListTree,
   Loader2,
   Pencil,
   Plus,
@@ -83,8 +84,15 @@ import { buildEpub } from "@/lib/epub";
 import { buildMarkdown } from "@/lib/markdown";
 import { buildPdf } from "@/lib/pdf";
 import { buildCoverPrompt, deleteCover, generateCover } from "@/services/cover";
-import { streamTimelineCheck, streamTimelineRepair, streamPass } from "@/services/story";
+import {
+  streamDeriveScenes,
+  streamDeriveStoryboard,
+  streamPass,
+  streamTimelineCheck,
+  streamTimelineRepair,
+} from "@/services/story";
 import type {
+  DerivedScene,
   PassResult,
   TimelineFinding,
   TimelineRepairFix,
@@ -200,6 +208,7 @@ export function BookDetailView({
   onUpdate,
   onDelete,
   onWordsWritten,
+  onStoryboardDerived,
 }: {
   book: Book;
   characters: Character[];
@@ -220,6 +229,12 @@ export function BookDetailView({
   onUpdate: (book: Book) => void;
   onDelete: (id: string) => void;
   onWordsWritten: (count: number) => void;
+  /**
+   * Ein abgeleitetes Storyboard (Figuren/Welt/Handlungs-Karten) sauber übernehmen — die Shell
+   * legt daraus fehlende Charaktere, Welteneinträge und Plot-Karten an, wie beim Anlegen eines
+   * Buchs. Ohne diesen Weg bliebe abgeleitetes Personal bis zum nächsten Profilstart unsichtbar.
+   */
+  onStoryboardDerived?: (book: Book) => void;
 }) {
   const [selectedIndex, setSelectedIndex] = useState(initialChapterIndex);
   const [mode, setMode] = useState<Mode>("edit");
@@ -425,6 +440,12 @@ export function BookDetailView({
   const totalWords = useMemo(() => manuscriptWordCount(manuscript), [manuscript]);
   const pendingExpandCount = useMemo(
     () => manuscript.filter((chapter) => chapter.expanded.trim().length === 0).length,
+    [manuscript],
+  );
+  /** Gibt es überhaupt Text, aus dem sich Struktur ableiten lässt? */
+  const hasManuscriptText = useMemo(
+    () =>
+      manuscript.some((chapter) => (chapter.expanded || chapter.draft).trim().length > 0),
     [manuscript],
   );
   const pendingConsistency = useMemo(
@@ -1288,6 +1309,379 @@ export function BookDetailView({
     return model;
   };
 
+  /* ── Struktur aus dem Manuskript ableiten (Storyboard & Szenen) ───────── */
+
+  /** Live-Liste der laufenden Ableitung (Storyboard-Zeilen bzw. Szenen-Beats). */
+  const [deriveText, setDeriveText] = useState<string | null>(null);
+  const [deriveLabel, setDeriveLabel] = useState<string | null>(null);
+
+  /** Hängt eine Zeile an die Live-Liste der Ableitung. */
+  const pushDeriveLine = (line: string) =>
+    setDeriveText((prev) => (prev ? `${prev}\n${line}` : line));
+
+  const resetDerive = () => {
+    setDeriveText(null);
+    setDeriveLabel(null);
+  };
+
+  /** Modell der Storyboard-Stufe — Ableitung von Storyboard und Szenen nutzen es. */
+  const structureModel = (): string => {
+    const model = readStageModel("storyboard");
+    if (!model.trim()) {
+      throw new Error(
+        "Bitte eine Model-ID für „Storyboard“ in den Einstellungen eintragen (die Ableitung nutzt sie).",
+      );
+    }
+    return model;
+  };
+
+  /**
+   * Kapitelpläne für die Struktur-Arbeit. Fehlt dem Buch ein Storyboard-Plan (Manuskript ohne
+   * Storyboard), entsteht er hier aus dem Manuskript — sonst hätten Szenen keinen Platz.
+   */
+  const structurePlans = (): ChapterPlan[] =>
+    plans.length > 0
+      ? plans
+      : manuscriptRef.current.map((chapter, index) => ({
+          index,
+          title: chapter.title || `Kapitel ${index + 1}`,
+          summary: "",
+          pov: "",
+          setting: "",
+          beats: [],
+          foreshadowing: [],
+        }));
+
+  /**
+   * Storyboard aus dem Manuskript ableiten: Meta-Angaben, Figurenliste und je Kapitel
+   * Kurzfassung/POV/Schauplatz/Foreshadowing.
+   *
+   * Vorhandene Angaben werden nur nach Rückfrage überschrieben — der Import setzt z. B. eine
+   * Kurzfassung aus dem Textanfang, und die soll die Modell-Fassung ersetzen dürfen.
+   */
+  const runDeriveStoryboard = async () => {
+    const chapters = manuscriptRef.current
+      .map((chapter) => ({
+        title: chapter.title,
+        text: (chapter.expanded || chapter.draft).trim(),
+      }))
+      .filter((chapter) => chapter.text.length > 0);
+    if (chapters.length === 0) {
+      setError("Kein Manuskript-Text vorhanden — es gibt nichts abzuleiten.");
+      return;
+    }
+    if (!book.storyboard) {
+      setError("Ohne Storyboard lässt sich nichts ableiten.");
+      return;
+    }
+
+    let model: string;
+    try {
+      model = structureModel();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
+      return;
+    }
+
+    const existing = book.storyboard;
+    const hasContent = Boolean(
+      existing.genre ||
+        existing.logline ||
+        existing.synopsis ||
+        existing.tone ||
+        existing.pov ||
+        existing.chapters.some((plan) => plan.summary.trim() || plan.pov.trim() || plan.setting.trim()),
+    );
+    const overwrite =
+      !hasContent ||
+      window.confirm(
+        "Vorhandene Storyboard-Angaben überschreiben?\n\n" +
+          "Betrifft Genre, Logline, Synopsis, Ton, POV, Kapitel-Kurzfassungen, POV/Schauplatz und Foreshadowing.\n" +
+          "Szenen-Beats bleiben unangetastet.\n\n" +
+          "Abbrechen = nur leere Felder füllen.",
+      );
+
+    setError(null);
+    setDeriveText("");
+    setDeriveLabel("Storyboard · Meta und Figuren");
+    setBusy("Storyboard wird abgeleitet…");
+    const jobId = createJob({ title: `${book.title}: Storyboard ableiten`, kind: "derive", total: 2 });
+    try {
+      const result = await streamDeriveStoryboard(
+        {
+          title: book.title,
+          genre: book.storyboard.genre,
+          chapters,
+          model,
+          language,
+        },
+        {
+          onStart: ({ batches }) => updateJob(jobId, { total: 1 + batches }),
+          onPhase: (phase) => {
+            setDeriveLabel(
+              phase === "meta" ? "Storyboard · Meta und Figuren" : "Storyboard · Kapitel-Batches",
+            );
+          },
+          onMeta: (meta) => {
+            pushDeriveLine(
+              meta.genre
+                ? `Genre: ${meta.genre}${meta.tone ? ` · ${meta.tone}` : ""}`
+                : "Meta: (keine Angaben im Text)",
+            );
+            if (meta.synopsis) pushDeriveLine(`Synopsis: ${meta.synopsis}`);
+          },
+          onCharacter: (character) => {
+            pushDeriveLine(`Figur: ${character.name}${character.role ? ` — ${character.role}` : ""}`);
+          },
+          onChapter: (plan) => {
+            if (plan.summary) pushDeriveLine(`Kapitel ${plan.index + 1}: ${plan.summary}`);
+          },
+          onBatch: (done, total) => {
+            updateJob(jobId, { done: 1 + done, label: `Kapitel-Batch ${done}/${total}` });
+          },
+        },
+      );
+
+      const pick = (derived: string, current: string) =>
+        overwrite ? derived || current : current || derived;
+
+      const plans = existing.chapters.map((plan, index) => {
+        const derived = result.chapters.find((entry) => entry.index === index);
+        if (!derived) return plan;
+        return {
+          ...plan,
+          summary: pick(derived.summary, plan.summary),
+          pov: pick(derived.pov, plan.pov),
+          setting: pick(derived.setting, plan.setting),
+          foreshadowing:
+            overwrite && derived.foreshadowing.length > 0
+              ? derived.foreshadowing
+              : plan.foreshadowing.length > 0
+                ? plan.foreshadowing
+                : derived.foreshadowing,
+        };
+      });
+
+      // Figuren zusammenführen: vorhandene zuerst, neue nach Namen ergänzt (keine Dubletten).
+      const names = new Set(existing.characters.map((entry) => entry.name.trim().toLowerCase()));
+      const characters = [...existing.characters];
+      for (const candidate of result.characters) {
+        const key = candidate.name.trim().toLowerCase();
+        if (!key || names.has(key)) continue;
+        names.add(key);
+        characters.push(candidate);
+      }
+
+      const next: Book = {
+        ...book,
+        storyboard: {
+          ...existing,
+          title: existing.title || result.meta.title,
+          subtitle: pick(result.meta.subtitle, existing.subtitle),
+          genre: pick(result.meta.genre, existing.genre) || "Roman",
+          logline: pick(result.meta.logline, existing.logline),
+          synopsis: pick(result.meta.synopsis, existing.synopsis),
+          tone: pick(result.meta.tone, existing.tone),
+          pov: pick(result.meta.pov, existing.pov),
+          themes: overwrite && result.meta.themes.length > 0 ? result.meta.themes : existing.themes,
+          characters,
+          chapters: plans,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (onStoryboardDerived) onStoryboardDerived(next);
+      else onUpdate(next);
+      updateJob(jobId, { done: 1 + (result.chapters.length > 0 ? 1 : 0) });
+      finishJob(
+        jobId,
+        "done",
+        result.characters.length > 0
+          ? `Storyboard abgeleitet · ${result.characters.length} Figuren`
+          : "Storyboard abgeleitet",
+      );
+      showToast(
+        result.characters.length > 0
+          ? `Storyboard abgeleitet · ${result.characters.length} Figuren erkannt`
+          : "Storyboard abgeleitet",
+        "ok",
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unbekannter Fehler.";
+      setError(message);
+      finishJob(jobId, "error", message);
+    } finally {
+      resetDerive();
+      setBusy(null);
+    }
+  };
+
+  /** Übernimmt abgeleitete Szenen in Beat-Liste und Szenen-Metadaten eines Kapitels. */
+  const applyDerivedScenes = (
+    index: number,
+    scenes: DerivedScene[],
+    baseManuscript: ChapterContent[],
+    basePlans: ChapterPlan[],
+  ): { manuscript: ChapterContent[]; plans: ChapterPlan[] } => {
+    const nextPlans = basePlans.map((plan, i) =>
+      i === index ? { ...plan, beats: scenes.map((scene) => scene.text) } : plan,
+    );
+    const nextManuscript = baseManuscript.map((chapter, i) =>
+      i === index
+        ? {
+            ...chapter,
+            sceneMeta: scenes.map((scene) => ({
+              time: scene.time || undefined,
+              setting: scene.setting || undefined,
+              pov: scene.pov || undefined,
+            })),
+            beatCharacters: scenes.map(() => []),
+          }
+        : chapter,
+    );
+    return { manuscript: nextManuscript, plans: nextPlans };
+  };
+
+  /** Szenen eines einzelnen Kapitels ableiten und direkt übernehmen. */
+  const runDeriveScenes = async (index: number) => {
+    const chapter = manuscriptRef.current[index];
+    const text = (chapter?.expanded || chapter?.draft || "").trim();
+    if (!text) {
+      setError(`Kapitel ${index + 1} hat keinen Text, aus dem sich Szenen ableiten ließen.`);
+      return;
+    }
+
+    let model: string;
+    try {
+      model = structureModel();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
+      return;
+    }
+
+    setError(null);
+    setDeriveText("");
+    setDeriveLabel(`Szenen · Kapitel ${index + 1}`);
+    setBusy(`Szenen Kapitel ${index + 1}…`);
+    try {
+      const scenes = await streamDeriveScenes(
+        {
+          chapterTitle: chapter?.title ?? `Kapitel ${index + 1}`,
+          text,
+          hint: plans[index]?.summary,
+          model,
+          language,
+        },
+        {
+          onScene: (scene) => pushDeriveLine(scene.text),
+          onPart: (done, total) => {
+            if (total > 1) setDeriveLabel(`Szenen · Kapitel ${index + 1} · Teil ${done}/${total}`);
+          },
+        },
+      );
+      const next = applyDerivedScenes(
+        index,
+        scenes,
+        manuscriptRef.current,
+        structurePlans(),
+      );
+      manuscriptRef.current = next.manuscript;
+      commit(next.manuscript, plans.length > 0 ? next.plans : undefined);
+      showToast(
+        scenes.length === 1
+          ? `Kapitel ${index + 1}: 1 Szene abgeleitet`
+          : `Kapitel ${index + 1}: ${scenes.length} Szenen abgeleitet`,
+        "ok",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
+    } finally {
+      resetDerive();
+      setBusy(null);
+    }
+  };
+
+  /** Szenen für **alle** Kapitel ableiten — als Job im Job-Center (Abbruch zwischen Kapiteln). */
+  const runDeriveAllScenes = async () => {
+    const targets = manuscriptRef.current
+      .map((chapter, index) => ({ index, chapter }))
+      .filter(({ chapter }) => (chapter.expanded || chapter.draft).trim().length > 0);
+    if (targets.length === 0) {
+      setError("Kein Manuskript-Text vorhanden — es gibt nichts abzuleiten.");
+      return;
+    }
+
+    let model: string;
+    try {
+      model = structureModel();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
+      return;
+    }
+
+    setError(null);
+    const jobId = createJob({
+      title: `${book.title}: Szenen ableiten`,
+      kind: "scenes",
+      total: targets.length,
+    });
+    let currentManuscript = manuscriptRef.current.map((chapter) => ({ ...chapter }));
+    let currentPlans = structurePlans().map((plan) => ({
+      ...plan,
+      beats: [...plan.beats],
+    }));
+    let failure: string | null = null;
+
+    for (const [position, { index }] of targets.entries()) {
+      if (isCancelled(jobId)) break;
+      const chapter = currentManuscript[index];
+      updateJob(jobId, { done: position, label: `Kapitel ${index + 1}` });
+      setBusy(`Szenen ${position + 1}/${targets.length} · Kapitel ${index + 1}…`);
+      setDeriveText("");
+      setDeriveLabel(`Szenen · Kapitel ${index + 1}/${targets.length}`);
+      try {
+        const scenes = await streamDeriveScenes(
+          {
+            chapterTitle: chapter?.title ?? `Kapitel ${index + 1}`,
+            text: (chapter?.expanded || chapter?.draft || "").trim(),
+            hint: currentPlans[index]?.summary,
+            model,
+            language,
+          },
+          {
+            onScene: (scene) => pushDeriveLine(scene.text),
+            onPart: (done, total) => {
+              if (total > 1) {
+                setDeriveLabel(`Szenen · Kapitel ${index + 1} · Teil ${done}/${total}`);
+              }
+            },
+          },
+        );
+        const next = applyDerivedScenes(index, scenes, currentManuscript, currentPlans);
+        currentManuscript = next.manuscript;
+        currentPlans = next.plans;
+        manuscriptRef.current = currentManuscript;
+        commit(currentManuscript, plans.length > 0 ? currentPlans : undefined);
+        updateJob(jobId, { done: position + 1, detail: `${scenes.length} Szenen` });
+      } catch (err) {
+        failure = err instanceof Error ? err.message : "Unbekannter Fehler.";
+        setError(`${failure} (abgebrochen bei Kapitel ${index + 1})`);
+        break;
+      }
+    }
+
+    resetDerive();
+    if (isCancelled(jobId)) {
+      finishJob(jobId, "cancelled", `${book.title}: Szenen-Ableitung abgebrochen`);
+    } else if (failure) {
+      finishJob(jobId, "error", failure);
+    } else {
+      updateJob(jobId, { done: targets.length });
+      finishJob(jobId, "done", `${targets.length} Kapitel in Szenen gegliedert`);
+    }
+    setBusy(null);
+  };
+
   /**
    * Timeline-Prüfung, gestreamt: Befunde erscheinen live im Dialog. `onFinding` reicht sie
    * sofort hoch; das zurückgegebene (normalisierte) Ergebnis ersetzt am Ende die Live-Liste.
@@ -1899,6 +2293,26 @@ export function BookDetailView({
               <Button
                 variant="outline"
                 className="glass rounded-xl border-white/10"
+                onClick={() => void runDeriveStoryboard()}
+                disabled={Boolean(busy) || !hasManuscriptText}
+                title="Titel, Genre, Logline, Synopsis, Figuren und Kapitel-Kurzfassungen aus dem Manuskript ableiten (für importierte Bücher)"
+              >
+                <Sparkles className="size-4" />
+                Storyboard ableiten
+              </Button>
+              <Button
+                variant="outline"
+                className="glass rounded-xl border-white/10"
+                onClick={() => void runDeriveAllScenes()}
+                disabled={Boolean(busy) || !hasManuscriptText}
+                title="Alle Kapitel in Szenen gliedern (Beats mit Zeit, Schauplatz und POV) — läuft als Job im Job-Center"
+              >
+                <ListTree className="size-4" />
+                Szenen ableiten
+              </Button>
+              <Button
+                variant="outline"
+                className="glass rounded-xl border-white/10"
                 onClick={() => setTimelineOpen(true)}
                 disabled={Boolean(busy) || !book.storyboard}
                 title="Zeitangaben der Szenen gegen die Kapitelreihenfolge prüfen"
@@ -2084,6 +2498,26 @@ export function BookDetailView({
           {busy}
         </div>
       ) : null}
+
+      {/* Live-Vorschau der Struktur-Ableitung (Storyboard/Szenen treffen einzeln ein). */}
+      <StreamPreview
+        text={deriveText}
+        label={deriveLabel}
+        showWords={false}
+        className="mb-4"
+        render={(text) => (
+          <ul className="space-y-0.5">
+            {text
+              .split("\n")
+              .filter(Boolean)
+              .map((line, index) => (
+                <li key={index} className="truncate">
+                  • {line}
+                </li>
+              ))}
+          </ul>
+        )}
+      />
 
       {timelineOpen ? (
         <TimelineDialog
@@ -2786,6 +3220,19 @@ export function BookDetailView({
                             ))}
                           </SelectContent>
                         </Select>
+                        <Button
+                          variant="outline"
+                          className="glass h-8 rounded-lg border-white/10 text-xs"
+                          onClick={() => void runDeriveScenes(safeIndex)}
+                          disabled={
+                            Boolean(busy) ||
+                            (selected?.expanded || selected?.draft || "").trim().length === 0
+                          }
+                          title="Szenen dieses Kapitels aus dem Text ableiten (ersetzt die Beat-Liste)"
+                        >
+                          <Sparkles className="size-3.5" />
+                          Szenen ableiten
+                        </Button>
                       </div>
 
                       {scenes.length === 0 ? (
@@ -3061,3 +3508,4 @@ export function BookDetailView({
     </div>
   );
 }
+

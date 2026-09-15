@@ -97,9 +97,10 @@ src/
 
 | Stufe | Route |
 | --- | --- |
-| Storyboard | `POST /api/storyboard` · Stream (Fortschritt): `POST /api/storyboard/stream` |
+| Storyboard | `POST /api/storyboard` · Stream (Fortschritt): `POST /api/storyboard/stream` · Ableitung aus Manuskript (Stream, gechunkt): `POST /api/storyboard/derive/stream` |
 | Rohentwurf | `POST /api/chapter/draft` · Stream: `POST /api/chapter/draft/stream` |
 | Ausbau | `POST /api/chapter/expand` · Stream: `POST /api/chapter/expand/stream` |
+| Szenen ableiten | `POST /api/chapter/scenes/stream` (Beats + Zeit/Schauplatz/POV, gechunkt/gestreamt) |
 | Kohärenz | `POST /api/chapter/consistency` · Stream: `POST /api/chapter/consistency/stream` |
 | Stil | `POST /api/chapter/style` · Stream: `POST /api/chapter/style/stream` |
 | Timeline-Prüfung | `POST /api/timeline/check` · Stream: `POST /api/timeline/check/stream` · Quick Fix: `POST /api/timeline/repair` · Stream: `POST /api/timeline/repair/stream` |
@@ -204,3 +205,4 @@ Wurzel behoben. **Bestehende** Testfehler werden nicht eigenmächtig angefasst �
 | Beitragen | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Verhaltenskodex / Sicherheit | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), [`SECURITY.md`](SECURITY.md) |
 | Paket-Anleitung promptgen | [`packages/promptgen/AGENTS.md`](packages/promptgen/AGENTS.md) |
+

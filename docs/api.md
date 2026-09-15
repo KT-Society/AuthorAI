@@ -581,6 +581,78 @@ Live-Variante: `POST /api/timeline/repair/stream` (JSONL, ein Ereignis je Kapite
 
 ## Weltenbau
 
+### `POST /api/storyboard/derive/stream`
+
+Gegenrichtung zu `POST /api/storyboard`: leitet die Storyboard-Angaben aus einem **fertigen
+Manuskript** ab (für importierte Bücher). **Gechunkt und gestreamt** (SSE, JSONL-basiert) — ein
+Aufruf über alle Kapitel würde bei längeren Büchern ins Ausgabelimit laufen, deshalb zwei Phasen
+und Batches à 8 Kapitel.
+
+**Request**
+
+```json
+{
+  "title": "Mein Buch",
+  "genre": "Roman",
+  "chapters": [{ "title": "Kapitel 1", "text": "…" }],
+  "model": "<model-id>",
+  "language": "German",
+  "seriesContext": "… (optional)"
+}
+```
+
+**Ereignisse**
+
+```json
+data: {"type":"start","chapters":40,"batches":5}
+data: {"type":"phase","phase":"meta"}                       ← Phase 1: Meta + Figuren
+data: {"type":"meta","meta":{ … }}
+data: {"type":"character","character":{"name":"…","role":"…","description":"…"}}
+data: {"type":"phase","phase":"chapters"}                   ← Phase 2: Kapitel-Batches
+data: {"type":"chapter","plan":{"index":2,"summary":"…","pov":"…","setting":"…","foreshadowing":["…"]}}
+data: {"type":"batch","done":1,"total":5}
+data: {"type":"done","meta":{ … },"characters":[ … ],"chapters":[ … ]}
+```
+
+Live-Objekte sind **ungeprüft**; verbindlich ist `done`. `themes` ist auf 6 Einträge begrenzt,
+`characters` auf 40, Dubletten nach Namen fallen weg. Kapitel werden über ihre Nummer zugeordnet —
+fehlende Einträge bleiben **leer** statt zu verrutschen (ein Modell, das Kapitel auslässt, ergibt
+also keine verschobenen Kurzfassungen). Ohne Manuskript-Text → **HTTP 400 vor dem Stream**
+(leeres `chapters` ist ein Aufrufer-Fehler, kein Stream-Fall).
+
+### `POST /api/chapter/scenes/stream`
+
+Leitet die **Szenen eines Kapitels** aus seiner Prosa ab (Beats mit Zeit, Schauplatz, POV) — die
+Grundlage für Timeline-Prüfung und Szenen-Editor. Gestreamt (JSONL); lange Kapitel zerlegt der
+Server vorher **absatzsicher** in Teile von ~2.500 Wörtern. Für ein ganzes Buch läuft das im
+Editor als Job über alle Kapitel.
+
+**Request**
+
+```json
+{
+  "chapterTitle": "Kapitel 1",
+  "text": "… voller Kapiteltext …",
+  "hint": "… Kurzfassung als Kontext (optional) …",
+  "model": "<model-id>",
+  "language": "German"
+}
+```
+
+**Ereignisse**
+
+```json
+data: {"type":"start","parts":2}
+data: {"type":"part","done":1,"total":2}                    ← bei mehrteiligen Kapiteln
+data: {"type":"scene","scene":{"text":"…","time":"…","setting":"…","pov":"…"}}
+data: {"type":"done","scenes":[ … ]}
+```
+
+`text` ist eine **Plan-Zeile** (max ~25 Wörter), nicht die Prosa. `time`/`setting`/`pov` sind leer,
+wenn der Text sie nicht hergibt. Szenen ohne `text` werden verworfen; identische Zeilen über eine
+Teil-Grenze hinweg werden **nicht** gedoppelt (live wie im Ergebnis). Liefert das Modell **keine**
+Szenen → **502**; leerer Kapiteltext → **HTTP 400** (ohne Modell-Aufruf).
+
 ### `POST /api/world/extract`
 
 Leitet Orte, Fraktionen, Magie, Artefakte und Lore aus einem vorhandenen Storyboard ab.

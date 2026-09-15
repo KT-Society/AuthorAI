@@ -41,6 +41,41 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   „2. Kapitel: Das Ende"), sonst hieße das Kapitel nach dem Import „Kapitel 1: Kapitel 1:
   Der Aufbruch".
 
+### Struktur aus dem Manuskript ableiten (Storyboard & Szenen)
+
+- **Fixed** **„Storyboard-Ableitung wurde vom Token-Limit abgeschnitten"**: Ich hatte für das
+  ganze Buch **einen** Aufruf gemacht — bei 40+ Kapiteln läuft jede Antwort zwangsläufig ins
+  Ausgabelimit, egal welches Modell. Jetzt ist die Ableitung **gechunkt** wie die
+  Storyboard-*Generierung*: Phase 1 liefert Metadaten + Figurenliste, Phase 2 die Kapitelpläne in
+  **Batches à 8**. Jede Antwort bleibt klein, das Limit ist kein Thema mehr.
+- **Added** **Beide Ableitungen sind jetzt gestreamt** (`/api/storyboard/derive/stream`,
+  `/api/chapter/scenes/stream`, JSONL): Metadaten, **Figuren** und **Kapitel-Kurzfassungen**
+  treffen einzeln ein und wachsen in der **Live-Vorschau** im Buch-Editor mit; lange Kapitel
+  werden bei der Szenen-Ableitung in Teile zerlegt (je ~2.500 Wörter, absatzsicher) und der
+  Teil-Fortschritt wird angezeigt. Dazu ein **Job** im Job-Center: Fortschritt über die Batches
+  (`Kapitel-Batch 3/6`) bzw. `N Szenen` je Kapitel.
+- **Added** **„Storyboard ableiten"** im Buch-Editor: Liest das Manuskript und füllt, was ein
+  importiertes Buch nicht hat — **Titel/Untertitel/Genre/Logline/Synopsis/Themen/Ton/POV**,
+  eine **Figurenliste** und je Kapitel **Kurzfassung, POV, Schauplatz, Foreshadowing**. Vorhandene
+  Angaben werden nur nach Rückfrage überschrieben (Abbruch = nur leere Felder füllen); Szenen-Beats
+  bleiben unangetastet. Ursache: Der Import kennt nur den Text — Kurzfassungen stammen dort aus dem
+  Textanfang, POV/Schauplatz sind leer, und ohne Kurzfassungen haben Prüf-Prompts und Plot-Board
+  nichts zu lesen.
+- **Added** **„Szenen ableiten"** (je Kapitel im Szenen-Bereich **und** für alle Kapitel als
+  **Job** im Job-Center): gliedert den Kapiteltext in Beats — eine kurze Plan-Zeile je Szene, dazu
+  **Zeit, Schauplatz und POV**, aber nur wenn der Text sie hergibt. Damit funktionieren
+  **Timeline-Prüfung** und Szenen-Editor auch für Bücher, deren Markdown keine Szenentrenner hat
+  (bisher kamen Szenen nur daraus).
+- **Added** **Routen `POST /api/storyboard/derive/stream` und `POST /api/chapter/scenes/stream`**:
+  die Gegenrichtung zur Generierung. Beide nutzen das **Storyboard-Model**. Serverseitig robust:
+  Kapitel werden über ihre Nummer zugeordnet (fehlende Einträge bleiben leer statt zu verrutschen),
+  leere Szenen ohne Text fallen weg, und ohne Manuskript-Text bzw. ohne Kapiteltext passiert
+  **kein** Modell-Aufruf (HTTP 400 vor dem Stream).
+- **Added** **Abgeleitetes Personal landet in den Ansichten**: Ein abgeleitetes Storyboard läuft
+  durch dieselbe Ableitung wie beim Anlegen eines Buchs (`collectMissingCharacters/-World/-Plot`)
+  — die Figuren aus dem Manuskript tauchen also direkt in „Charaktere", „Weltenbau" und im
+  Plot-Board auf, statt erst nach einem Neustart.
+
 ### Live-Vorschläge für Prüfungen und Extraktionen
 
 - **Added** **Vier weitere Routen streamen jetzt live**: `POST /api/timeline/check`,

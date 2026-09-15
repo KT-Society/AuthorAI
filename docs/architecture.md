@@ -234,6 +234,12 @@ mit Kapitelplan (Kurzfassung aus dem Kapitelanfang, optional Szenen aus Szenentr
 Zählwerte und Ziel-Wörter. Danach läuft es durch dieselbe Shell wie ein erstelltes Buch
 (`addBook` → Ableitungen aus dem Storyboard, Persistenz, Öffnen im Editor).
 
+**Struktur nachleiten:** Im Editor leiten zwei Aufrufe nach, was der Import nicht wissen kann —
+`POST /api/storyboard/derive` (Meta, Figurenliste, Kapitel-Kurzfassungen) und
+`POST /api/chapter/scenes` (Beats mit Zeit/Schauplatz/POV je Kapitel, im Ganzen als Job). Ein
+abgeleitetes Storyboard geht über `onStoryboardDerived` zurück in die Shell, damit **dieselben
+Ableitungen** wie beim Buch-Anlegen laufen (`collectMissingCharacters/-World/-Plot`).
+
 ## Datenfluss (Beispiel: Kapitel ausbauen)
 
 ```mermaid

@@ -390,6 +390,225 @@ export async function streamTimelineRepair(
   return result;
 }
 
+export interface StoryboardDeriveRequest {
+  title: string;
+  genre?: string;
+  chapters: { title: string; text: string }[];
+  model: string;
+  language: string;
+  seriesContext?: string;
+}
+
+/** Kapitelplan-Angaben aus dem Text (leer = nicht belegbar). */
+export interface DerivedChapterPlan {
+  index: number;
+  summary: string;
+  pov: string;
+  setting: string;
+  foreshadowing: string[];
+}
+
+export interface StoryboardDeriveResult {
+  meta: {
+    title: string;
+    subtitle: string;
+    genre: string;
+    logline: string;
+    synopsis: string;
+    themes: string[];
+    tone: string;
+    pov: string;
+  };
+  characters: StoryCharacter[];
+  chapters: DerivedChapterPlan[];
+}
+
+/** Normalisiert die Meta-Angaben der Ableitung (Server liefert sie roh). */
+function asDeriveMeta(value: unknown): StoryboardDeriveResult["meta"] {
+  const meta = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const text = (key: string) => (typeof meta[key] === "string" ? (meta[key] as string) : "");
+  return {
+    title: text("title"),
+    subtitle: text("subtitle"),
+    genre: text("genre"),
+    logline: text("logline"),
+    synopsis: text("synopsis"),
+    themes: Array.isArray(meta.themes) ? meta.themes.map(String) : [],
+    tone: text("tone"),
+    pov: text("pov"),
+  };
+}
+
+/** Normalisiert Figuren der Ableitung (gleiche Toleranz wie die Figuren-Extraktion). */
+function asDerivedCharacters(value: unknown): StoryCharacter[] {
+  if (!Array.isArray(value)) return [];
+  const characters: StoryCharacter[] = [];
+  for (const entry of value) {
+    const item = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    if (!name) continue;
+    characters.push({
+      name,
+      role: typeof item.role === "string" ? item.role : "",
+      description: typeof item.description === "string" ? item.description : "",
+    });
+  }
+  return characters;
+}
+
+/** Normalisiert einen abgeleiteten Kapitelplan. */
+function asDerivedPlan(value: unknown): DerivedChapterPlan | null {
+  const item = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const index = Number.parseInt(String(item.index ?? ""), 10);
+  if (!Number.isFinite(index) || index < 0) return null;
+  return {
+    index,
+    summary: typeof item.summary === "string" ? item.summary : "",
+    pov: typeof item.pov === "string" ? item.pov : "",
+    setting: typeof item.setting === "string" ? item.setting : "",
+    foreshadowing: Array.isArray(item.foreshadowing) ? item.foreshadowing.map(String) : [],
+  };
+}
+
+export interface StoryboardDeriveHandlers {
+  /** Vor dem ersten Aufruf: Anzahl Kapitel und Batches. */
+  onStart?: (info: { chapters: number; batches: number }) => void;
+  onPhase?: (phase: "meta" | "chapters") => void;
+  onMeta?: (meta: StoryboardDeriveResult["meta"]) => void;
+  onCharacter?: (character: StoryCharacter) => void;
+  /** Ein Kapitelplan, sobald das Modell ihn geschrieben hat (live, vor der Endprüfung). */
+  onChapter?: (plan: DerivedChapterPlan) => void;
+  onBatch?: (done: number, total: number) => void;
+}
+
+/**
+ * Gestreamte Storyboard-Ableitung aus einem fertigen Manuskript: **gechunkt** (Meta/Figuren, dann
+ * Kapitel in Batches) und **gestreamt** (Figuren und Kapitel treffen einzeln ein). Verbindlich ist
+ * das Ergebnis aus dem Abschluss.
+ */
+export async function streamDeriveStoryboard(
+  input: StoryboardDeriveRequest,
+  handlers: StoryboardDeriveHandlers = {},
+): Promise<StoryboardDeriveResult> {
+  let result: StoryboardDeriveResult | null = null;
+
+  await streamEvents("/api/storyboard/derive/stream", input, (event) => {
+    if (event.type === "start") {
+      handlers.onStart?.({
+        chapters: Number(event.chapters ?? 0),
+        batches: Number(event.batches ?? 0),
+      });
+      return;
+    }
+    if (event.type === "phase" && (event.phase === "meta" || event.phase === "chapters")) {
+      handlers.onPhase?.(event.phase);
+      return;
+    }
+    if (event.type === "meta") {
+      handlers.onMeta?.(asDeriveMeta(event.meta));
+      return;
+    }
+    if (event.type === "character") {
+      const [character] = asDerivedCharacters([event.character]);
+      if (character) handlers.onCharacter?.(character);
+      return;
+    }
+    if (event.type === "chapter") {
+      const plan = asDerivedPlan(event.plan);
+      if (plan) handlers.onChapter?.(plan);
+      return;
+    }
+    if (event.type === "batch") {
+      handlers.onBatch?.(Number(event.done ?? 0), Number(event.total ?? 0));
+      return;
+    }
+    if (event.type === "done") {
+      result = {
+        meta: asDeriveMeta(event.meta),
+        characters: asDerivedCharacters(event.characters),
+        chapters: (Array.isArray(event.chapters) ? event.chapters : [])
+          .map(asDerivedPlan)
+          .filter((plan): plan is DerivedChapterPlan => plan !== null),
+      };
+    }
+  });
+
+  if (!result) throw new Error("Der Server hat keine Storyboard-Ableitung geliefert.");
+  return result;
+}
+
+export interface SceneDeriveRequest {
+  chapterTitle: string;
+  text: string;
+  hint?: string;
+  model: string;
+  language: string;
+}
+
+/** Eine aus dem Text gelesene Szene (Beat-Zeile + optionale Zeit/Schauplatz/POV). */
+export interface DerivedScene {
+  text: string;
+  time: string;
+  setting: string;
+  pov: string;
+}
+
+/** Normalisiert eine Szenen-Zeile (Live-Ereignis wie Abschluss). */
+function asDerivedScene(value: unknown): DerivedScene | null {
+  const item = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const text = typeof item.text === "string" ? item.text.trim() : "";
+  if (!text) return null;
+  return {
+    text,
+    time: typeof item.time === "string" ? item.time.trim() : "",
+    setting: typeof item.setting === "string" ? item.setting.trim() : "",
+    pov: typeof item.pov === "string" ? item.pov.trim() : "",
+  };
+}
+
+export interface SceneDeriveHandlers {
+  /** Vor dem ersten Aufruf: in wie viele Teile das Kapitel zerlegt wurde. */
+  onStart?: (info: { parts: number }) => void;
+  onPart?: (done: number, total: number) => void;
+  /** Eine Szene, sobald das Modell sie geschrieben hat (live). */
+  onScene?: (scene: DerivedScene) => void;
+}
+
+/**
+ * Gestreamte Szenen-Ableitung: lange Kapitel werden serverseitig gechunkt, die Szenen treffen
+ * einzeln ein. Verbindlich ist die Liste aus dem Abschluss.
+ */
+export async function streamDeriveScenes(
+  input: SceneDeriveRequest,
+  handlers: SceneDeriveHandlers = {},
+): Promise<DerivedScene[]> {
+  let scenes: DerivedScene[] | null = null;
+
+  await streamEvents("/api/chapter/scenes/stream", input, (event) => {
+    if (event.type === "start") {
+      handlers.onStart?.({ parts: Number(event.parts ?? 0) });
+      return;
+    }
+    if (event.type === "part") {
+      handlers.onPart?.(Number(event.done ?? 0), Number(event.total ?? 0));
+      return;
+    }
+    if (event.type === "scene") {
+      const scene = asDerivedScene(event.scene);
+      if (scene) handlers.onScene?.(scene);
+      return;
+    }
+    if (event.type === "done") {
+      scenes = (Array.isArray(event.scenes) ? event.scenes : [])
+        .map(asDerivedScene)
+        .filter((scene): scene is DerivedScene => scene !== null);
+    }
+  });
+
+  if (scenes === null) throw new Error("Der Server hat keine Szenen geliefert.");
+  return scenes.length > 0 ? scenes : [];
+}
+
 export interface WorldExtractRequest {
   storyboard: Storyboard;
   model: string;
