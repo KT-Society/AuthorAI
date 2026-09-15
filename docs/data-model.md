@@ -120,6 +120,10 @@ interface SceneConstraint {
 deshalb liegt eine solche Korrektur außerhalb der Kapitel-Version (siehe `roadmap.md`,
 „Szenen-Struktur versionieren").
 
+**Import:** Ein importiertes Manuskript liegt in **`expanded`** (`draft` bleibt leer, weil es
+keinen Rohentwurf gibt). So liest es die gesamte Kette (`manuscriptOf` → `expanded || draft`)
+ohne Sonderfall: Pässe, Exporte, Wortzahlen, Prüfungen.
+
 ### Cover-Text (`src/data/cover.ts`)
 
 ```ts

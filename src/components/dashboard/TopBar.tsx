@@ -1,4 +1,4 @@
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,11 +10,14 @@ export function TopBar({
   query,
   onQueryChange,
   onCreate,
+  onImport,
   profileName,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
   onCreate: () => void;
+  /** Öffnet den Manuskript-Import (vorhandenes Markdown/Text einlesen). */
+  onImport: () => void;
   profileName: string;
 }) {
   const now = new Date();
@@ -51,6 +54,16 @@ export function TopBar({
         </div>
 
         <NotificationsBell />
+
+        <Button
+          variant="outline"
+          onClick={onImport}
+          className="glass h-10 rounded-xl border-white/10 px-3 font-semibold"
+          title="Vorhandenes Manuskript (Markdown/Text) als Projekt einlesen"
+        >
+          <Upload className="size-4" />
+          <span className="hidden sm:inline">Importieren</span>
+        </Button>
 
         <Button
           onClick={onCreate}

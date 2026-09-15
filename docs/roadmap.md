@@ -12,6 +12,16 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 - **Szenen-Import/Export**: Szenenplan als JSON austauschen
 - **Drei-Wege-Vergleich**: „aktuell ↔ vor Kohärenz ↔ vor Stil" in einer kombinierten Ansicht
 
+### Import & Austausch (Anschlüsse an den Markdown-Import)
+- **DOCX-Import**: Autoren liefern oft `.docx` — Überschriften und Absätze aus dem Word-XML lesen
+  (die ZIP-Bausteine für den Export liegen schon im Repo)
+- **Mehrere Dateien in einem Zug**: einen Stapel Manuskripte importieren und als **Reihe** anlegen
+  statt Band für Band
+- **Metadaten aus der Überschrift**: `## Kapitel 3 — POV: Aria · Tag 2` beim Import gleich in
+  Szenen-Zeit, POV und Schauplatz übernehmen (heute bleibt die Zeile ein reiner Titel)
+- **Kapitelgrenzen im Dialog nachziehen**: erkannte Kapitel vor dem Anlegen verschieben/zusammen-
+  fassen, wenn die Überschriften-Heuristik daneben liegt
+
 ### Kanon & Kontinuität (Anschlüsse an den Fakten-Check)
 - **Widerspruchs-Marker im Editor**: gemeldete Zitate direkt im Kapiteltext hervorheben und
   dorthin springen, statt sie nur als Liste zu zeigen

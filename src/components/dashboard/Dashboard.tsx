@@ -46,6 +46,7 @@ import { releaseCoverImage } from "@/lib/coverStore";
 import { createBackup, parseBackup } from "@/lib/backup";
 import type { ProfileBackup } from "@/lib/backup";
 import { emptyMetaToday, normalizeMeta, recordWords } from "@/lib/streak";
+import { showToast } from "@/lib/toast";
 import { findMatchingEntry } from "@/lib/worldMatch";
 import { findMatchingCharacter } from "@/lib/characterMatch";
 import {
@@ -57,6 +58,7 @@ import type { AppNotification, NotificationInput } from "@/lib/notifications";
 
 import { BookDetailView } from "./BookDetailView";
 import { ChaptersView } from "./ChaptersView";
+import { ImportMarkdownDialog } from "./ImportMarkdownDialog";
 import { CharactersView } from "./CharactersView";
 import { ContinuityView } from "./ContinuityView";
 import { DashboardView } from "./DashboardView";
@@ -223,6 +225,7 @@ export function Dashboard({
   const [openBookId, setOpenBookId] = useState<string | null>(null);
   const [openChapterIndex, setOpenChapterIndex] = useState(0);
   const [createRequest, setCreateRequest] = useState(0);
+  const [importOpen, setImportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
@@ -432,6 +435,8 @@ export function Dashboard({
     setCreateRequest((prev) => prev + 1);
   };
 
+  const startImport = () => setImportOpen(true);
+
   /* ── Projekt-Backup (Export/Import) ─────────────────────────────────── */
 
   const handleExportBackup = () => {
@@ -595,6 +600,7 @@ export function Dashboard({
                 onOpenBook={(id) => openBook(id)}
                 onDeleteBook={deleteBook}
                 onCreate={startCreate}
+                onImport={startImport}
               />
             ) : activeNav === "chapters" ? (
               <ChaptersView books={books} onOpenChapter={(id, index) => openBook(id, index)} />
@@ -695,6 +701,7 @@ export function Dashboard({
                 onOpenBook={(id) => openBook(id)}
                 onDeleteBook={deleteBook}
                 createRequest={createRequest}
+                onImport={startImport}
                 notifications={notifications}
                 onClearActivity={clearActivity}
                 ideas={ideas}
@@ -713,6 +720,22 @@ export function Dashboard({
             )}
           </main>
         </div>
+
+        <ImportMarkdownDialog
+          open={importOpen}
+          paletteIndex={books.length}
+          onClose={() => setImportOpen(false)}
+          onImport={(book) => {
+            // Wie ein im Wizard erstelltes Buch: anlegen, Ableitungen laufen lassen, öffnen.
+            addBook(book);
+            showToast(
+              book.chapters === 1
+                ? `„${book.title}" importiert · 1 Kapitel`
+                : `„${book.title}" importiert · ${book.chapters} Kapitel`,
+              "ok",
+            );
+          }}
+        />
 
         <SettingsDialog
         open={settingsOpen}

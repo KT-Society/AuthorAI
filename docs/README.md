@@ -31,6 +31,8 @@ bun run dev     # App auf http://localhost:3000
 
 1. **Profil** anlegen („Wer schreibt heute?").
 2. **Neues Buch** → Idee eingeben → Model je Schritt setzen (optional Anbieter umstellen).
+   **Oder** vorhandenes Manuskript **importieren** (Bibliothek → „Importieren", Markdown/Text) —
+   dann direkt bei Schritt 3 einsteigen.
 3. Pipeline durchlaufen: Storyboard → Rohentwurf → Ausbau → Kohärenz → Stil. Lange Ausgaben
    entstehen **live vor deinen Augen**; Storyboard, Ausbau und Prüfungen zeigen ihren Fortschritt
    auch im **Job-Center**.

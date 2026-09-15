@@ -28,6 +28,7 @@ export function DashboardView({
   onOpenBook,
   onDeleteBook,
   createRequest,
+  onImport,
   notifications,
   onClearActivity,
   ideas,
@@ -53,6 +54,8 @@ export function DashboardView({
   onOpenBook: (id: string) => void;
   onDeleteBook: (id: string) => void;
   createRequest: number;
+  /** Öffnet den Manuskript-Import (vorhandenes Markdown/Text einlesen). */
+  onImport: () => void;
   notifications: AppNotification[];
   onClearActivity: () => void;
   ideas: Idea[];
@@ -89,6 +92,7 @@ export function DashboardView({
         query={query}
         onQueryChange={setQuery}
         onCreate={() => setDialogOpen(true)}
+        onImport={onImport}
         profileName={profileName}
       />
 

@@ -36,6 +36,25 @@ und im Assistenten läuft parallel die **Live-Vorschau** mit dem entstehenden Te
 
 ---
 
+## 0 · Bestehendes Manuskript importieren
+
+Wer schon geschrieben hat, startet nicht bei der Idee: **Bibliothek → Importieren** liest
+**Markdown** (oder reinen Text) und legt daraus ein vollständiges Projekt an.
+
+| Was | Wie |
+| --- | --- |
+| Kapitel | Die häufigste Überschriftsebene ist die Kapitel-Ebene; eine Überschrift darüber ist der Titel. Der eigene Export (`---` + `## Kapitel n: Titel`) wird **exakt** erkannt, ebenso der TXT-Export (`Kapitel n: Titel` als Zeile) |
+| Metadaten | YAML-Frontmatter (`title`, `subtitle`, `genre`, `tags`, `synopsis`) oder die Export-Zeile `*Genre · n Wörter · n Kapitel*`; im Dialog **editierbar** vor dem Anlegen |
+| Szenen | Szenentrenner (`***`, `---`, `* * *`, `— — —`) werden zu Szenen; Beat = erster Satz des Abschnitts (abschaltbar) |
+| Prosa | Inline-Auszeichnung wird entfernt (`**fett**`, Links, Code), Absätze bleiben. Der Text landet in `expanded` — dort, wo alle Pässe und Exporte lesen |
+
+Danach ist das Buch **kein Sonderfall**: Kapitelplan mit Kurzfassungen (aus dem Kapitelanfang)
+füttert die Prüf-Prompts, Wortzahlen und Ziel-Wörter sind berechnet, und Figuren, Weltenbau und
+Kanon lassen sich wie gewohnt ableiten. Ohne erkennbare Struktur wird der Text **ein** Kapitel
+plus Hinweis — verloren geht nichts.
+
+---
+
 ## 1 · Idee
 
 Freitext des Nutzers (Prämisse, Figur, Konflikt, Setting, Ton) plus Kapitelzahl (3–40)

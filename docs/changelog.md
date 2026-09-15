@@ -8,6 +8,39 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Manuskript-Import (Markdown)
+
+- **Added** **Vorhandene Manuskripte importieren**: In der **Bibliothek** und in der Top-Bar gibt
+  es jetzt **„Importieren"**. Der Dialog liest eine Markdown- oder Textdatei **im Browser**
+  (nichts wird hochgeladen), zeigt vor dem Anlegen eine Vorschau — erkannte Kapitel mit
+  Wortzahlen, Titel/Untertitel/Genre editierbar, Hinweise — und legt daraus ein **vollständiges
+  Projekt** an: Manuskript, Storyboard mit Kapitelplan, Zählwerte und Ziel-Wörter. Ab da ist es
+  ein ganz normales Buch: bearbeiten, Kohärenz/Stil prüfen, Fakten-Check, Figuren/Weltenbau
+  ableiten, exportieren. Ursache: Bisher gab es nur den Weg über den Assistenten — ein Autor mit
+  fertigem Manuskript hätte alles neu schreiben müssen.
+- **Added** **Round-Trip mit dem eigenen Export**: Der Import erkennt die Form von
+  `lib/markdown.ts` **exakt** (`# Titel`, optional `## Untertitel`, `*Genre · n Wörter ·
+  n Kapitel*`, `> Synopsis`, `` `tag` ``, `---` + `## Kapitel n: Titel`) — ein aus AuthorAI
+  exportiertes Manuskript kommt also verlustfrei zurück (Titel, Untertitel, Genre, Tags,
+  Synopsis, Kapitel, Wortzahlen). Auch der **TXT-Export** wird gelesen (Kapitel als
+  `Kapitel n: Titel`-Zeilen).
+- **Added** **Fremde Manuskripte**: Kapitel werden heuristisch erkannt — die häufigste
+  Überschriftsebene ist die Kapitel-Ebene, eine Überschrift darüber ist der Titel, Szenentrenner
+  (`***`, `---`, `* * *`, `— — —`) werden zu **Szenen**, YAML-Frontmatter (`title`, `genre`,
+  `tags`, `synopsis`) übernommen. Inline-Auszeichnung (`**fett**`, Links, Code) wird entfernt,
+  die Prosa bleibt; `Neo_Kyoto` & Co. überleben. Ist gar keine Struktur da, wird alles **ein**
+  Kapitel plus Hinweis — nichts geht verloren.
+- **Added** **Szenen aus Szenentrennern** (abschaltbar): Jede Szene wird zu einem Beat mit dem
+  ersten Satz des Abschnitts als Text — damit funktionieren **Timeline-Prüfung** und der
+  Szenen-Editor auch für importierte Bücher.
+- **Changed** **Ein Ort für Slug und Cover-Farben**: `slugify` (jetzt `lib/slug.ts`) und die
+  Cover-Palette (jetzt `data/cover.ts`) lagen im Wizard — der Import braucht beides, also teilen
+  sich Wizard und Import eine Quelle.
+- **Fixed** **Kapitelnummern-Dubletten beim Re-Import**: Ein Export-Titel lautet
+  `## Kapitel 1: Der Aufbruch` — der Parser entfernt die Numerierung (auch mehrfach gestapelt:
+  „2. Kapitel: Das Ende"), sonst hieße das Kapitel nach dem Import „Kapitel 1: Kapitel 1:
+  Der Aufbruch".
+
 ### Live-Vorschläge für Prüfungen und Extraktionen
 
 - **Added** **Vier weitere Routen streamen jetzt live**: `POST /api/timeline/check`,

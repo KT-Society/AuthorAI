@@ -189,6 +189,35 @@ sind vorausgewählt.
 
 ---
 
+## Import bestehender Manuskripte
+
+### Der Import findet nur ein Kapitel
+
+Dann enthielt die Datei keine (wiederkehrenden) Überschriften. Der Import nimmt den Text
+vollständig als **ein** Kapitel auf und weist im Dialog darauf hin. Behelf: Kapitel im Markdown mit
+`## Kapitel 1: Titel` (oder `Kapitel 1: Titel` als eigene Zeile) markieren — beides wird erkannt.
+
+### Titel oder Kapitelnamen sind falsch
+
+Die Heuristik nimmt die erste Überschrift über der Kapitel-Ebene als Titel und entfernt eine
+Numerierung aus Kapitelnamen („Kapitel 3: Der Sturm" → „Der Sturm"). Titel, Untertitel und Genre
+lassen sich **im Import-Dialog** vor dem Anlegen korrigieren; Kapitelnamen danach in der
+Kapitelverwaltung.
+
+### Keine Szenen im importierten Buch
+
+Szenen entstehen nur aus Szenentrennern (`***`, `---`, `* * *`, `— — —`). Ohne Trenner gibt es
+einen Beat pro Kapitel bzw. — wenn die Option im Dialog aus war — gar keinen. Nachträglich im
+Bereich **Szenen** anlegen; ohne Szenen hat die Timeline-Prüfung keine Zeitangaben zu lesen.
+
+### Fett/Kursiv oder `Neo_Kyoto` sehen komisch aus
+
+Inline-Auszeichnung wird entfernt (`**fett**` → `fett`, Links → Beschriftung). Unterstriche
+**innerhalb** von Namen bleiben absichtlich stehen (`Neo_Kyoto`), weil sie sonst als Kursiv-Marker
+gelesen würden.
+
+---
+
 ## Cover
 
 ### Cover fehlt / Bild kaputt

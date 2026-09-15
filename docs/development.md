@@ -110,8 +110,21 @@ Fakten), gibt es statt eines JSON-Dokuments eine JSONL-Variante: ein Objekt pro 
   **trotzdem** bedienen (siehe `chatCompletionStream`), sonst laufen JSONL-Sammler und
   Prosa-Vorschauen ins Leere.
 
-### Live-Vorschau & Fortschritt (Konventionen)
+### Export & Import sprechen dieselbe Form
 
+Formate werden **paarweise** gepflegt: Wer `lib/epub.ts`, `lib/docx.ts`, `lib/markdown.ts` oder
+`lib/pdf.ts` anfasst, prüft die Gegenrichtung mit (`lib/markdownImport.ts` liest Markdown und den
+TXT-Export). Regeln dabei:
+
+- Der Export bleibt die Referenz: Struktur (Überschriftsebenen, Trenner, Metazeilen) wird **nicht**
+  beiläufig geändert, sonst bricht der Import still.
+- Der Import muss **verlustfrei** zurücklesen: Titel, Untertitel, Genre, Tags, Synopsis, Kapitel
+  und Wortzahlen. Das ist mit einem Round-Trip-Test zu belegen (`buildMarkdown` → `parse` →
+  `buildImportedBook`), nicht per Augenmaß.
+- Fremde Dateien sind der Normalfall: Was nicht erkannt wird (keine Überschriften, gemischte
+  Ebenen), wird als **ein** Kapitel plus Hinweis aufgenommen — nie stillschweigend verworfen.
+
+### Live-Vorschau & Fortschritt (Konventionen)
 | Baustein | Datei | Wofür |
 | --- | --- | --- |
 | `StreamPreview` | `components/dashboard/StreamPreview.tsx` | Wachsender Text + Wortstand + Schritt-Info. `showWords={false}`/`render` für Nicht-Prosa (Storyboard-Titelliste) |

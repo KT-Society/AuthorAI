@@ -30,7 +30,9 @@ Idee → Storyboard → Rohentwurf (~500 W) → Ausbau (3.000–5.000 W) → Koh
 | **Charaktere** | Aus dem Storyboard automatisch angelegt, editierbar, **Soul-Scan** (12 Sektionen) |
 | **Weltenbau** | Orte, Fraktionen, Magie, Artefakte, Lore — automatisch + per Extraktion |
 | **Plot-Board** | Kapitel als Karten, Akt/Status, Board-Ansicht |
+| **Material** | Cover für Text, Portrait, Logo oder Produktfoto — oder Farbverlauf als Fallback |
 | **Recherche** | Notizen + echte Tavily-Suche |
+| **Import** | Vorhandene Manuskripte als **Markdown/Text** einlesen (Kapitel aus Überschriften, Szenen aus Trennern) — danach prüfen, bearbeiten, Kanon ableiten wie bei einem hier erstellten Buch |
 | **Szenen** | Beats je Kapitel editierbar mit POV/Schauplatz/Zeit/**Wortziel** — verbindlich für Generierung und Prüfung |
 | **Timeline** | Zeitangaben der Szenen gegen die Kapitelreihenfolge prüfen — Befunde erscheinen live, mit **Quick Fix** (korrigiert Szenen-Zeit/Schauplatz/Text nach Diff-Vorschau) |
 | **Export** | EPUB (mit Cover), DOCX für Lektorat, Markdown, sauberes PDF über den Reader |

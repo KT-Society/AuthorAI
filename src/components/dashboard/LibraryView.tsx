@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Layers, Library, Plus, Search } from "lucide-react";
+import { Layers, Library, Plus, Search, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,12 +40,15 @@ export function LibraryView({
   onOpenBook,
   onDeleteBook,
   onCreate,
+  onImport,
 }: {
   books: Book[];
   series?: Series[];
   onOpenBook: (id: string) => void;
   onDeleteBook: (id: string) => void;
   onCreate: () => void;
+  /** Öffnet den Manuskript-Import (vorhandenes Markdown/Text einlesen). */
+  onImport: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<BookStatus | "all">("all");
@@ -121,6 +124,15 @@ export function LibraryView({
                 className="glass h-10 w-full rounded-xl pl-9 lg:w-64"
               />
             </div>
+            <Button
+              variant="outline"
+              onClick={onImport}
+              className="glass h-10 rounded-xl border-white/10 px-4 font-semibold"
+              title="Vorhandenes Manuskript (Markdown/Text) als Projekt einlesen"
+            >
+              <Upload className="size-4" />
+              Importieren
+            </Button>
             <Button
               onClick={onCreate}
               className="h-10 rounded-xl bg-gradient-to-r from-brand-violet to-brand-indigo px-4 font-semibold text-white shadow-[0_0_30px_-10px_hsl(258_90%_66%/0.95)]"

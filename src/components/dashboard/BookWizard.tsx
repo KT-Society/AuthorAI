@@ -42,12 +42,14 @@ import type { ModelStage } from "@/lib/generationSettings";
 
 import type { Book } from "@/data/author";
 import type { Character } from "@/data/characters";
+import { COVER_PALETTE, FALLBACK_COVER } from "@/data/cover";
 import { canonBlock } from "@/data/continuity";
 import type { CanonFact, CharacterRelation } from "@/data/continuity";
 import type { Series } from "@/data/series";
 import { seriesOfBook, volumeLabel } from "@/data/series";
 import type { WorldEntry } from "@/data/world";
 import { buildSeriesContext } from "@/lib/seriesContext";
+import { slugify } from "@/lib/slug";
 import { manuscriptOf, resumeStep } from "@/lib/bookManuscript";
 import {
   EXPAND_DEFAULT_WORDS,
@@ -81,14 +83,6 @@ import { CanonCheckDialog } from "./CanonCheckDialog";
 import type { CanonScopeSelection } from "./CanonCheckDialog";
 import type { CanonRepairChange } from "./CanonRepairPreviewDialog";
 
-const COVER_PALETTE: [string, string][] = [  ["hsl(258 90% 62%)", "hsl(342 90% 58%)"],
-  ["hsl(186 100% 52%)", "hsl(232 85% 60%)"],
-  ["hsl(38 95% 58%)", "hsl(342 90% 58%)"],
-  ["hsl(158 84% 42%)", "hsl(186 100% 50%)"],
-  ["hsl(232 85% 62%)", "hsl(186 100% 50%)"],
-];
-const FALLBACK_COVER: [string, string] = ["hsl(258 90% 62%)", "hsl(342 90% 58%)"];
-
 const STEPS: { id: WizardStep; label: string }[] = [
   { id: "idea", label: "Idee" },
   { id: "storyboard", label: "Storyboard" },
@@ -98,16 +92,6 @@ const STEPS: { id: WizardStep; label: string }[] = [
   { id: "style", label: "Stil" },
   { id: "fakten", label: "Fakten" },
 ];
-
-function slugify(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[äöüß]/g, (char) => ({ ä: "ae", ö: "oe", ü: "ue", ß: "ss" })[char] ?? char)
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "buch"
-  );
-}
 
 export function BookWizard({
   open,

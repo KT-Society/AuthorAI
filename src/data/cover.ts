@@ -22,6 +22,17 @@ export interface CoverTextLayer {
   shadow: boolean;
 }
 
+/** Farbpaare für den Cover-Gradient (Reihenfolge = Vergabe beim Anlegen). */
+export const COVER_PALETTE: [string, string][] = [
+  ["hsl(258 90% 62%)", "hsl(342 90% 58%)"],
+  ["hsl(186 100% 52%)", "hsl(232 85% 60%)"],
+  ["hsl(38 95% 58%)", "hsl(342 90% 58%)"],
+  ["hsl(158 84% 42%)", "hsl(186 100% 50%)"],
+  ["hsl(232 85% 62%)", "hsl(186 100% 50%)"],
+];
+
+export const FALLBACK_COVER: [string, string] = ["hsl(258 90% 62%)", "hsl(342 90% 58%)"];
+
 export const COVER_FONTS = ["Outfit", "Inter", "Georgia", "Courier New"];
 export const COVER_WEIGHTS = [300, 400, 500, 600, 700, 800];
 

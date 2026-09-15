@@ -157,6 +157,8 @@ Typen + Seed-Daten, frei von UI-Logik:
 | `epub.ts` | EPUB-3-Erzeugung (Cover, Kapitel, Navigation) im Browser |
 | `docx.ts` | DOCX-Erzeugung (OOXML) für Lektorats-Workflows |
 | `markdown.ts` | Markdown-Export eines Buchs |
+| `markdownImport.ts` | Markdown/Text → vollständiges Buch (Kapitel aus Überschriften, Szenen aus Trennern); kennt die Form von `markdown.ts` exakt (Round-Trip) |
+| `slug.ts` | URL-/Datei-tauglicher Slug (Buch-IDs) |
 | `backup.ts` | Projekt-Backup (JSON) erzeugen/validieren |
 | `graph.ts` | Deterministisches Kreis-Layout + Kanten-Helfer (+ Sparkline) für den Beziehungsgraphen |
 | `jobs.ts` | Job-Store (Modul-Singleton) für Hintergrund-Queues + `useJobs()`; `createJobStreamReporter` schreibt Stream-Fortschritt gedrosselt in `Job.detail` |
@@ -190,6 +192,7 @@ Typen + Seed-Daten, frei von UI-Logik:
 - **Bausteine:** `primitives.tsx` (Panel, Badge, ProgressBar, Sparkline, ViewHeader, …),
   `DiffView.tsx` (Wort-Diff-Darstellung), `StreamPreview.tsx` (Live-Vorschau eines laufenden
   Streams: wachsender Text, Wortstand, Schritt-Info — von Buch-Editor **und** Assistent genutzt),
+  `ImportMarkdownDialog.tsx` (Manuskript-Import mit Vorschau der erkannten Kapitel),
   `CharacterContinuityPanel.tsx`
   (Fakten-/Beziehungs-Panels im Charakter-Editor), `ToastHost`
 
@@ -224,6 +227,12 @@ Bestätigung. Ergebnisse landen als Berichte am Kapitel bzw. im Timeline-Dialog.
 
 Dabei lassen sich **Teil-Exporte** erzeugen: Gesamtbuch, Akt I–III (Positions-Regel wie im
 Plot-Board) oder das aktuell gewählte Kapitel.
+
+**Gegenrichtung (Import):** `lib/markdownImport.ts` liest Markdown/Text **im Browser** (nichts
+wird hochgeladen) und baut daraus ein vollständiges `Book` — Manuskript in `expanded`, Storyboard
+mit Kapitelplan (Kurzfassung aus dem Kapitelanfang, optional Szenen aus Szenentrennern),
+Zählwerte und Ziel-Wörter. Danach läuft es durch dieselbe Shell wie ein erstelltes Buch
+(`addBook` → Ableitungen aus dem Storyboard, Persistenz, Öffnen im Editor).
 
 ## Datenfluss (Beispiel: Kapitel ausbauen)
 
