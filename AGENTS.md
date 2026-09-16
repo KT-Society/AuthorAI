@@ -192,6 +192,13 @@ Vor jedem „fertig":
    Cover-Erzeugung, ein LLM-Pfad, pure Logik (z. B. `computeStreak`).
 3. **Markdown-Links** prüft der Check automatisch mit.
 
+> **Lokal grün ≠ CI grün.** Der Check prüft, was **auf der Platte** liegt: Eine Datei, die
+> `.gitignore` verschluckt, ist lokal da und im Repo **nicht**. So war `src/data/state.ts` nie
+> versioniert — die nackte Ignore-Zeile `data` traf auch `src/data/`, und die CI war dauerhaft rot,
+> während lokal alles lief. Bei unerklärlicher CI-Röte: `git status --ignored` über `src/` prüfen
+> und gegen einen Export des Index testen (`git checkout-index -a --prefix=…`), nicht gegen das
+> Arbeitsverzeichnis.
+
 **Zero-Warning-Haltung:** Warnungen (Typen, Lint, Build) sind Mängel und werden an der
 Wurzel behoben. **Bestehende** Testfehler werden nicht eigenmächtig angefasst — vorher fragen.
 

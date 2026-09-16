@@ -2,11 +2,14 @@
 node_modules
 
 # output
-out
-dist
-release
-covers
-data
+# Wurzel-verankert (führender Slash): Ein nackter Name wie `data` matcht in Git auf **jeder**
+# Ebene und traf damit auch `src/data/` — Folge: `src/data/state.ts` war nie versioniert und die
+# CI rot. `dist` bleibt bewusst unverankert, weil Workspaces dorthin bauen.
+/out/
+/dist
+/release/
+/covers/
+/data/
 *.tgz
 
 # backups

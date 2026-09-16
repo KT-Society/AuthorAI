@@ -276,6 +276,18 @@ bun run check
 Der Check läuft in CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml))
 bei jedem Push und Pull Request.
 
+> **Lokal grün heißt nicht automatisch CI grün.** Der Check prüft, was **auf der Platte** liegt —
+> eine Datei, die `.gitignore` verschluckt, ist lokal vorhanden und im Repository nicht. Genau so
+> war `src/data/state.ts` nie versioniert (die nackte Ignore-Zeile `data` traf auch `src/data/`),
+> und die CI war dauerhaft rot, obwohl lokal alles lief. Bei unerklärlicher CI-Röte deshalb erst
+> `git status --ignored` bzw. `git ls-files src packages` prüfen — und lokale Läufe gegen einen
+> **Export des Index** stellen, statt gegen das Arbeitsverzeichnis:
+>
+> ```bash
+> git checkout-index -a --prefix=/tmp/ci-sim/   # exakt das, was CI auscheckt
+> (cd /tmp/ci-sim && bun run scripts/check.ts)
+> ```
+
 ### Echte Verifikation für kritische Pfade
 
 Für Server-Logik mit externen APIs: **echter Test-Call** über ein temporäres Skript

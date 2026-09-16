@@ -28,6 +28,25 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   behandeln. `backup/backup.py` bleibt versioniert; die Archive sind über `*.rar`/`*.zip` in
   `.gitignore` abgedeckt.
 
+### Repo: die CI war dauerhaft rot (fehlende Quelldatei)
+
+- **Fixed** **`src/data/state.ts` lag nie im Repository** — deshalb war der Import-Check in der CI
+  dauerhaft rot (`✗ Import: src/index.ts → ./data/state`, **121** statt 122 Dateien), obwohl lokal
+  alles lief. Ursache: Die `.gitignore`-Zeile `data` (gemeint war das **Laufzeit**-Verzeichnis
+  `<root>/data/` mit der SQLite-DB) ist **nicht verankert** und matcht in Git auf **jeder** Ebene —
+  also auch `src/data/`. Die **Sammlungs-Whitelist, die Client und Server teilen**, wurde dadurch
+  nie committet; lokal existierte sie auf der Platte, im gepushten Repo fehlte sie. Wirkung: Ein
+  frischer Klon ließ sich **nicht bauen**. Nachgewiesen am Export des Index (das, was CI auscheckt):
+  vorher 3 Importprobleme, jetzt `checked 122 source files, 96 links — OK`.
+- **Changed** **`.gitignore` verankert seine Wurzelverzeichnisse**: `/data/`, `/covers/`,
+  `/release/`, `/out/` — dieselbe Falle entschärft. `dist` bleibt bewusst unverankert (Workspaces
+  bauen dorthin), ebenso `node_modules`, `coverage` und `logs`, wo verschachtelte Treffer erwünscht
+  sind.
+- **Noted** **Lokal grün heißt nicht CI grün:** Der Check prüft, was auf der Platte liegt — eine
+  ignorierte Datei ist lokal da und im Repo nicht. Der Prüfweg (`git status --ignored` über `src/`
+  und `packages/`, dazu ein Test gegen `git checkout-index -a --prefix=…` statt gegen das
+  Arbeitsverzeichnis) steht jetzt in [`development.md`](development.md) und `AGENTS.md`.
+
 ### Doku: die Startseiten-Zusammenfassung driftete
 
 - **Fixed** **Root-`CHANGELOG.md` stand auf „Aktuell: 0.2.0", während die App auf 0.5.9 lief** —
