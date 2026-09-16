@@ -8,6 +8,30 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Kanon-Extraktion: belegt statt geraten
+
+- **Fixed** **„Ich kann den Scan 20× machen und finde immer etwas anderes"**: Das war kein
+  Modell-Problem, sondern ein Denkfehler in der Quelle. Die Extraktion bekam das **Storyboard**
+  (Kurzfassungen, Figurenbeschreibungen, Synopsis) — daraus *musste* das Modell konkrete „Fakten"
+  erfinden, und jeder Lauf erfand andere. Folgen: der Kanon füllte sich mit Behauptungen, und der
+  Fakten-Check meldete bei jedem Durchlauf andere „Widersprüche" gegen diese Behauptungen.
+  Jetzt liest die Extraktion den **Manuskript-Text, Kapitel für Kapitel**.
+- **Added** **Belegpflicht — kein Fakt ohne Textbeleg**: Jeder Vorschlag muss ein **wörtliches
+  Zitat** aus dem jeweiligen Kapitel mitbringen (5–25 Wörter). Der Server prüft jeden Beleg gegen
+  genau den Text, den das Modell gesehen hat, und **verwirft** Vorschläge mit erfundenem,
+  paraphrasiertem oder fehlendem Beleg. Der Vergleich toleriert Weißraum, Zeichensetzung und
+  typografische Anführungszeichen (bekannte Falle in diesem Repo), aber keine Umformulierung.
+  Damit ist der Kanon **nachprüfbar**: Der Beleg wird im Vorschlagsdialog mit angezeigt und im
+  Fakt gespeichert (`CanonFact.quote`).
+- **Changed** **Kapitel für Kapitel mit wachsendem Kontext**: Die Extraktion läuft je Kapitel
+  (lange Kapitel absatzsicher geteilt, ~2.500 Wörter), meldet den Fortschritt
+  („Kapitel 3/12 wird gelesen…") und gibt die bereits gefundenen Aussagen als „ALREADY TRACKED"
+  in die folgenden Kapitel. `establishedIn` setzt jetzt **der Server** auf das gelesene Kapitel
+  (mit Titel) — vorher war es eine Angabe des Modells.
+- **Changed** **Ohne Manuskript keine Fakten**: Ein Projekt ohne geschriebenen Text wird mit einer
+  klaren Meldung abgewiesen (HTTP 400, kein Modell-Aufruf), statt Fakten aus dem Plan zu erfinden.
+  Die Route nimmt dafür `chapters` statt `storyboard`.
+
 ### Bereiche leeren („Alle löschen")
 
 - **Added** **„Alle löschen" in Charaktere, Weltenbau und Kontinuität**: Die drei Bereiche haben

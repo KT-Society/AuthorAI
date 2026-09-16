@@ -40,6 +40,7 @@ import type { WorldEntry } from "@/data/world";
 import type { Series } from "@/data/series";
 import { canonVolumeIds } from "@/data/series";
 import { readLanguage, readStageModel } from "@/lib/generationSettings";
+import { manuscriptOf } from "@/lib/bookManuscript";
 import { edgeOpacity, edgePath, edgeWidth, layoutCircle, sortByDegree } from "@/lib/graph";
 import type { GraphNode } from "@/lib/graph";
 import { dedupeFacts, dedupeRelations } from "@/lib/factMatch";
@@ -111,6 +112,8 @@ export function ContinuityView({
   const [extractBusy, setExtractBusy] = useState(false);
   /** Läuft die gestreamte Ableitung gerade? (Dialog ist dann bereits offen.) */
   const [extracting, setExtracting] = useState(false);
+  /** Live-Label der Extraktion („Kapitel 3/12 wird gelesen…"). */
+  const [extractLabel, setExtractLabel] = useState<string | null>(null);
   const [extractError, setExtractError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<{
     facts: ExtractedFact[];
@@ -220,8 +223,22 @@ export function ContinuityView({
 
   const runExtract = async () => {
     const book = books.find((item) => item.id === extractBookId);
-    if (!book?.storyboard) {
-      setExtractError("Dieses Projekt hat kein Storyboard — bitte zuerst eines erstellen.");
+    if (!book) {
+      setExtractError("Bitte ein Projekt auswählen.");
+      return;
+    }
+    // Quelle der Fakten ist der **Manuskript-Text** — Kapitel für Kapitel, mit Belegprüfung.
+    const extractChapters = manuscriptOf(book)
+      .map((chapter, index) => ({
+        title:
+          chapter.title?.trim() || book.storyboard?.chapters[index]?.title || `Kapitel ${index + 1}`,
+        text: (chapter.expanded || chapter.draft || "").trim(),
+      }))
+      .filter((chapter) => chapter.text.length > 0);
+    if (extractChapters.length === 0) {
+      setExtractError(
+        "Dieses Projekt hat noch kein Manuskript — Fakten lassen sich nur aus geschriebenem Text belegen.",
+      );
       return;
     }
     const model = readStageModel("consistency");
@@ -232,6 +249,7 @@ export function ContinuityView({
     setExtractError(null);
     setExtractBusy(true);
     setExtracting(true);
+    setExtractLabel("Kapitel werden gelesen…");
     // Dialog sofort öffnen — die Vorschläge wachsen dann live hinein.
     setCandidates({ facts: [], relations: [] });
 
@@ -253,7 +271,7 @@ export function ContinuityView({
 
       const result = await streamContinuityExtract(
         {
-          storyboard: book.storyboard,
+          chapters: extractChapters,
           characters: scoped.map((character) => ({ name: character.name, role: character.role })),
           worldNames: bookWorlds.map((entry) => entry.title),
           knownStatements: facts
@@ -273,6 +291,7 @@ export function ContinuityView({
           language: readLanguage() ?? "German",
         },
         {
+          onChapter: (done, total) => setExtractLabel(`Kapitel ${done}/${total} wird gelesen…`),
           onItem: (type, item) =>
             setCandidates((prev) => {
               const base = prev ?? { facts: [], relations: [] };
@@ -296,6 +315,7 @@ export function ContinuityView({
     } finally {
       setExtracting(false);
       setExtractBusy(false);
+      setExtractLabel(null);
     }
   };
 
@@ -348,6 +368,7 @@ export function ContinuityView({
           entityId: character.id,
           entityType: "character",
           statement: fact.statement,
+          quote: fact.quote,
           establishedIn: fact.establishedIn,
         });
         continue;
@@ -363,6 +384,7 @@ export function ContinuityView({
         entityId: entry.id,
         entityType: "world",
         statement: fact.statement,
+        quote: fact.quote,
         establishedIn: fact.establishedIn,
         hard: fact.hard,
       });
@@ -788,6 +810,7 @@ export function ContinuityView({
         facts={candidates?.facts ?? []}
         relations={candidates?.relations ?? []}
         running={extracting}
+        progressLabel={extractLabel}
         bookTitle={books.find((book) => book.id === extractBookId)?.title ?? ""}
         onClose={() => setCandidates(null)}
         onAccept={acceptExtraction}
@@ -795,4 +818,8 @@ export function ContinuityView({
     </div>
   );
 }
+
+
+
+
 

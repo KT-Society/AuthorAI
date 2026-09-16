@@ -177,7 +177,8 @@ interface CanonFact {
   entityId: string;              // Charakter-ID oder Welteintrag-ID
   entityType: FactEntityType;
   statement: string;             // kurze, prüfbare Aussage
-  establishedIn?: string;        // z. B. "Kapitel 4"
+  quote?: string;                // wörtlicher Beleg aus dem Manuskript (server-geprüft)
+  establishedIn?: string;        // Kapitel-Label, vom Server gesetzt
   hard?: boolean;                // nur world: nie brechbare Regel
 }
 
@@ -200,6 +201,12 @@ interface CharacterRelation {
 für alle Generierungs- und Prüf-Pässe; sind beide Listen leer, liefert er `""` (kein leerer
 Header im Prompt). Beim Löschen einer Figur bzw. eines Welteneintrags räumt die Shell
 zugehörige Fakten und Beziehungen mit auf.
+
+**`CanonFact.quote`** entsteht bei der Ableitung: Jeder Vorschlag muss ein wörtliches Zitat aus
+dem Kapitel mitbringen, das der Server gegen genau diesen Text prüft (Toleranz nur bei Weißraum,
+Zeichensetzung und typografischen Anführungszeichen). Ohne belegbaren Beleg wandert der Fakt
+**nicht** in den Kanon — deshalb ist der Kanon nachprüfbar statt bloß plausibel. Manuell im
+Charakter-Editor angelegte Fakten haben keinen Beleg; das Feld ist optional.
 
 ### Reihen (`src/data/series.ts`)
 

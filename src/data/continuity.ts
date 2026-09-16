@@ -18,6 +18,12 @@ export interface CanonFact {
   entityType: FactEntityType;
   /** Kurze, überprüfbare Aussage. */
   statement: string;
+  /**
+   * Wörtlicher Beleg aus dem Manuskript (vom Server gegen den Kapiteltext geprüft).
+   * Fakten ohne belegbaren Beleg werden bei der Ableitung verworfen — das Feld macht den Kanon
+   * nachprüfbar, statt ihn zu einer Ansammlung von Behauptungen zu machen.
+   */
+  quote?: string;
   /** Kapitel/Bereich, in dem der Fakt etabliert wurde (optional). */
   establishedIn?: string;
   /** Nur für world: harte Regeln, die nie gebrochen werden dürfen. */
@@ -67,6 +73,8 @@ export interface ExtractedFact {
   entityName: string;
   entityType: FactEntityType;
   statement: string;
+  /** Wörtlicher Beleg aus dem Kapiteltext (Pflicht — sonst wird der Fakt verworfen). */
+  quote?: string;
   establishedIn?: string;
   hard?: boolean;
 }

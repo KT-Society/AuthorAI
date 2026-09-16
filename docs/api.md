@@ -120,17 +120,23 @@ Antwort ab, mit **HTTP 502** und klarer Meldung.
 
 ### `POST /api/continuity/extract`
 
-Leitet **Fakten** (zu Figuren und Welteinträgen) und **Beziehungen** (zwischen Figuren) aus
-Storyboard und Figuren-Register ab. Die Antwort enthält **Namen**, keine IDs — die Zuordnung
-auf Charakter-/Welt-IDs macht der Client (Review-Dialog vor der Übernahme).
+Leitet **Fakten** (zu Figuren und Welteinträgen) und **Beziehungen** (zwischen Figuren) aus dem
+**Manuskript** ab — **Kapitel für Kapitel**. Die Antwort enthält **Namen**, keine IDs; die
+Zuordnung auf Charakter-/Welt-IDs macht der Client (Review-Dialog vor der Übernahme).
 Bereits erfasste Aussagen und Beziehungen werden über `knownStatements`/`knownRelations`
 ausgeschlossen; erfundene Entitäten filtert der Server heraus.
+
+**Belegpflicht:** Jeder Vorschlag muss ein **wörtliches Zitat** aus dem jeweiligen Kapitel
+mitbringen (`quote`). Der Server prüft es gegen genau den Text, den das Modell gesehen hat, und
+**verwirft** Vorschläge mit erfundenem, paraphrasiertem oder fehlendem Beleg — der Vergleich
+toleriert Weißraum, Zeichensetzung und typografische Anführungszeichen, aber keine Umformulierung.
+`establishedIn` setzt der Server selbst (Kapitel-Label mit Titel).
 
 **Request**
 
 ```json
 {
-  "storyboard": { … },
+  "chapters": [{ "title": "Der Aufbruch", "text": "…" }],
   "characters": [{ "name": "Elias Thorne", "role": "Protagonist" }],
   "worldNames": ["Kinder der Asche"],
   "knownStatements": ["Elias ist Schmied."],
@@ -146,7 +152,9 @@ ausgeschlossen; erfundene Entitäten filtert der Server heraus.
 {
   "facts": [
     { "kind": "history", "entityName": "Elias Thorne", "entityType": "character",
-      "statement": "Verlor seine Familie beim Brand der Schmiede.", "establishedIn": "Kapitel 1" }
+      "statement": "Verlor seine Familie beim Brand der Schmiede.",
+      "quote": "Der Brand der Schmiede nahm ihm Frau und Tochter.",
+      "establishedIn": "Kapitel 1: Der Aufbruch" }
   ],
   "relations": [
     { "fromName": "Elias Thorne", "toName": "Sylar", "kind": "distrust",
@@ -155,26 +163,31 @@ ausgeschlossen; erfundene Entitäten filtert der Server heraus.
 }
 ```
 
-Schneidet das Token-Limit die Antwort ab, antwortet die Route mit **HTTP 502** und klarer Meldung.
-Fakten/Beziehungen gehen als `canon`-Block zusätzlich an `chapter/draft`, `chapter/expand`,
-`chapter/consistency`, `chapter/style` und `timeline/check`.
+Ohne (nicht-leeren) Kapiteltext → **HTTP 400 vor dem Modell-Aufruf**; schneidet das Token-Limit
+ein Kapitel ab → **HTTP 502** mit klarer Meldung. Weniger Fakten sind ausdrücklich **erwartet**:
+Was nicht belegbar ist, kommt nicht in den Kanon. Fakten/Beziehungen gehen als `canon`-Block
+zusätzlich an `chapter/draft`, `chapter/expand`, `chapter/consistency`, `chapter/style` und
+`timeline/check`.
 
 ### `POST /api/continuity/extract/stream`
 
-Gestreamte Variante der Extraktion: Das Modell wird auf **JSONL** (ein Objekt pro Zeile)
-angewiesen, sodass der Server jeden Vorschlag **sofort** weitergeben kann, sobald er fertig ist.
-Am Ende kommt die **validierte und deduplizierte** Fassung — sie ersetzt die Live-Liste.
+Gestreamte Variante derselben Extraktion, ebenfalls **Kapitel für Kapitel**: Das Modell wird auf
+**JSONL** (ein Objekt pro Zeile) angewiesen, sodass der Server jeden Vorschlag **sofort**
+weitergeben kann. Am Ende kommt die **validierte** Fassung (inkl. Belegprüfung) — sie ersetzt die
+Live-Liste.
 
 ```
+data: {"type":"chapter","done":3,"total":12}
 data: {"type":"item","item":"fact","raw":{ … }}
 data: {"type":"item","item":"relation","raw":{ … }}
 data: {"type":"done","facts":[ … ],"relations":[ … ]}
 data: {"type":"error","error":"…"}
 ```
 
-Zwei Absicherungen: Zeilen werden auch über **Chunk-Grenzen** hinweg zusammengesetzt, und wenn
-das Modell JSONL ignoriert (kein einziges Objekt erkannt), fällt der Server auf normales JSON
-zurück — es geht also nichts verloren. Fehlendes Model/Storyboard → **HTTP 400 vor dem Stream**.
+Lange Kapitel werden absatzsicher geteilt (~2.500 Wörter) und **je Teil** gegen dessen Text
+geprüft. Zwei Absicherungen: Zeilen werden auch über **Chunk-Grenzen** hinweg zusammengesetzt, und
+wenn das Modell JSONL ignoriert, fällt der Server auf normales JSON zurück. Fehlendes Model oder
+kein Kapiteltext → **HTTP 400 vor dem Stream**.
 
 ### `POST /api/continuity/check`
 

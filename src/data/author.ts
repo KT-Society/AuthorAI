@@ -33,6 +33,11 @@ export interface Book {
    * Ohne ihn würde „Alle löschen" beim nächsten App-Start rückgängig gemacht.
    */
   storyboardImported?: boolean;
+  /**
+   * Bis zu welchem Kapitel (Anzahl, 1-basiert) der Kanon aus dem Manuskript gescannt wurde.
+   * Der nächste Scan setzt dort fort — ein abgebrochener Lauf kostet also nicht wieder alles.
+   */
+  canonScannedChapters?: number;
   storyboard?: Storyboard;
   manuscript?: ChapterContent[];
 }

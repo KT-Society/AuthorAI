@@ -27,6 +27,11 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   fassen, wenn die Überschriften-Heuristik daneben liegt
 
 ### Kanon & Kontinuität (Anschlüsse an den Fakten-Check)
+- **Belege im Kanon sichtbar machen**: Der wörtliche Beleg (`CanonFact.quote`) wird im
+  Vorschlagsdialog gezeigt, aber nicht im Fakten-Editor — dort gehört er hin, damit man einen
+  Fakt gegen die Stelle im Text prüfen kann
+- **Fakt → Textstelle springen**: Aus dem Beleg direkt ins Kapitel an die zitierte Stelle (baut auf
+  dem Widerspruchs-Marker unten auf)
 - **Widerspruchs-Marker im Editor**: gemeldete Zitate direkt im Kapiteltext hervorheben und
   dorthin springen, statt sie nur als Liste zu zeigen
 - **„Strenger Modus" (Opt-in)**: blockierendes Speichern, solange ein Kanon-Widerspruch offen

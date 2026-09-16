@@ -307,12 +307,24 @@ RELATIONS (binding — keep these dynamics consistent):
   einer **Reihe**, umfasst der Scope **alle Bände** (`canonVolumeIds`): gemeinsame Welt,
   Figuren-Historie und Fakten über die Bände hinweg.
 - **Leer = kein Block**: ohne Fakten/Beziehungen taucht der Block nicht auf (kein toter Header).
-- **Quelle**: manuell (Charakter-Editor → Panels „Fakten“/„Beziehungen“) oder
-  `POST /api/continuity/extract` mit Review-Dialog.
+- **Quelle**: manuell (Charakter-Editor → Panels „Fakten“/„Beziehungen“) oder die Ableitung
+  (unten).
+- **Ableitung ist belegt, nicht geraten**: Die Extraktion liest den **Manuskript-Text, Kapitel für
+  Kapitel** — nicht das Storyboard. Jeder Vorschlag braucht ein **wörtliches Zitat** aus dem
+  jeweiligen Kapitel (`quote`); der Server prüft es gegen genau den Text, den das Modell gesehen
+  hat, und verwirft alles ohne belegbaren Beleg (Toleranz nur bei Weißraum, Zeichensetzung und
+  typografischen Anführungszeichen). Folgen: der Kanon ist nachprüfbar (der Beleg wird im Dialog
+  angezeigt und im Fakt gespeichert), erfundene „Fakten" fallen raus, und wiederholte Läufe liefern
+  dasselbe Ergebnis. `establishedIn` setzt der Server (Kapitel-Label).
+  Ohne Manuskript-Text gibt es **keine** Fakten (HTTP 400) — aus einem Plan lässt sich nichts
+  belegen.
 - **Ableitung live**: `POST /api/continuity/extract/stream` lässt das Modell **JSONL** schreiben
-  (ein Objekt pro Zeile); der Review-Dialog öffnet sofort und die Vorschläge wachsen hinein.
-  Am Ende ersetzt die validierte Fassung die Live-Liste (Erkennung auch über Chunk-Grenzen,
-  Fallback auf normales JSON, falls das Modell JSONL ignoriert).
+  (ein Objekt pro Zeile); der Review-Dialog öffnet sofort, zeigt den Fortschritt
+  („Kapitel 3/12") und die Vorschläge wachsen mitsamt Beleg hinein. Am Ende ersetzt die validierte
+  Fassung die Live-Liste (Erkennung auch über Chunk-Grenzen, Fallback auf normales JSON, falls das
+  Modell JSONL ignoriert). Lange Kapitel werden absatzsicher geteilt (~2.500 Wörter).
+- **Wachsend statt wiederholend**: Bereits gefundene Aussagen und Beziehungen gehen als
+  „ALREADY TRACKED" in die folgenden Kapitel — der Kanon wächst von Kapitel zu Kapitel.
 - **Dubletten**: Bekanntes wird **unscharf** verglichen (`lib/factMatch.ts`) — dieselbe Aussage
   in neuer Formulierung wird nicht erneut vorgeschlagen. Für den Bestand gibt es in der Ansicht
   **„Dubletten entfernen"** (Fakten nach Aussage, Beziehungen nach Richtung + Typ). Absicht:

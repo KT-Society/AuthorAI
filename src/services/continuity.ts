@@ -5,12 +5,12 @@
  */
 
 import type { ExtractedContinuity, ExtractedFact, ExtractedRelation } from "@/data/continuity";
-import type { Storyboard } from "@/data/story";
 
 import { postJson } from "./http";
 import { streamEvents } from "./stream";
 export interface ContinuityExtractRequest {
-  storyboard: Storyboard;
+  /** Manuskript-Kapitel in Lesereihenfolge — die Quelle der Fakten (Belege werden daraus geprüft). */
+  chapters: { title: string; text: string }[];
   characters: { name: string; role?: string }[];
   worldNames?: string[];
   knownStatements?: string[];
@@ -37,12 +37,18 @@ export async function extractContinuity(
 export async function streamContinuityExtract(
   input: ContinuityExtractRequest,
   handlers: {
+    /** Fortschritt über die Kapitel (1-basiert). */
+    onChapter?: (done: number, total: number) => void;
     onItem?: (type: "fact" | "relation", item: ExtractedFact | ExtractedRelation) => void;
   } = {},
 ): Promise<ExtractedContinuity> {
   let result: ExtractedContinuity | null = null;
 
   await streamEvents("/api/continuity/extract/stream", input, (event) => {
+    if (event.type === "chapter") {
+      handlers.onChapter?.(Number(event.done ?? 0), Number(event.total ?? 0));
+      return;
+    }
     if (event.type === "item" && event.item && typeof event.raw === "object" && event.raw) {
       const raw = event.raw as Record<string, unknown>;
       if (event.item === "fact") {
@@ -256,3 +262,4 @@ export async function streamCanonRepair(
     });
   });
 }
+

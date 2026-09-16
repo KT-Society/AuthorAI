@@ -1,5 +1,7 @@
 /**
- * Server-only: Kontinuitäts-Extraktion (Fakten + Beziehungen) aus Storyboard und Register.
+ * Server-only: Kontinuitäts-Extraktion (Fakten + Beziehungen) aus dem **Manuskript**, Kapitel
+ * für Kapitel. Jeder Fakt braucht einen wörtlichen Beleg aus dem Kapiteltext (`quoteMatchesText`)
+ * — sonst wandert er nicht in den Kanon. Zusätzlich: Fakten-Check, Kanon-Repair, Zusammenfassungen.
  *
  * Liefert **Namen**, keine IDs — die Zuordnung auf Charakter-/Welt-IDs macht der Client.
  * Nur Modul für den Server; niemals aus Client-Code importieren.
@@ -7,7 +9,7 @@
 
 import { ApiError } from "@promptgen/server/api";
 
-import { createJsonlConsumer, jsonlFormatBlock } from "./jsonl";
+import { createJsonlConsumer } from "./jsonl";
 import {
   FACT_KINDS,
   RELATION_KINDS,
@@ -28,10 +30,17 @@ import { chatCompletionDetailed, chatCompletionStream, cleanJsonBlock } from "./
 import { languageLock, splitIntoChunks } from "./story";
 
 export interface ContinuityExtractInput {
-  storyboard: Storyboard;
-  /** Figuren-Register des Projekts. */
+  /**
+   * Manuskript-Kapitel in Lesereihenfolge — **die Quelle** der Fakten.
+   *
+   * Vorher wurde aus dem Storyboard (Kurzfassungen!) extrahiert; daraus *musste* das Modell
+   * erfinden, und jeder Lauf lieferte andere „Fakten". Jetzt liest die Extraktion den echten Text,
+   * Kapitel für Kapitel, und jeder Fakt braucht einen wörtlichen Beleg daraus.
+   */
+  chapters: { title: string; text: string }[];
+  /** Figuren-Register des Projekts (nur Zuordnung, keine Quelle). */
   characters: { name: string; role?: string }[];
-  /** Namen der Welteneinträge des Projekts (optional, ergänzt die Storyboard-Welt). */
+  /** Namen der Welteneinträge des Projekts (nur Zuordnung). */
   worldNames?: string[];
   /** Bereits erfasste Aussagen → nicht erneut vorschlagen. */
   knownStatements?: string[];
@@ -43,6 +52,11 @@ export interface ContinuityExtractInput {
 
 const MAX_FACTS = 24;
 const MAX_RELATIONS = 20;
+/** Je Kapitel: klein halten — lieber wenige belegte Fakten als viele Behauptungen. */
+const MAX_FACTS_PER_CHAPTER = 8;
+const MAX_RELATIONS_PER_CHAPTER = 6;
+/** Wortbudget eines Kapitel-Teils (wie bei den Szenen: die Antwort ist klein). */
+const CONTINUITY_CHUNK_WORDS = 2500;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -100,104 +114,159 @@ function parseJson(content: string): Record<string, unknown> {
 export function knownEntityNames(input: {
   characters: { name: string }[];
   worldNames?: string[];
-  storyboard: Storyboard;
 }): { characters: string[]; world: string[] } {
   const characters = [...new Set(input.characters.map((entry) => entry.name.trim()).filter(Boolean))];
-  const fromStoryboard = input.storyboard.world
-    ? [
-        ...input.storyboard.world.locations,
-        ...input.storyboard.world.factions,
-        ...input.storyboard.world.magic,
-        ...input.storyboard.world.artifacts,
-        ...input.storyboard.world.lore,
-      ].map((item) => item.name)
-    : [];
   const world = [
-    ...new Set([...(input.worldNames ?? []), ...fromStoryboard].map((name) => name.trim()).filter(Boolean)),
+    ...new Set((input.worldNames ?? []).map((name) => name.trim()).filter(Boolean)),
   ];
   return { characters, world };
 }
 
-function continuitySystem(language: string): string {
-  return `You are a continuity editor building a story bible.
-${languageLock(language)}
+/* ─────────────────────── Beleg-Prüfung (gegen den Text) ─────────────────────── */
 
-TASK: from the material below, extract (1) facts that are explicitly established and
-(2) relationships between the listed characters that the material actually shows.
-
-Respond ONLY with a single valid JSON object:
-{
-  "facts": [{ "entity": string, "entityType": "character" | "world", "kind": string,
-              "statement": string, "establishedIn": string, "hard": boolean }],
-  "relations": [{ "from": string, "to": string, "kind": string, "intensity": number,
-                  "note": string, "secret": boolean, "establishedIn": string }]
+/** Für den Beleg-Vergleich normalisieren: Kleinschreibung, Anführungs-/Strichzeichen, Weißraum. */
+function normalizeEvidence(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[„“”«»‚‘’'"`´]/g, '"')
+    .replace(/[–—−]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
+/** Wörter ohne Zeichensetzung — Grundlage des toleranten Vergleichs. */
+function wordSequence(text: string): string[] {
+  return normalizeEvidence(text)
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function containsWindow(haystack: string[], window: string[]): boolean {
+  if (window.length === 0 || window.length > haystack.length) return false;
+  for (let start = 0; start + window.length <= haystack.length; start += 1) {
+    let match = true;
+    for (let offset = 0; offset < window.length; offset += 1) {
+      if (haystack[start + offset] !== window[offset]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
+/**
+ * Steht der Beleg **wirklich** im Text?
+ *
+ * Tolerant gegenüber Weißraum, Zeichensetzung und typografischen Anführungszeichen (bekannte
+ * Fallen in diesem Repo) — aber nicht gegenüber Umformulierungen: Entweder der normalisierte
+ * Beleg kommt wörtlich vor, oder mindestens 60 % seiner Wörter (und nie weniger als 6) müssen
+ * als **zusammenhängender** Wortlauf im Text stehen.
+ *
+ * Damit ist die Extraktion nachprüfbar: Ein erfundener oder paraphrasierter Beleg fällt raus,
+ * egal wie überzeugend die Aussage klingt.
+ */
+export function quoteMatchesText(quote: string, text: string): boolean {
+  const needle = normalizeEvidence(quote);
+  if (needle.replace(/\s/g, "").length < 10) return false;
+
+  const haystack = normalizeEvidence(text);
+  if (haystack.includes(needle)) return true;
+
+  const needleWords = wordSequence(quote);
+  if (needleWords.length < 6) return false;
+  const haystackWords = wordSequence(text);
+  const required = Math.max(6, Math.ceil(needleWords.length * 0.6));
+
+  for (let start = 0; start + required <= needleWords.length; start += 1) {
+    if (containsWindow(haystackWords, needleWords.slice(start, start + required))) return true;
+  }
+  return false;
+}
+
+function continuityChapterSystem(language: string): string {
+  return `You are a continuity editor building a story bible from a FINISHED manuscript.
+${languageLock(language)}
+
+TASK: read the CHAPTER TEXT below and record ONLY what it literally states:
+(1) facts about a listed character or world entity,
+(2) relationships between two listed characters that the text actually shows.
+
+EVIDENCE IS MANDATORY: every entry needs "quote" — a passage copied **verbatim** from the chapter
+text (5-25 words, no ellipsis, no rewording, no added punctuation). The server checks each quote
+against the text and DISCARDS entries whose quote is not found there. A paraphrase is a lost entry,
+and that is intentional: the canon must be verifiable, not plausible.
+
+Format: one JSON object per line (JSONL). Examples:
+{"t":"fact","entity":"Aria","entityType":"character","kind":"attribute","statement":"…","quote":"…","hard":false}
+{"t":"relation","from":"Aria","to":"Theron","kind":"distrust","intensity":-0.6,"quote":"…","secret":false}
+
 FACT RULES
-- "entity" MUST be one of the names listed under KNOWN CHARACTERS or KNOWN WORLD ENTITIES.
+- "entity" MUST be one of the names under KNOWN CHARACTERS / KNOWN WORLD ENTITIES.
 - "kind" MUST be one of: ${FACT_KINDS.join(", ")}.
   attribute = stable trait/age/role · history = past event · skill = ability
   possession = important object · world = world fact · rule = hard world rule.
-- "statement": ONE short, checkable sentence (no hedging, no interpretation).
-- "establishedIn": short source label from the material, e.g. "Kapitel 4" or "Storyboard".
-- "hard": true only for world rules that must never be broken.
-- NEVER invent facts. If the material does not establish it, leave it out.
+- "statement": ONE short, checkable sentence that the quote supports — no hedging, no interpretation,
+  nothing beyond what the text says.
+- "hard": true only for world rules the text presents as unbreakable.
+- Omission is fine. If the chapter only implies it, leave it out.
 
 RELATION RULES
-- "from"/"to" MUST be names from KNOWN CHARACTERS.
+- "from"/"to" MUST be names under KNOWN CHARACTERS (two different figures).
 - "kind" MUST be one of: ${RELATION_KINDS.join(", ")}.
-- "intensity": number from -1 (hostile) to 1 (devoted).
-- "note": optional short reason grounded in the material.
-- "secret": true only if the material marks it as hidden from others.
-- Only relationships the material really establishes — no speculation, no filler.
+- "intensity": number from -1 (hostile) to 1 (devoted), as the text shows it.
+- "quote": verbatim evidence for that relationship.
+- "secret": true only if the text marks it as hidden from others.
 
 LIMITS
-- At most ${MAX_FACTS} facts and ${MAX_RELATIONS} relations; fewer is better than padded.
+- At most ${MAX_FACTS_PER_CHAPTER} facts and ${MAX_RELATIONS_PER_CHAPTER} relations for ONE chapter;
+  fewer, well-evidenced entries are far better than padding.
 - Never repeat anything listed under ALREADY TRACKED.
-- Statements/notes MUST be in ${language}; all other string values stay exactly as the enums/names.`;
+- Statements/notes/quotes in ${language}; enums and entity/character names exactly as listed.`;
 }
 
-function material(input: ContinuityExtractInput): string {
-  const { characters, world } = knownEntityNames(input);
-  const sb = input.storyboard;
+/** Ein Kapitel (oder Kapitelteil) als Auftrag — inklusive bereits gefundener Aussagen. */
+function chapterMaterial(
+  chapter: { title: string; text: string },
+  index: number,
+  total: number,
+  part: { index: number; count: number } | null,
+  context: { title: string; knownStatements: string[]; knownRelations: string[] },
+): string {
+  const trackedFacts = context.knownStatements.map((entry) => `- ${entry}`).join("\n");
+  const trackedRelations = context.knownRelations.map((entry) => `- ${entry}`).join("\n");
 
-  const cast = input.characters
-    .map((entry) => `- ${entry.name}${entry.role?.trim() ? ` (${entry.role.trim()})` : ""}`)
-    .join("\n");
-  const chapters = sb.chapters
-    .map((chapter, index) => `${index + 1}. ${chapter.title} — ${chapter.summary}`)
-    .join("\n");
-  const worldNames = world.length > 0 ? world.join(", ") : "(none)";
+  return `BOOK: ${context.title || "(untitled)"}
+CHAPTER: ${index + 1} of ${total} — ${chapter.title.trim() || `Kapitel ${index + 1}`}${
+    part && part.count > 1 ? ` · part ${part.index + 1} of ${part.count}` : ""
+  }
 
-  const tracked = [...(input.knownStatements ?? []), ...(input.knownRelations ?? [])]
-    .map((entry) => `- ${entry}`)
-    .join("\n");
+ALREADY TRACKED — FACTS (never repeat these):
+${trackedFacts || "- (none)"}
 
-  return `TITLE: ${sb.title}
-GENRE: ${sb.genre}
-SYNOPSIS: ${sb.synopsis}
-THEMES: ${sb.themes.join(", ")}
+ALREADY TRACKED — RELATIONS (never repeat these):
+${trackedRelations || "- (none)"}
 
-KNOWN CHARACTERS:
-${cast || "- (none)"}
+CHAPTER TEXT:
+${chapter.text}
 
-KNOWN WORLD ENTITIES:
-${worldNames}
-
-STORYBOARD CHARACTERS (descriptions):
-${sb.characters.map((character) => `- ${character.name} (${character.role}): ${character.description}`).join("\n") || "- (none)"}
-
-CHAPTERS:
-${chapters || "- (none)"}
-
-ALREADY TRACKED (do not repeat):
-${tracked || "- (none)"}`;
+Record the facts and relationships of THIS text now as JSONL (one object per line), entirely in the given language.`;
 }
 
-/** Rohantwort normalisieren: unbekannte Entitäten verwerfen, Werte validieren, deduplizieren. */
+/**
+ * Rohantwort normalisieren: unbekannte Entitäten verwerfen, Werte validieren, deduplizieren —
+ * und **Belege gegen den Text prüfen**. Ohne Beleg (oder mit erfundenem/paraphrasiertem Beleg)
+ * wandert ein Fakt nicht in den Kanon.
+ *
+ * `source` ist der Text, den das Modell für diese Antwort gesehen hat (Kapitel oder Kapitelteil),
+ * plus das Label, das als `establishedIn` gesetzt wird — vertrauenswürdig, weil serverseitig.
+ */
 export function normalizeContinuity(
   value: unknown,
   input: ContinuityExtractInput,
+  source: { text: string; label: string },
 ): ExtractedContinuity {
   const { characters, world } = knownEntityNames(input);
   const obj = asRecord(value);
@@ -210,7 +279,11 @@ export function normalizeContinuity(
     const item = asRecord(entry);
     const rawEntity = str(item.entity);
     const statement = str(item.statement);
+    const quote = str(item.quote);
     if (!rawEntity || !statement) continue;
+
+    // Belegpflicht: kein Beleg oder Beleg nicht im Text → Fakt verwerfen.
+    if (!quote || !quoteMatchesText(quote, source.text)) continue;
 
     const asCharacter = matchName(rawEntity, characters);
     const asWorld = asCharacter ? null : matchName(rawEntity, world);
@@ -232,7 +305,8 @@ export function normalizeContinuity(
       entityName,
       entityType,
       statement,
-      establishedIn: str(item.establishedIn) || undefined,
+      quote,
+      establishedIn: source.label,
       hard: entityType === "world" && item.hard === true ? true : undefined,
     });
   }
@@ -245,6 +319,10 @@ export function normalizeContinuity(
     const fromName = matchName(str(item.from), characters);
     const toName = matchName(str(item.to), characters);
     if (!fromName || !toName || fromName === toName) continue;
+
+    // Auch Beziehungen brauchen einen Beleg aus dem Text (nicht gespeichert, aber geprüft).
+    const quote = str(item.quote);
+    if (!quote || !quoteMatchesText(quote, source.text)) continue;
 
     const kind = (RELATION_KINDS as string[]).includes(str(item.kind))
       ? (str(item.kind) as RelationKind)
@@ -268,31 +346,13 @@ export function normalizeContinuity(
   return { facts, relations };
 }
 
-/** Extrahiert Fakten und Beziehungen aus Storyboard + Register (ein LLM-Aufruf). */
-export async function extractContinuity(
-  input: ContinuityExtractInput,
-): Promise<ExtractedContinuity> {
-  const { content, finishReason } = await chatCompletionDetailed({
-    model: input.model,
-    system: continuitySystem(input.language),
-    user: `${material(input)}
-
-Extract the facts and relationships now as JSON, statements in ${input.language}.`,
-    json: true,
-    maxTokens: 4000,
-    temperature: 0.3,
-  });
-
-  if (finishReason === "length") {
-    throw new ApiError(
-      "Die Kontinuitäts-Extraktion wurde vom Token-Limit abgeschnitten. Bitte ein Modell mit größerem Kontext wählen.",
-      502,
-    );
-  }
-
-  return normalizeContinuity(parseJson(content), input);
-}
-
+/**
+ * Extrahiert Fakten und Beziehungen **Kapitel für Kapitel** aus dem Manuskript.
+ *
+ * Sammelt die bereits gefundenen Aussagen und gibt sie als „ALREADY TRACKED" in die nächsten
+ * Kapitel — so wächst der Kanon, statt sich zu wiederholen. Jeder Fakt braucht einen Beleg aus
+ * dem jeweiligen Kapiteltext (siehe `quoteMatchesText`).
+ */
 /* ─────────────────── Gestreamte Extraktion (JSONL, live) ─────────────────── */
 
 export interface ContinuityItemEvent {
@@ -314,52 +374,99 @@ function classifyItem(obj: Record<string, unknown>): ContinuityItemEvent | null 
   return null;
 }
 
-function continuityStreamSystem(language: string): string {
-  return `${continuitySystem(language)}
-
-${jsonlFormatBlock(
-    language,
-    `{"t":"fact","entity":"…","entityType":"character","kind":"history","statement":"…","establishedIn":"Kapitel 2","hard":false}
-{"t":"relation","from":"…","to":"…","kind":"distrust","intensity":-0.6,"note":"…","secret":false,"establishedIn":"Kapitel 5"}`,
-  )}`;
+export interface ContinuityStreamHandlers {
+  /** Fortschritt über die Kapitel (1-basiert). */
+  onChapter?: (done: number, total: number) => void;
+  /** Ein fertiges Objekt (live, vor der Beleg-Prüfung). */
+  onItem?: (item: ContinuityItemEvent) => void;
 }
 
-/** Extrahiert live: jedes fertige JSONL-Objekt wird sofort gemeldet und am Ende gemeinsam validiert. */
+/**
+ * Extrahiert live, **Kapitel für Kapitel**: Jedes fertige JSONL-Objekt wird sofort gemeldet, am
+ * Ende steht die validierte Fassung — geprüft gegen den Text des jeweiligen Kapitels.
+ *
+ * Lange Kapitel werden absatzsicher geteilt (`splitIntoChunks`), damit die Eingabe nicht aus dem
+ * Kontext läuft; der Beleg wird dann gegen den jeweiligen Teil geprüft (genau den Text, den das
+ * Modell gesehen hat).
+ */
 export async function extractContinuityStream(
   input: ContinuityExtractInput,
-  handlers: { onItem?: (item: ContinuityItemEvent) => void },
+  handlers: ContinuityStreamHandlers = {},
 ): Promise<ExtractedContinuity> {
-  const facts: unknown[] = [];
-  const relations: unknown[] = [];
-
-  const consumer = createJsonlConsumer((parsed) => {
-    const item = classifyItem(parsed);
-    if (!item) return;
-    if (item.type === "fact") facts.push(parsed);
-    else relations.push(parsed);
-    handlers.onItem?.(item);
-  });
-
-  const { content } = await chatCompletionStream(
-    {
-      model: input.model,
-      system: continuityStreamSystem(input.language),
-      user: `${material(input)}
-
-Extract the facts and relationships now as JSONL (one object per line), entirely in ${input.language}.`,
-      maxTokens: 4000,
-      temperature: 0.3,
-    },
-    consumer.push,
-  );
-  consumer.flush();
-
-  // Nichts als JSONL erkannt? Dann hat das Modell normales JSON geliefert → damit arbeiten.
-  if (facts.length === 0 && relations.length === 0) {
-    return normalizeContinuity(parseJson(content), input);
+  const chapters = input.chapters.filter((chapter) => chapter.text.trim().length > 0);
+  if (chapters.length === 0) {
+    throw new ApiError(
+      "Kein Manuskript-Text vorhanden, aus dem sich Fakten belegen ließen.",
+      400,
+    );
   }
 
-  return normalizeContinuity({ facts, relations }, input);
+  const allFacts: ExtractedFact[] = [];
+  const allRelations: ExtractedRelation[] = [];
+  const context = {
+    title: "",
+    knownStatements: [...(input.knownStatements ?? [])],
+    knownRelations: [...(input.knownRelations ?? [])],
+  };
+
+  for (const [index, chapter] of chapters.entries()) {
+    handlers.onChapter?.(index + 1, chapters.length);
+    const label = `Kapitel ${index + 1}: ${chapter.title.trim() || "ohne Titel"}`;
+    const parts = splitIntoChunks(chapter.text, CONTINUITY_CHUNK_WORDS);
+
+    for (const [partIndex, part] of parts.entries()) {
+      const rawFacts: unknown[] = [];
+      const rawRelations: unknown[] = [];
+
+      const consumer = createJsonlConsumer((parsed) => {
+        const item = classifyItem(parsed);
+        if (!item) return;
+        if (item.type === "fact") rawFacts.push(parsed);
+        else rawRelations.push(parsed);
+        handlers.onItem?.(item);
+      });
+
+      const call = await chatCompletionStream(
+        {
+          model: input.model,
+          system: continuityChapterSystem(input.language),
+          user: chapterMaterial(
+            { title: chapter.title, text: part },
+            index,
+            chapters.length,
+            parts.length > 1 ? { index: partIndex, count: parts.length } : null,
+            context,
+          ),
+          maxTokens: 3000,
+          temperature: 0.2,
+        },
+        consumer.push,
+      );
+      consumer.flush();
+
+      // Nichts als JSONL? Dann hat das Modell ein JSON-Dokument geliefert → damit arbeiten.
+      const payload =
+        rawFacts.length > 0 || rawRelations.length > 0
+          ? { facts: rawFacts, relations: rawRelations }
+          : parseJson(call.content, `Kapitel ${index + 1}`);
+
+      // Gegen **genau den Text** prüfen, den das Modell gesehen hat.
+      const normalized = normalizeContinuity(payload, input, { text: part, label });
+
+      for (const fact of normalized.facts) {
+        if (allFacts.length >= MAX_FACTS) break;
+        allFacts.push(fact);
+        context.knownStatements.push(fact.statement);
+      }
+      for (const relation of normalized.relations) {
+        if (allRelations.length >= MAX_RELATIONS) break;
+        allRelations.push(relation);
+        context.knownRelations.push(`${relation.fromName}→${relation.toName}:${relation.kind}`);
+      }
+    }
+  }
+
+  return { facts: allFacts, relations: allRelations };
 }
 
 /* ─────────────────────────── Fakten-Check (Kanon) ─────────────────────────── */
@@ -824,3 +931,7 @@ export async function repairCanonChapters(
     Array.from({ length: Math.min(limit, Math.max(1, pending.length)) }, () => worker()),
   );
 }
+
+
+
+

@@ -285,6 +285,31 @@ Gewollt: Fakten hängen an Figuren bzw. Welteinträgen und verschwinden mit ihne
 Kettenwirkung, die den Kanon konsistent hält). Der Kanon lässt sich über **„Vorschläge ableiten"**
 in der Kontinuität neu aufbauen.
 
+## Kanon & Kontinuität
+
+### Der Scan liefert jedes Mal andere Fakten
+
+Behoben. Ursache war die **Quelle**: Die Ableitung las das Storyboard (Kurzfassungen) und musste
+daraus Fakten erfinden. Jetzt liest sie den **Manuskript-Text, Kapitel für Kapitel**, und jeder
+Vorschlag braucht ein **wörtliches Zitat** als Beleg, das der Server gegen genau den Text prüft.
+
+### „Kein Manuskript-Text …" beim Ableiten von Fakten
+
+Gewollt: Aus einem Plan (Storyboard) lässt sich nichts belegen. Erst Kapitel schreiben (Rohentwurf
+genügt), dann ableiten.
+
+### Es kommen nur wenige Fakten an
+
+Erwartet und beabsichtigt: Nur was wörtlich im Text steht **und** mit einem Zitat belegt ist,
+kommt in den Kanon. Wenige belastbare Fakten sind mehr wert als viele Behauptungen — beim
+Fakten-Check rächen sich erfundene Fakten sofort. Der Beleg steht im Vorschlagsdialog unter der
+Aussage; fehlt er, hat das Modell paraphrasiert (dann fällt der Vorschlag weg).
+
+### Auch Beziehungen fehlen
+
+Beziehungen brauchen ebenfalls einen Beleg aus demselben Kapitel. „Misstrauen" lässt sich nur
+aufnehmen, wenn der Text es hergibt — sonst nicht.
+
 ---
 
 ## Daten & Profile

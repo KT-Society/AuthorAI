@@ -1077,16 +1077,19 @@ const chapters = asManuscriptChapters(body.chapters);
       },
     },
 
-    // Streaming extraction (JSONL): each finished suggestion is emitted as it arrives.
+    // Streaming extraction (JSONL), chapter by chapter: every evidenced suggestion arrives live.
     "/api/continuity/extract/stream": {
       async POST(req) {
         try {
           const body = await readJson(req);
-          const storyboard = asStoryboard(body.storyboard);
           const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
           const language = optionalLanguage(body.language);
+          const chapters = asManuscriptChapters(body.chapters);
+          if (chapters.length === 0) {
+            throw new ApiError("Kein Manuskript-Text für die Kontinuitäts-Extraktion.", 400);
+          }
           const input = {
-            storyboard,
+            chapters,
             characters: asCharacterRefs(body.characters),
             worldNames: asStringList(body.worldNames),
             knownStatements: asStringList(body.knownStatements),
@@ -1096,6 +1099,7 @@ const chapters = asManuscriptChapters(body.chapters);
           };
           return sseResponse(async (emit) => {
             const result = await extractContinuityStream(input, {
+              onChapter: (done, total) => emit({ type: "chapter", done, total }),
               onItem: (item) => emit({ type: "item", item: item.type, raw: item.raw }),
             });
             emit({ type: "done", ...result });
@@ -1107,17 +1111,20 @@ const chapters = asManuscriptChapters(body.chapters);
     },
 
     // Continuity extraction: facts + relations from storyboard and register.
+    // Continuity extraction (non-streaming): facts + relations, chapter by chapter.
     "/api/continuity/extract": {
       async POST(req) {
         try {
           const body = await readJson(req);
-          const storyboard = asStoryboard(body.storyboard);
           const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
           const language = optionalLanguage(body.language);
-          const characters = asCharacterRefs(body.characters);
+          const chapters = asManuscriptChapters(body.chapters);
+          if (chapters.length === 0) {
+            throw new ApiError("Kein Manuskript-Text für die Kontinuitäts-Extraktion.", 400);
+          }
           const result = await extractContinuity({
-            storyboard,
-            characters,
+            chapters,
+            characters: asCharacterRefs(body.characters),
             worldNames: asStringList(body.worldNames),
             knownStatements: asStringList(body.knownStatements),
             knownRelations: asStringList(body.knownRelations),
@@ -1307,4 +1314,5 @@ console.log("");
 if (isStandaloneBinary() && process.env.AUTHORAI_OPEN !== "0") {
   openInBrowser(baseUrl);
 }
+
 
