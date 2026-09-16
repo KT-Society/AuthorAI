@@ -62,10 +62,15 @@ kein Default**. Leer = erbt das Standard-Model.
 **Setzen:** Einstellungen (Sidebar → „Einstellungen") oder direkt im Buch-Wizard
 (die Leiste zeigt das Model der aktiven Stufe).
 
-> **Ein Model trägt mehr als eine Aufgabe:** Das **Kohärenz**-Model
-> (`authorai.model.consistency`) wird außer für den Kohärenz-Pass auch für **Fakten-Check,
-> Kanon-Quick-Fix, Timeline-Prüfung und Timeline-Quick-Fix** genutzt (Reasoning-Qualität zahlt
-> sich hier aus). Alles andere läuft genau über die Stufe, die im Wizard sichtbar ist.
+> **Ein Model trägt mehr als eine Aufgabe:**
+>
+> - Das **Storyboard**-Model (`authorai.model.storyboard`) trägt zusätzlich alles, was **Struktur
+>   aus Text liest**: „Storyboard ableiten", „Szenen ableiten" sowie die **Figuren-** und
+>   **Weltenbau-Extraktion** (aus Manuskript bzw. Storyboard).
+> - Das **Kohärenz**-Model (`authorai.model.consistency`) trägt außer dem Kohärenz-Pass auch
+>   **Fakten-Check, Kanon-Quick-Fix, Kanon-Extraktion (Kapitel für Kapitel), Timeline-Prüfung und
+>   Timeline-Quick-Fix** — überall dort zahlt sich Reasoning-Qualität aus.
+> - **Rohentwurf**, **Ausbau** und **Stil** bleiben genau das, was im Wizard sichtbar ist.
 
 ---
 
@@ -104,8 +109,8 @@ OpenAI-kompatiblen Anbieter** umschalten. Bei „Eigener Anbieter" kommen **Base
 - Key: `authorai.canonWarn` (`"0"` = aus; Standard **an**), geräteweit.
 - Wirkt beim **Kapitelwechsel**: das verlassene Kapitel wird still gegen den Kanon geprüft; bei
   Widersprüchen erscheint eine **nicht blockierende** Warnung mit direktem Weg in den Fakten-Check.
-- Modell: die Stufe **Kohärenz** (`authorai.model.consistency`) — sie trägt auch Fakten-Check und
-  Quick Fix.
+- Modell: die Stufe **Kohärenz** (`authorai.model.consistency`) — sie trägt auch Fakten-Check,
+  Quick Fix, Kanon-Extraktion und Timeline-Prüfung.
 - Unveränderte Kapitel kosten nichts (Text-Hash `lib/textHash.ts` + Antwort-Cache;
   `AUTHORAI_CACHE=0` schaltet den Cache ab).
 

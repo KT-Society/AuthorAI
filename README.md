@@ -1,7 +1,7 @@
 # AuthorAI — Dein KI-Buchautor
 
 > **Repository:** [github.com/KT-Society/AuthorAI](https://github.com/KT-Society/AuthorAI)
-> · **Version:** 0.5.5 · **Lizenz:** MIT · **Entwickler:** KT-Society & Echo
+> · **Version:** 0.5.9 · **Lizenz:** MIT · **Entwickler:** KT-Society & Echo
 
 Eine vollständige, lokal laufende **Autoren-Werkbank**: von der Buchidee über Storyboard,
 Rohentwurf und Ausbau bis zu Kohärenz- und Stilprüfung, mit Charakteren, Weltenbau,
@@ -25,7 +25,7 @@ Idee → Storyboard → Rohentwurf (~500 W) → Ausbau (3.000–5.000 W) → Koh
 | **Ausbau** | Ziel 3.000–5.000 Wörter pro Kapitel, Continuation-Loop, Craft-Regeln (Pacing, Show-don't-tell, Foreshadowing) |
 | **Kohärenz-Pass** | Logik-/Kontinuitätsprüfung gegen Nachbarkapitel + Foreshadowing, mit Prüfbericht |
 | **Stil-Pass** | Satzbau, Rhythmus, Grammatik, Sprachgebrauch — inhaltlich unverändert |
-| **Kontinuität** | Kanon aus Fakten & Beziehungen (inkl. Beziehungs-Arc) — verbindlich für alle Pässe; Fakten-Check + Quick Fix |
+| **Kontinuität** | Kanon aus Fakten & Beziehungen (inkl. Beziehungs-Arc) — verbindlich für alle Pässe; Ableitung **Kapitel für Kapitel mit wörtlichem Textbeleg** (nichts ohne Zitat), Fakten-Check + Quick Fix, fortsetzbar |
 | **Live-Vorschau** | Streaming für Rohentwurf, Ausbau, Kohärenz, Stil, Fakten-Check und Extraktionen — inkl. Fortsetzungen; Timeline-Befunde, Figuren- und Welt-Vorschläge treffen einzeln ein; Job-Center mit Live-Stand („Teil 2/5 · 1.240 Wörter") |
 | **Charaktere** | Aus dem Storyboard automatisch angelegt, editierbar, **Soul-Scan** (12 Sektionen) |
 | **Weltenbau** | Orte, Fraktionen, Magie, Artefakte, Lore — automatisch + per Extraktion |

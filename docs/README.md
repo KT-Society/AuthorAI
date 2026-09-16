@@ -1,7 +1,7 @@
 # AuthorAI — Dokumentation
 
 > **Repository:** [github.com/KT-Society/AuthorAI](https://github.com/KT-Society/AuthorAI)
-> · **Version:** 0.5.5
+> · **Version:** 0.5.9
 
 Willkommen im Handbuch. Hier steht alles, was du brauchst, um AuthorAI zu verstehen,
 zu betreiben und zu erweitern.
@@ -35,9 +35,13 @@ bun run dev     # App auf http://localhost:3000
    dann direkt bei Schritt 3 einsteigen.
 3. Pipeline durchlaufen: Storyboard → Rohentwurf → Ausbau → Kohärenz → Stil. Lange Ausgaben
    entstehen **live vor deinen Augen**; Storyboard, Ausbau und Prüfungen zeigen ihren Fortschritt
-   auch im **Job-Center**.
+   auch im **Job-Center**. Bei **importierten** Büchern leiten **„Storyboard ableiten"** und
+   **„Szenen ableiten"** die fehlende Struktur (Kurzfassungen, POV, Schauplatz, Beats) aus dem
+   Text ab.
 4. Prüfen und ausbessern: Fakten-Check und **Timeline** finden Widersprüche — beide mit
-   **Quick Fix** samt Diff-Vorschau, geschrieben wird erst nach dem Bestätigen.
+   **Quick Fix** samt Diff-Vorschau, geschrieben wird erst nach dem Bestätigen. Den **Kanon**
+   (Fakten & Beziehungen) leitest du Kapitel für Kapitel aus dem Manuskript ab: Jeder Vorschlag
+   braucht ein **wörtliches Zitat**, der Scan ist unterbrechbar und läuft an der Stelle weiter.
 5. Zwischendurch jederzeit **Zwischenspeichern**; weiter im Buch-Editor.
 
 ## Dokumentationslandkarte

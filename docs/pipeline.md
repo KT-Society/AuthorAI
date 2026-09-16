@@ -285,7 +285,7 @@ zum Ende gesperrt; verbindlich ist die validierte Fassung des Abschlusses.
 
 Prüf-Pässe lesen sonst Text gegen Text — das Modell muss Widersprüche selbst *erkennen*. Mit dem
 **Kanon** werden Fakten und Beziehungen einmal explizit erfasst und jedem Aufruf als harter Block
-mitgegeben (`lib/continuity.ts` → `canonBlock()`, erzeugt in `BookDetailView`):
+mitgegeben (`data/continuity.ts` → `canonBlock()`, erzeugt in `BookDetailView`):
 
 ```
 CANON FACTS (binding — never contradict these; if the text does, name the fact and chapter in <NOTES>):

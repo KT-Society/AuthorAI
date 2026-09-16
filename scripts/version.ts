@@ -33,6 +33,12 @@ interface Target {
   what: string;
   /** Ersetzt den Inhalt; liefert null, wenn das Muster nicht passt. */
   apply: (content: string, version: string) => string | null;
+  /**
+   * Eigene Nachprüfung. Standard: die Datei enthält die Zielversion als Text.
+   * Nötig für Ziele, die **nicht** die volle Version tragen (SECURITY.md führt eine Minor-Linie
+   * wie `0.5.x`) — dort würde die Standardprüfung immer fehlschlagen.
+   */
+  verify?: (content: string, version: string) => boolean;
 }
 
 const TARGETS: Target[] = [
@@ -88,6 +94,10 @@ const TARGETS: Target[] = [
       const [major = 0, minor = 0] = version.split(".").map((part) => Number(part) || 0);
       const line = `${major}.${minor}.x`;
       return substitute(content, /(\|\s*)\d+\.\d+\.x(\s*\|\s*✅)/, `$1${line}$2`);
+    },
+    verify: (content, version) => {
+      const [major = 0, minor = 0] = version.split(".").map((part) => Number(part) || 0);
+      return content.includes(`| ${major}.${minor}.x | ✅ |`);
     },
   },
 ];
@@ -272,9 +282,10 @@ const stale: string[] = [];
 for (const [file, entries] of byFile) {
   const content = read(file);
   for (const entry of entries) {
-    if (entry.apply(content, target) !== null && !content.includes(target)) {
-      stale.push(`${file} (${entry.what})`);
-    }
+    const ok = entry.verify
+      ? entry.verify(content, target)
+      : entry.apply(content, target) !== null && content.includes(target);
+    if (!ok) stale.push(`${file} (${entry.what})`);
   }
 }
 for (const file of ["README.md", "docs/README.md"]) {

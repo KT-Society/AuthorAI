@@ -109,7 +109,7 @@ Ports: Root **3000**, promptgen **3001** (eigener `Bun.serve`, überschreibbar p
 | `index.ts` | `Bun.serve` mit allen Routen, Fehler-Handling, HMR in Dev |
 | `server/llm.ts` | OpenRouter-Chat-Helper (`chatCompletion`, `chatCompletionDetailed`, `chatCompletionStream`, `cleanJsonBlock`) |
 | `server/story.ts` | Storyboard, Rohentwurf, Ausbau, Kohärenz, Stil, Weltenbau-Extraktion, Figuren-Extraktion, Chunking |
-| `server/continuity.ts` | Fakten-/Beziehungs-Extraktion + Normalisierung, Fakten-Check gegen den Kanon (Einzel, Queue/Stream, Quick Fix) |
+| `server/continuity.ts` | Fakten-/Beziehungs-Extraktion aus dem Manuskript (**Kapitel für Kapitel, mit Belegprüfung**), Fakten-Check gegen den Kanon (Einzel, Queue/Stream, Quick Fix) |
 | `server/cache.ts` | Antwort-Cache (LRU + TTL) für wiederholbare Analysen; `AUTHORAI_CACHE=0` schaltet ab |
 | `server/cover.ts` | Pollinations-Bilderzeugung, Dateiablage, Löschen |
 | `server/research.ts` | Tavily-Suche |

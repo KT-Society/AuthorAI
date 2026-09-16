@@ -8,6 +8,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+_Nichts offen — nächste Themen siehe [`roadmap.md`](roadmap.md)._
+
+---
+
+## [0.5.9] — 2026-09-16
+
 ### Kanon-Scan: keine stille Obergrenze mehr
 
 - **Fixed** **„Über 600 Fakten gefunden — am Ende nur 44, und nur die ersten Kapitel"**: Im
@@ -195,6 +201,13 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   auch Prosa-Vorschauen funktionieren damit ohne SSE), (2) die vier JSONL-Routen verarbeiten den
   fertigen Text notfalls **nachträglich** durch denselben Zeilen-Parser
   (`consumeJsonlText`), bevor sie auf ein JSON-Dokument zurückfallen.
+
+### Release-Werkzeug: Nachprüfung mit eigenem Maßstab
+
+- **Fixed** **`version:bump` verweigerte SECURITY.md**: Die Nachprüfung verlangte in **jeder**
+  Zieldatei die volle Versionsnummer — SECURITY.md führt aber absichtlich nur die Minor-Linie
+  (`0.5.x`). Ziele können jetzt eine **eigene Prüfung** mitbringen (`verify`), der Bump lief danach
+  grün durch (belegt mit einem Wegwerf-Bump 0.5.10 und zurück).
 
 ---
 

@@ -41,7 +41,7 @@ bun run version:bump 0.4.1 --dry-run   # nur zeigen, nichts schreiben
 bun run version:bump 0.4.1 --force     # auch rückwärts (Downgrade)
 ```
 
-Das Skript (`scripts/version.ts`) hält **sieben** Stellen konsistent:
+Das Skript (`scripts/version.ts`) hält **sieben Positionen** (acht Dateien) konsistent:
 
 1. `package.json` → `version`
 2. `packages/promptgen/package.json` → `version` (Workspace-Paket, gleiche Version)
