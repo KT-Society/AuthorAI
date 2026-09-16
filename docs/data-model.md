@@ -36,10 +36,18 @@ interface Book {
   defaultTargetWords?: number;         // Projekt-Vorgabe je Kapitel
   /** Storyboard einmalig in die Sammlungen gespiegelt (Figuren/Welt/Plot) — siehe unten. */
   storyboardImported?: boolean;
+  /** Bis zu welchem Kapitel (Anzahl) der Kanon aus dem Manuskript gescannt wurde. */
+  canonScannedChapters?: number;
   storyboard?: Storyboard;
   manuscript?: ChapterContent[];
 }
 ```
+
+**`canonScannedChapters`** macht den Kanon-Scan **fortsetzbar**: Er wird beim Übernehmen der
+Vorschläge auf den erreichten Kapitelstand gesetzt. Der nächste Scan bietet an, dort weiterzumachen
+und schickt nur die offenen Kapitel (Versatz `startChapter` → absolute Kapitel-Labels). Ein
+abgebrochener Lauf kostet damit nur das, was noch nicht bestätigt war; „alles neu scannen" ist
+weiterhin möglich.
 
 **`storyboardImported`** verhindert, dass Löschungen von selbst zurückkommen: Die Shell leitet
 fehlende Storyboard-Daten (Figuren, Weltenbau, Plot-Karten) beim Start nach — aber nur für Bücher

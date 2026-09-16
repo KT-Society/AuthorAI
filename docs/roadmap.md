@@ -27,6 +27,8 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   fassen, wenn die Überschriften-Heuristik daneben liegt
 
 ### Kanon & Kontinuität (Anschlüsse an den Fakten-Check)
+- **Kanon-Scan als Job**: Der Kapitel-für-Kapitel-Scan läuft im Dialog; als Job im Job-Center
+  könnte er laufen, während man woanders arbeitet (Fortschritt und Abbruch inklusive)
 - **Belege im Kanon sichtbar machen**: Der wörtliche Beleg (`CanonFact.quote`) wird im
   Vorschlagsdialog gezeigt, aber nicht im Fakten-Editor — dort gehört er hin, damit man einen
   Fakt gegen die Stelle im Text prüfen kann

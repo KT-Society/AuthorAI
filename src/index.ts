@@ -11,7 +11,6 @@ import { EXPAND_DEFAULT_WORDS } from "./data/story";
 import type { SceneConstraint, Storyboard } from "./data/story";
 import { coversDir, generateCover, saveCoverImage } from "./server/cover";
 import {
-  extractContinuity,
   extractContinuityStream,
   checkCanon,
   checkCanonChapters,
@@ -1090,6 +1089,8 @@ const chapters = asManuscriptChapters(body.chapters);
           }
           const input = {
             chapters,
+            // Beim Weiterlaufen: Anzahl der übersprungenen Kapitel (für korrekte Labels).
+            startChapter: optionalInt(body.startChapter, 0),
             characters: asCharacterRefs(body.characters),
             worldNames: asStringList(body.worldNames),
             knownStatements: asStringList(body.knownStatements),
@@ -1099,7 +1100,9 @@ const chapters = asManuscriptChapters(body.chapters);
           };
           return sseResponse(async (emit) => {
             const result = await extractContinuityStream(input, {
-              onChapter: (done, total) => emit({ type: "chapter", done, total }),
+              onChapter: (index, total) => emit({ type: "chapter", index, total }),
+              onChapterDone: (info) => emit({ type: "chapterDone", ...info }),
+              onWarning: (message) => emit({ type: "warning", message }),
               onItem: (item) => emit({ type: "item", item: item.type, raw: item.raw }),
             });
             emit({ type: "done", ...result });
@@ -1110,33 +1113,8 @@ const chapters = asManuscriptChapters(body.chapters);
       },
     },
 
-    // Continuity extraction: facts + relations from storyboard and register.
-    // Continuity extraction (non-streaming): facts + relations, chapter by chapter.
-    "/api/continuity/extract": {
-      async POST(req) {
-        try {
-          const body = await readJson(req);
-          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
-          const language = optionalLanguage(body.language);
-          const chapters = asManuscriptChapters(body.chapters);
-          if (chapters.length === 0) {
-            throw new ApiError("Kein Manuskript-Text für die Kontinuitäts-Extraktion.", 400);
-          }
-          const result = await extractContinuity({
-            chapters,
-            characters: asCharacterRefs(body.characters),
-            worldNames: asStringList(body.worldNames),
-            knownStatements: asStringList(body.knownStatements),
-            knownRelations: asStringList(body.knownRelations),
-            model,
-            language,
-          });
-          return Response.json(result);
-        } catch (err) {
-          return errorResponse(err);
-        }
-      },
-    },
+    // Continuity extraction runs chapter by chapter over the manuscript (streamed variant only).
+
 
     // Research lookup via Tavily (server-side key).
     "/api/research": {

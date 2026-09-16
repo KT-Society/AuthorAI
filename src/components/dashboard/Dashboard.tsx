@@ -717,6 +717,7 @@ export function Dashboard({
                 onFactsChange={setFacts}
                 onRelationsChange={setRelations}
                 onClearAll={clearAllCanon}
+                onBookUpdate={updateBook}
               />
             ) : activeNav === "world" ? (
             <WorldView
@@ -828,4 +829,5 @@ export function Dashboard({
 }
 
 export default Dashboard;
+
 

@@ -287,6 +287,19 @@ in der Kontinuität neu aufbauen.
 
 ## Kanon & Kontinuität
 
+### Der Scan lief Minuten und brach dann ab — alles weg
+
+Behoben. Ein einzelnes Kapitel mit unbrauchbarer Modellantwort warf früher den **gesamten** Lauf
+weg. Jetzt wird nur dieses Kapitel übersprungen (Warnung im Vorschlagsdialog), der Rest läuft
+weiter, und **was gefunden wurde, bleibt** und ist übernehmbar. Der erreichte Kapitelstand wird
+beim Übernehmen gemerkt — der nächste Start bietet „bei Kapitel N weitermachen?" an.
+
+### Der Scan läuft lange — kann ich zwischendurch aufhören?
+
+Ja. Übernehmen, was da ist: Der Stand (bis zu welchem Kapitel gescannt wurde) wird gespeichert, der
+nächste Lauf macht dort weiter. Übersprungene Kapitel werden als Warnung genannt und können gezielt
+nachgeholt werden (Abbrechen im Fortsetzen-Dialog = alles neu scannen).
+
 ### Der Scan liefert jedes Mal andere Fakten
 
 Behoben. Ursache war die **Quelle**: Die Ableitung las das Storyboard (Kurzfassungen) und musste

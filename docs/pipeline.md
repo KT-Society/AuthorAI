@@ -323,6 +323,11 @@ RELATIONS (binding — keep these dynamics consistent):
   („Kapitel 3/12") und die Vorschläge wachsen mitsamt Beleg hinein. Am Ende ersetzt die validierte
   Fassung die Live-Liste (Erkennung auch über Chunk-Grenzen, Fallback auf normales JSON, falls das
   Modell JSONL ignoriert). Lange Kapitel werden absatzsicher geteilt (~2.500 Wörter).
+- **Robust und fortsetzbar**: Ein Kapitel mit unbrauchbarer Antwort wird **übersprungen** (als
+  Warnung gemeldet) — der Rest läuft weiter, schon Gefundenes bleibt erhalten. Jedes Buch merkt
+  sich mit `canonScannedChapters`, bis zu welchem Kapitel gescannt wurde; der nächste Lauf bietet
+  „bei Kapitel N weitermachen?" an und schickt nur die offenen Kapitel (Versatz `startChapter`
+  sorgt für absolute Labels). Der Stand wird beim Übernehmen gesetzt.
 - **Wachsend statt wiederholend**: Bereits gefundene Aussagen und Beziehungen gehen als
   „ALREADY TRACKED" in die folgenden Kapitel — der Kanon wächst von Kapitel zu Kapitel.
 - **Dubletten**: Bekanntes wird **unscharf** verglichen (`lib/factMatch.ts`) — dieselbe Aussage

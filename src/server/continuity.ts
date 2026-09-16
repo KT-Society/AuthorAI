@@ -38,6 +38,12 @@ export interface ContinuityExtractInput {
    * Kapitel für Kapitel, und jeder Fakt braucht einen wörtlichen Beleg daraus.
    */
   chapters: { title: string; text: string }[];
+  /**
+   * Wie viele Kapitel davor übersprungen wurden (0-basiert). Nur für **ehrliche Labels**:
+   * Beim Weiterlaufen heißt das erste gelesene Kapitel dann z. B. „Kapitel 7" statt „Kapitel 1"
+   * — sonst würde `establishedIn` den falschen Kapitelnamen tragen.
+   */
+  startChapter?: number;
   /** Figuren-Register des Projekts (nur Zuordnung, keine Quelle). */
   characters: { name: string; role?: string }[];
   /** Namen der Welteneinträge des Projekts (nur Zuordnung). */
@@ -374,11 +380,20 @@ function classifyItem(obj: Record<string, unknown>): ContinuityItemEvent | null 
   return null;
 }
 
+/** Ergebnis eines Scans: die validierten Einträge **und** was schiefging (übersprungene Kapitel). */
+export interface ContinuityScanResult extends ExtractedContinuity {
+  warnings: string[];
+}
+
 export interface ContinuityStreamHandlers {
-  /** Fortschritt über die Kapitel (1-basiert). */
-  onChapter?: (done: number, total: number) => void;
+  /** Ein Kapitel wird jetzt gelesen (1-basiert, bezogen auf die übergebene Kapitelliste). */
+  onChapter?: (index: number, total: number) => void;
+  /** Ein Kapitel ist durch — Grundlage für „hier weitermachen". */
+  onChapterDone?: (info: { index: number; facts: number; relations: number }) => void;
   /** Ein fertiges Objekt (live, vor der Beleg-Prüfung). */
   onItem?: (item: ContinuityItemEvent) => void;
+  /** Ein Kapitel wurde übersprungen (Fehler), der Lauf geht weiter. */
+  onWarning?: (message: string) => void;
 }
 
 /**
@@ -388,11 +403,15 @@ export interface ContinuityStreamHandlers {
  * Lange Kapitel werden absatzsicher geteilt (`splitIntoChunks`), damit die Eingabe nicht aus dem
  * Kontext läuft; der Beleg wird dann gegen den jeweiligen Teil geprüft (genau den Text, den das
  * Modell gesehen hat).
+ *
+ * **Ein Kapitel kann den Lauf nicht mehr zerreißen:** Antwortet das Modell unbrauchbar, wird nur
+ * dieses Kapitel übersprungen (als Warnung gemeldet) — alles davor bleibt erhalten, und der Rest
+ * wird weiter gelesen. Vorher warf ein einziger unlesbarer Block den gesamten Scan weg.
  */
 export async function extractContinuityStream(
   input: ContinuityExtractInput,
   handlers: ContinuityStreamHandlers = {},
-): Promise<ExtractedContinuity> {
+): Promise<ContinuityScanResult> {
   const chapters = input.chapters.filter((chapter) => chapter.text.trim().length > 0);
   if (chapters.length === 0) {
     throw new ApiError(
@@ -403,72 +422,93 @@ export async function extractContinuityStream(
 
   const allFacts: ExtractedFact[] = [];
   const allRelations: ExtractedRelation[] = [];
+  const warnings: string[] = [];
   const context = {
     title: "",
     knownStatements: [...(input.knownStatements ?? [])],
     knownRelations: [...(input.knownRelations ?? [])],
   };
 
+  const offset = input.startChapter ?? 0;
+  const totalChapters = offset + chapters.length;
+
   for (const [index, chapter] of chapters.entries()) {
-    handlers.onChapter?.(index + 1, chapters.length);
-    const label = `Kapitel ${index + 1}: ${chapter.title.trim() || "ohne Titel"}`;
-    const parts = splitIntoChunks(chapter.text, CONTINUITY_CHUNK_WORDS);
+    const absolute = offset + index;
+    handlers.onChapter?.(absolute + 1, totalChapters);
+    const label = `Kapitel ${absolute + 1}: ${chapter.title.trim() || "ohne Titel"}`;
+    const beforeFacts = allFacts.length;
+    const beforeRelations = allRelations.length;
 
-    for (const [partIndex, part] of parts.entries()) {
-      const rawFacts: unknown[] = [];
-      const rawRelations: unknown[] = [];
+    try {
+      const parts = splitIntoChunks(chapter.text, CONTINUITY_CHUNK_WORDS);
 
-      const consumer = createJsonlConsumer((parsed) => {
-        const item = classifyItem(parsed);
-        if (!item) return;
-        if (item.type === "fact") rawFacts.push(parsed);
-        else rawRelations.push(parsed);
-        handlers.onItem?.(item);
-      });
+      for (const [partIndex, part] of parts.entries()) {
+        const rawFacts: unknown[] = [];
+        const rawRelations: unknown[] = [];
 
-      const call = await chatCompletionStream(
-        {
-          model: input.model,
-          system: continuityChapterSystem(input.language),
-          user: chapterMaterial(
-            { title: chapter.title, text: part },
-            index,
-            chapters.length,
-            parts.length > 1 ? { index: partIndex, count: parts.length } : null,
-            context,
-          ),
-          maxTokens: 3000,
-          temperature: 0.2,
-        },
-        consumer.push,
-      );
-      consumer.flush();
+        const consumer = createJsonlConsumer((parsed) => {
+          const item = classifyItem(parsed);
+          if (!item) return;
+          if (item.type === "fact") rawFacts.push(parsed);
+          else rawRelations.push(parsed);
+          handlers.onItem?.(item);
+        });
 
-      // Nichts als JSONL? Dann hat das Modell ein JSON-Dokument geliefert → damit arbeiten.
-      const payload =
-        rawFacts.length > 0 || rawRelations.length > 0
-          ? { facts: rawFacts, relations: rawRelations }
-          : parseJson(call.content, `Kapitel ${index + 1}`);
+        const call = await chatCompletionStream(
+          {
+            model: input.model,
+            system: continuityChapterSystem(input.language),
+            user: chapterMaterial(
+              { title: chapter.title, text: part },
+              absolute,
+              totalChapters,
+              parts.length > 1 ? { index: partIndex, count: parts.length } : null,
+              context,
+            ),
+            maxTokens: 3000,
+            temperature: 0.2,
+          },
+          consumer.push,
+        );
+        consumer.flush();
 
-      // Gegen **genau den Text** prüfen, den das Modell gesehen hat.
-      const normalized = normalizeContinuity(payload, input, { text: part, label });
+        // Nichts als JSONL? Dann hat das Modell ein JSON-Dokument geliefert → damit arbeiten.
+        const payload =
+          rawFacts.length > 0 || rawRelations.length > 0
+            ? { facts: rawFacts, relations: rawRelations }
+            : parseJson(call.content);
 
-      for (const fact of normalized.facts) {
-        if (allFacts.length >= MAX_FACTS) break;
-        allFacts.push(fact);
-        context.knownStatements.push(fact.statement);
+        // Gegen **genau den Text** prüfen, den das Modell gesehen hat.
+        const normalized = normalizeContinuity(payload, input, { text: part, label });
+
+        for (const fact of normalized.facts) {
+          if (allFacts.length >= MAX_FACTS) break;
+          allFacts.push(fact);
+          context.knownStatements.push(fact.statement);
+        }
+        for (const relation of normalized.relations) {
+          if (allRelations.length >= MAX_RELATIONS) break;
+          allRelations.push(relation);
+          context.knownRelations.push(`${relation.fromName}→${relation.toName}:${relation.kind}`);
+        }
       }
-      for (const relation of normalized.relations) {
-        if (allRelations.length >= MAX_RELATIONS) break;
-        allRelations.push(relation);
-        context.knownRelations.push(`${relation.fromName}→${relation.toName}:${relation.kind}`);
-      }
+    } catch (err) {
+      // Nur dieses Kapitel verlieren — nicht den ganzen Lauf.
+      const message = err instanceof Error ? err.message : "Unbekannter Fehler.";
+      const skipped = `Kapitel ${absolute + 1} (${chapter.title.trim() || "ohne Titel"}): ${message}`;
+      warnings.push(`${skipped} — übersprungen, der Rest wurde weiter gelesen.`);
+      handlers.onWarning?.(skipped);
     }
+
+    handlers.onChapterDone?.({
+      index: absolute + 1,
+      facts: allFacts.length - beforeFacts,
+      relations: allRelations.length - beforeRelations,
+    });
   }
 
-  return { facts: allFacts, relations: allRelations };
+  return { facts: allFacts, relations: allRelations, warnings };
 }
-
 /* ─────────────────────────── Fakten-Check (Kanon) ─────────────────────────── */
 
 export interface CanonCheckInput {
@@ -931,6 +971,8 @@ export async function repairCanonChapters(
     Array.from({ length: Math.min(limit, Math.max(1, pending.length)) }, () => worker()),
   );
 }
+
+
 
 
 

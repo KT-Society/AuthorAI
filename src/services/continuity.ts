@@ -8,6 +8,7 @@ import type { ExtractedContinuity, ExtractedFact, ExtractedRelation } from "@/da
 
 import { postJson } from "./http";
 import { streamEvents } from "./stream";
+
 export interface ContinuityExtractRequest {
   /** Manuskript-Kapitel in Lesereihenfolge — die Quelle der Fakten (Belege werden daraus geprüft). */
   chapters: { title: string; text: string }[];
@@ -19,34 +20,49 @@ export interface ContinuityExtractRequest {
   language: string;
 }
 
-export async function extractContinuity(
-  input: ContinuityExtractRequest,
-): Promise<ExtractedContinuity> {
-  const data = await postJson<Partial<ExtractedContinuity>>("/api/continuity/extract", input);
-  return {
-    facts: Array.isArray(data.facts) ? data.facts : [],
-    relations: Array.isArray(data.relations) ? data.relations : [],
-  };
+/** Ergebnis eines Scans: validierte Einträge **und** übersprungene Kapitel. */
+export interface ContinuityScanResult extends ExtractedContinuity {
+  /** Kapitel, die das Modell unbrauchbar beantwortet hat (übersprungen, Rest wurde gelesen). */
+  warnings: string[];
+}
+
+export interface ContinuityStreamHandlers {
+  /** Ein Kapitel wird jetzt gelesen (1-basiert, bezogen auf die übergebene Kapitelliste). */
+  onChapter?: (index: number, total: number) => void;
+  /** Ein Kapitel ist durch — Grundlage für „hier weitermachen". */
+  onChapterDone?: (info: { index: number; facts: number; relations: number }) => void;
+  onItem?: (type: "fact" | "relation", item: ExtractedFact | ExtractedRelation) => void;
+  /** Ein Kapitel wurde übersprungen (Fehler); der Lauf geht weiter. */
+  onWarning?: (message: string) => void;
 }
 
 /**
- * Gestreamte Extraktion (JSONL): Der Server schickt jeden Vorschlag, sobald das Modell ihn
- * fertig hat, und am Ende die **validierte** Fassung. Die Live-Objekte sind absichtlich nur
- * grob gemappt — verbindlich ist das Ergebnis aus `onDone`.
+ * Gestreamte Extraktion (JSONL), **Kapitel für Kapitel**: Der Server schickt jeden Vorschlag,
+ * sobald das Modell ihn fertig hat, meldet den Kapitel-Fortschritt (inkl. „Kapitel N ist durch")
+ * und übersprungene Kapitel als Warnung. Am Ende kommt die **validierte** Fassung — die Live-
+ * Objekte sind absichtlich nur grob gemappt.
  */
 export async function streamContinuityExtract(
   input: ContinuityExtractRequest,
-  handlers: {
-    /** Fortschritt über die Kapitel (1-basiert). */
-    onChapter?: (done: number, total: number) => void;
-    onItem?: (type: "fact" | "relation", item: ExtractedFact | ExtractedRelation) => void;
-  } = {},
-): Promise<ExtractedContinuity> {
-  let result: ExtractedContinuity | null = null;
+  handlers: ContinuityStreamHandlers = {},
+): Promise<ContinuityScanResult> {
+  let result: ContinuityScanResult | null = null;
 
   await streamEvents("/api/continuity/extract/stream", input, (event) => {
     if (event.type === "chapter") {
-      handlers.onChapter?.(Number(event.done ?? 0), Number(event.total ?? 0));
+      handlers.onChapter?.(Number(event.index ?? 0), Number(event.total ?? 0));
+      return;
+    }
+    if (event.type === "chapterDone") {
+      handlers.onChapterDone?.({
+        index: Number(event.index ?? 0),
+        facts: Number(event.facts ?? 0),
+        relations: Number(event.relations ?? 0),
+      });
+      return;
+    }
+    if (event.type === "warning" && typeof event.message === "string") {
+      handlers.onWarning?.(event.message);
       return;
     }
     if (event.type === "item" && event.item && typeof event.raw === "object" && event.raw) {
@@ -64,6 +80,7 @@ export async function streamContinuityExtract(
       result = {
         facts: Array.isArray(event.facts) ? (event.facts as ExtractedFact[]) : [],
         relations: Array.isArray(event.relations) ? (event.relations as ExtractedRelation[]) : [],
+        warnings: Array.isArray(event.warnings) ? event.warnings.map(String) : [],
       };
     }
   });
@@ -81,6 +98,7 @@ function mapRawFact(raw: Record<string, unknown>): ExtractedFact | null {
     entityName,
     entityType: raw.entityType === "world" ? "world" : "character",
     statement,
+    quote: typeof raw.quote === "string" ? raw.quote.trim() || undefined : undefined,
     establishedIn: typeof raw.establishedIn === "string" ? raw.establishedIn : undefined,
     hard: raw.hard === true ? true : undefined,
   };
@@ -262,4 +280,6 @@ export async function streamCanonRepair(
     });
   });
 }
+
+
 

@@ -19,6 +19,7 @@ export function ContinuityExtractDialog({
   relations,
   running = false,
   progressLabel,
+  warnings = [],
   bookTitle,
   onClose,
   onAccept,
@@ -30,6 +31,8 @@ export function ContinuityExtractDialog({
   running?: boolean;
   /** Live-Label der Extraktion (z. B. „Kapitel 3/12 wird gelesen…"). */
   progressLabel?: string | null;
+  /** Übersprungene Kapitel (unbrauchbare Modellantwort) — der Rest des Laufs ist erhalten. */
+  warnings?: string[];
   bookTitle: string;
   onClose: () => void;
   onAccept: (facts: ExtractedFact[], relations: ExtractedRelation[]) => void;
@@ -108,6 +111,14 @@ export function ContinuityExtractDialog({
             ? `${progressLabel ?? "Die Vorschläge treffen live ein"} — am Ende wird jeder Beleg gegen den Text geprüft.`
             : "Nur übernehmen, was wirklich im Material steht. Alles ist vorausgewählt — Abwählen, was nicht ins Kanon gehört."}
         </p>
+
+        {warnings.length > 0 ? (
+          <ul className="mt-3 space-y-1 rounded-xl border border-brand-amber/30 bg-brand-amber/10 px-3 py-2 text-[11px] text-brand-amber">
+            {warnings.map((warning, index) => (
+              <li key={index}>• {warning}</li>
+            ))}
+          </ul>
+        ) : null}
 
         <div className="mt-3 flex-1 space-y-4 overflow-y-auto pr-1">
           {facts.length > 0 ? (
@@ -267,4 +278,5 @@ export function ContinuityExtractDialog({
     </div>
   );
 }
+
 

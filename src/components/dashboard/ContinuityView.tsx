@@ -88,6 +88,7 @@ export function ContinuityView({
   onFactsChange,
   onRelationsChange,
   onClearAll,
+  onBookUpdate,
 }: {
   books: Book[];
   characters: Character[];
@@ -99,6 +100,8 @@ export function ContinuityView({
   onRelationsChange: (relations: CharacterRelation[]) => void;
   /** Leert den gesamten Kanon (Fakten und Beziehungen). */
   onClearAll: () => void;
+  /** Buch ändern (z. B. Scan-Stand merken) — kommt aus der Shell. */
+  onBookUpdate?: (book: Book) => void;
 }) {
   const [tab, setTab] = useState<"facts" | "relations">("facts");
   const [query, setQuery] = useState("");
@@ -114,6 +117,10 @@ export function ContinuityView({
   const [extracting, setExtracting] = useState(false);
   /** Live-Label der Extraktion („Kapitel 3/12 wird gelesen…"). */
   const [extractLabel, setExtractLabel] = useState<string | null>(null);
+  /** Kapitel, die das Modell unbrauchbar beantwortet hat (übersprungen, Rest gelesen). */
+  const [extractWarnings, setExtractWarnings] = useState<string[]>([]);
+  /** Bis hierhin ist der Scan durch — wird beim Übernehmen als Stand gemerkt. */
+  const [extractProgress, setExtractProgress] = useState(0);
   const [extractError, setExtractError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<{
     facts: ExtractedFact[];
@@ -228,14 +235,14 @@ export function ContinuityView({
       return;
     }
     // Quelle der Fakten ist der **Manuskript-Text** — Kapitel für Kapitel, mit Belegprüfung.
-    const extractChapters = manuscriptOf(book)
+    const allChapters = manuscriptOf(book)
       .map((chapter, index) => ({
         title:
           chapter.title?.trim() || book.storyboard?.chapters[index]?.title || `Kapitel ${index + 1}`,
         text: (chapter.expanded || chapter.draft || "").trim(),
       }))
       .filter((chapter) => chapter.text.length > 0);
-    if (extractChapters.length === 0) {
+    if (allChapters.length === 0) {
       setExtractError(
         "Dieses Projekt hat noch kein Manuskript — Fakten lassen sich nur aus geschriebenem Text belegen.",
       );
@@ -246,12 +253,35 @@ export function ContinuityView({
       setExtractError("Bitte eine Model-ID für „Kohärenz“ in den Einstellungen eintragen.");
       return;
     }
+
+    /**
+     * Weiterlaufen statt neu anfangen: Ein abgebrochener Scan hat den Stand gemerkt
+     * (`canonScannedChapters`). Der Rest wird nachgeholt — der Dialog fragt einmal nach.
+     */
+    const scanned = Math.min(book.canonScannedChapters ?? 0, allChapters.length);
+    let startIndex = 0;
+    if (scanned > 0 && scanned < allChapters.length) {
+      const resume = window.confirm(
+        `Dieses Projekt wurde bis Kapitel ${scanned} von ${allChapters.length} gescannt.\n\n` +
+          `OK = bei Kapitel ${scanned + 1} weitermachen\n` +
+          "Abbrechen = alles neu scannen",
+      );
+      startIndex = resume ? scanned : 0;
+    }
+    const extractChapters = allChapters.slice(startIndex);
+
     setExtractError(null);
     setExtractBusy(true);
     setExtracting(true);
-    setExtractLabel("Kapitel werden gelesen…");
+    setExtractWarnings([]);
+    setExtractLabel(
+      startIndex > 0 ? `Weiter bei Kapitel ${startIndex + 1}…` : "Kapitel werden gelesen…",
+    );
     // Dialog sofort öffnen — die Vorschläge wachsen dann live hinein.
     setCandidates({ facts: [], relations: [] });
+
+    /** Bis hierher ist der Scan durch (absolut) — Grundlage für „hier weitermachen". */
+    let completed = startIndex;
 
     try {
       const scoped = bookCharacters(book.id);
@@ -272,6 +302,7 @@ export function ContinuityView({
       const result = await streamContinuityExtract(
         {
           chapters: extractChapters,
+          startChapter: startIndex,
           characters: scoped.map((character) => ({ name: character.name, role: character.role })),
           worldNames: bookWorlds.map((entry) => entry.title),
           knownStatements: facts
@@ -291,7 +322,12 @@ export function ContinuityView({
           language: readLanguage() ?? "German",
         },
         {
-          onChapter: (done, total) => setExtractLabel(`Kapitel ${done}/${total} wird gelesen…`),
+          onChapter: (index, total) => setExtractLabel(`Kapitel ${index}/${total} wird gelesen…`),
+          onChapterDone: ({ index }) => {
+            // Der Server zählt absolut (inkl. Versatz) — der Stand ist direkt übernehmbar.
+            completed = index;
+          },
+          onWarning: (message) => setExtractWarnings((prev) => [...prev, message]),
           onItem: (type, item) =>
             setCandidates((prev) => {
               const base = prev ?? { facts: [], relations: [] };
@@ -302,15 +338,24 @@ export function ContinuityView({
         },
       );
 
+      setExtractProgress(completed);
+      setExtractWarnings(result.warnings);
+
       // Endfassung ist validiert und dedupliziert — sie ersetzt die Live-Liste.
       if (result.facts.length === 0 && result.relations.length === 0) {
         setCandidates(null);
-        setExtractError("Keine neuen Vorschläge gefunden (alles bereits erfasst).");
+        setExtractError(
+          result.warnings.length > 0
+            ? "Keine belegbaren Fakten gefunden — Kapitel wurden übersprungen (siehe Hinweise)."
+            : "Keine neuen Vorschläge gefunden (alles bereits erfasst).",
+        );
         return;
       }
       setCandidates(result);
     } catch (err) {
-      setCandidates(null);
+      // **Nichts verwerfen**: Was angekommen ist, bleibt im Dialog und ist übernehmbar.
+      // Der erreichte Kapitelstand wird beim Übernehmen gemerkt — dort geht es weiter.
+      setExtractProgress(completed);
       setExtractError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
       setExtracting(false);
@@ -414,18 +459,33 @@ export function ContinuityView({
     if (newFacts.length > 0) onFactsChange([...facts, ...newFacts]);
     if (newRelations.length > 0) onRelationsChange([...relations, ...newRelations]);
 
+    /**
+     * Fortschritt merken: Bis hierhin ist das Manuskript gescannt. Beim nächsten Lauf geht es
+     * dort weiter — ein Abbruch kostet also nur das, was noch nicht bestätigt war.
+     */
+    if (onBookUpdate && extractProgress > (book.canonScannedChapters ?? 0)) {
+      onBookUpdate({
+        ...book,
+        canonScannedChapters: extractProgress,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
     const parts = [
       newFacts.length > 0 ? `${newFacts.length} Fakten` : "",
       newRelations.length > 0 ? `${newRelations.length} Beziehungen` : "",
     ].filter(Boolean);
     const skipped = skippedFacts + skippedRelations;
+    const progressNote =
+      extractProgress > 0 ? ` · Stand: Kapitel ${extractProgress} gescannt` : "";
     showToast(
       parts.length > 0
-        ? `${parts.join(" · ")} übernommen${skipped > 0 ? ` (${skipped} ohne Zuordnung übersprungen)` : ""}`
+        ? `${parts.join(" · ")} übernommen${skipped > 0 ? ` (${skipped} ohne Zuordnung übersprungen)` : ""}${progressNote}`
         : "Nichts übernommen — keine Figur zuordenbar",
       parts.length > 0 ? "ok" : "error",
     );
     setCandidates(null);
+    setExtractWarnings([]);
   };
 
   const unknownEntities = facts.filter((fact) => nameOf(fact.entityId) === "(unbekannt)").length;
@@ -811,6 +871,7 @@ export function ContinuityView({
         relations={candidates?.relations ?? []}
         running={extracting}
         progressLabel={extractLabel}
+        warnings={extractWarnings}
         bookTitle={books.find((book) => book.id === extractBookId)?.title ?? ""}
         onClose={() => setCandidates(null)}
         onAccept={acceptExtraction}
@@ -818,6 +879,9 @@ export function ContinuityView({
     </div>
   );
 }
+
+
+
 
 
 

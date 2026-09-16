@@ -8,6 +8,27 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Kanon-Scan: robust und fortsetzbar
+
+- **Fixed** **„Nach 6 Minuten: Kontinuitäts-JSON ungültig — und alles weg"**: Ein einziges Kapitel
+  mit unbrauchbarer Modellantwort warf den **gesamten** Scan weg (ein `parseJson`-Fehler brach die
+  Schleife ab, der Client leerte die Vorschlagsliste). Jetzt gilt: **Ein Kapitel kann den Lauf nicht
+  mehr zerreißen** — es wird übersprungen, als Warnung gemeldet und der Rest wird weiter gelesen.
+  Was bis dahin gefunden wurde, bleibt erhalten und ist übernehmbar.
+- **Added** **Kapitelweise fortsetzbar** (genau der gewünschte Ablauf „scannen, speichern, weiter
+  scannen"): Jedes Buch merkt sich mit `canonScannedChapters`, bis zu welchem Kapitel der Kanon
+  gescannt wurde. Beim nächsten Lauf fragt die Ansicht **„bei Kapitel N weitermachen?"** (Abbrechen
+  = alles neu scannen) und schickt nur die offenen Kapitel. Der Stand wird beim **Übernehmen**
+  gesetzt — ein Abbruch kostet also nur das, was noch nicht bestätigt war.
+- **Added** **Ehrliche Kapitel-Labels beim Weiterlaufen**: Der Server bekommt den Versatz
+  (`startChapter`) und zählt **absolut** — Kapitel 7 heißt auch im zweiten Lauf „Kapitel 7", nicht
+  „Kapitel 1". Damit stimmt `establishedIn` in jedem Fakt.
+- **Added** **Fortschritt je Kapitel**: Der Stream meldet jetzt `chapter` (wird gelesen),
+  `chapterDone` (durch, mit Anzahl gefundener Fakten) und `warning` (übersprungen). Die Warnungen
+  stehen im Vorschlagsdialog — man sieht also, welche Kapitel nachgeholt werden müssen.
+- **Changed** **Tote Route entfernt**: `POST /api/continuity/extract` (nicht-streamend) hatte
+  keinen Aufrufer mehr — die Ansicht nutzt ausschließlich die Stream-Variante.
+
 ### Kanon-Extraktion: belegt statt geraten
 
 - **Fixed** **„Ich kann den Scan 20× machen und finde immer etwas anderes"**: Das war kein

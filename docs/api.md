@@ -118,25 +118,22 @@ Antwort ab, mit **HTTP 502** und klarer Meldung.
 
 ## Kontinuität
 
-### `POST /api/continuity/extract`
+### `POST /api/continuity/extract/stream`
 
 Leitet **Fakten** (zu Figuren und Welteinträgen) und **Beziehungen** (zwischen Figuren) aus dem
-**Manuskript** ab — **Kapitel für Kapitel**. Die Antwort enthält **Namen**, keine IDs; die
-Zuordnung auf Charakter-/Welt-IDs macht der Client (Review-Dialog vor der Übernahme).
-Bereits erfasste Aussagen und Beziehungen werden über `knownStatements`/`knownRelations`
-ausgeschlossen; erfundene Entitäten filtert der Server heraus.
-
-**Belegpflicht:** Jeder Vorschlag muss ein **wörtliches Zitat** aus dem jeweiligen Kapitel
-mitbringen (`quote`). Der Server prüft es gegen genau den Text, den das Modell gesehen hat, und
-**verwirft** Vorschläge mit erfundenem, paraphrasiertem oder fehlendem Beleg — der Vergleich
-toleriert Weißraum, Zeichensetzung und typografische Anführungszeichen, aber keine Umformulierung.
-`establishedIn` setzt der Server selbst (Kapitel-Label mit Titel).
+**Manuskript** ab — **Kapitel für Kapitel**, gestreamt (JSONL, ein Objekt pro Zeile). Jeder
+Vorschlag muss ein **wörtliches Zitat** aus dem jeweiligen Kapitel mitbringen (`quote`): Der Server
+prüft es gegen genau den Text, den das Modell gesehen hat, und **verwirft** Vorschläge mit
+erfundenem, paraphrasiertem oder fehlendem Beleg. `establishedIn` setzt der Server selbst
+(Kapitel-Label inkl. Titel). Die Antwort enthält **Namen**, keine IDs — die Zuordnung auf
+Charakter-/Welt-IDs macht der Client (Review-Dialog vor der Übernahme).
 
 **Request**
 
 ```json
 {
   "chapters": [{ "title": "Der Aufbruch", "text": "…" }],
+  "startChapter": 0,
   "characters": [{ "name": "Elias Thorne", "role": "Protagonist" }],
   "worldNames": ["Kinder der Asche"],
   "knownStatements": ["Elias ist Schmied."],
@@ -146,48 +143,26 @@ toleriert Weißraum, Zeichensetzung und typografische Anführungszeichen, aber k
 }
 ```
 
-**Response**
+`startChapter` ist der **Versatz** fürs Weiterlaufen: Wie viele Kapitel davor bereits gescannt
+wurden (dann zählt der Server absolut — Kapitel 7 bleibt Kapitel 7).
 
-```json
-{
-  "facts": [
-    { "kind": "history", "entityName": "Elias Thorne", "entityType": "character",
-      "statement": "Verlor seine Familie beim Brand der Schmiede.",
-      "quote": "Der Brand der Schmiede nahm ihm Frau und Tochter.",
-      "establishedIn": "Kapitel 1: Der Aufbruch" }
-  ],
-  "relations": [
-    { "fromName": "Elias Thorne", "toName": "Sylar", "kind": "distrust",
-      "intensity": -0.6, "note": "seit dem Verrat im Hafen" }
-  ]
-}
-```
-
-Ohne (nicht-leeren) Kapiteltext → **HTTP 400 vor dem Modell-Aufruf**; schneidet das Token-Limit
-ein Kapitel ab → **HTTP 502** mit klarer Meldung. Weniger Fakten sind ausdrücklich **erwartet**:
-Was nicht belegbar ist, kommt nicht in den Kanon. Fakten/Beziehungen gehen als `canon`-Block
-zusätzlich an `chapter/draft`, `chapter/expand`, `chapter/consistency`, `chapter/style` und
-`timeline/check`.
-
-### `POST /api/continuity/extract/stream`
-
-Gestreamte Variante derselben Extraktion, ebenfalls **Kapitel für Kapitel**: Das Modell wird auf
-**JSONL** (ein Objekt pro Zeile) angewiesen, sodass der Server jeden Vorschlag **sofort**
-weitergeben kann. Am Ende kommt die **validierte** Fassung (inkl. Belegprüfung) — sie ersetzt die
-Live-Liste.
+**Ereignisse**
 
 ```
-data: {"type":"chapter","done":3,"total":12}
-data: {"type":"item","item":"fact","raw":{ … }}
+data: {"type":"chapter","index":3,"total":12}                     ← Kapitel wird jetzt gelesen
+data: {"type":"item","item":"fact","raw":{ … }}                    ← Vorschlag (live, ungeprüft)
 data: {"type":"item","item":"relation","raw":{ … }}
-data: {"type":"done","facts":[ … ],"relations":[ … ]}
+data: {"type":"chapterDone","index":3,"facts":2,"relations":1}     ← Kapitel ist durch
+data: {"type":"warning","message":"Kapitel 4 (…): …"}              ← übersprungen, Lauf geht weiter
+data: {"type":"done","facts":[ … ],"relations":[ … ],"warnings":[ … ]}
 data: {"type":"error","error":"…"}
 ```
 
 Lange Kapitel werden absatzsicher geteilt (~2.500 Wörter) und **je Teil** gegen dessen Text
 geprüft. Zwei Absicherungen: Zeilen werden auch über **Chunk-Grenzen** hinweg zusammengesetzt, und
-wenn das Modell JSONL ignoriert, fällt der Server auf normales JSON zurück. Fehlendes Model oder
-kein Kapiteltext → **HTTP 400 vor dem Stream**.
+wenn das Modell JSONL ignoriert, fällt der Server auf normales JSON zurück. **Ein Kapitel kann den
+Lauf nicht mehr zerreißen** — unbrauchbare Antworten landen als `warning` im Ergebnis, alles davor
+bleibt erhalten. Ohne (nicht-leeren) Kapiteltext → **HTTP 400 vor dem Stream**.
 
 ### `POST /api/continuity/check`
 
@@ -785,3 +760,4 @@ Character-Routen unter eigener Basis:
 - `POST /api/generate`
 
 → `http://localhost:3001`. Eigenständig nutzbar über `bun run --cwd packages/promptgen dev`.
+
