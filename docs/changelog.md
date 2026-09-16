@@ -28,6 +28,43 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
   behandeln. `backup/backup.py` bleibt versioniert; die Archive sind über `*.rar`/`*.zip` in
   `.gitignore` abgedeckt.
 
+### Doku: Roadmap gegen den Code geprüft
+
+- **Changed** **Alle 74 Roadmap-Einträge wurden gegen den Code geprüft** (71 Ideen in den drei
+  Planungsabschnitten plus 3 bewusste Nicht-Ziele) — jede Begründung („heute ist es so …") und jede
+  Frage „blockiert das etwas anderes?". Ergebnis: **keine** Idee war inzwischen erledigt, aber
+  **vier Begründungen waren falsch oder irreführend**:
+  - **DOCX-Import**: „die ZIP-Bausteine liegen schon im Repo" — im Repo liegt nur ein
+    **unkomprimierter Writer** (`lib/zip.ts`, für den Export). Ein DOCX ist deflate-komprimiert:
+    Reader und Inflate fehlen komplett, der vorhandene Code hilft nicht.
+  - **Kanon-Konflikt zwischen Bänden**: Der Reihen-Kanon wirkt **schon** über alle Bände — es fehlt
+    die **Band-Angabe** am Fakt (und in der Meldung), nicht die Prüfung. Die Idee ist damit
+    deutlich kleiner als beschrieben.
+  - **Sortieren/Filtern**: **Filtern** gibt es in Welt, Plot und Notizen bereits; es fehlt vor
+    allem das **Sortieren** (hat bislang nur die Bibliothek).
+  - **Stil-Profil pro Buch**: Der Stand war richtig (geräteweit) — ergänzt um die Grenze aus harter
+    Regel 3: pro Projekt gehört es in die SQLite-Sammlung, nicht in `localStorage`.
+- **Added** **_Vorsicht:_-Hinweise an den Einträgen, die einen echten Stolperstein haben.** Zwei
+  davon sind Vorbedingungen, keine Fußnoten:
+  - **„Widerspruchs-Marker im Editor"** setzt voraus, dass die Zitate des **Fakten-Checks** gegen
+    den Kapiteltext geprüft werden. Bei der Extraktion passiert das (`quoteMatchesText`), beim
+    Check wird nur „nicht leer" verlangt — ein Marker könnte sonst ins Leere zeigen.
+  - **„Arc-Vorschläge aus dem Manuskript"** trifft auf eine Dedupe, die Beziehungen **über
+    Kapitel hinweg** zusammenfasst — genau das unterdrückt den Verlauf, den der Arc braucht.
+  - **„Typprüfung als Skript"**: `tsconfig` ist `strict` **und** `noUncheckedIndexedAccess`, ein
+    erster `tsc`-Lauf deckt also Altlasten auf. Der erste Schritt ist ein **Melde-Lauf**, kein
+    Blockade-Gate für die CI.
+- **Added** **_Halb da:_-Hinweise, wo die Infrastruktur schon liegt** (Aufwand kleiner als
+  gedacht): `beatCharacters` ist bis in den Prompt durchverkabelt und wird nur nie gefüllt;
+  `arcAt()` ist implementiert, aber ohne Aufrufer; `cacheStats()` existiert ungenutzt;
+  `GET /api/store/info` wird geladen und nie angezeigt; `startedAt`/`finishedAt` liegen vor;
+  Szenen-Vorlagen und zwei Diff-Vorschau-Muster existieren bereits; der Rohentwurf-Lauf braucht
+  nur das Job-Muster aus dem Buch-Editor.
+- **Noted** **Belege statt Meinungen:** Jedes Urteil ist mit `Datei:Zeile` belegt; die kritischen
+  Behauptungen (`beatCharacters`, `arcAt`, `cacheStats`, `fetchStoreInfo`, Zitatprüfung im
+  Fakten-Check, `tsconfig`-Härte) wurden zusätzlich einzeln nachgeprüft. Neu im Dokument: eine
+  Fußzeile bei „Bewusst nicht geplant", die alle Langfrist-Ideen an diese drei Zeilen bindet.
+
 ### Repo: die CI war dauerhaft rot (fehlende Quelldatei)
 
 - **Fixed** **`src/data/state.ts` lag nie im Repository** — deshalb war der Import-Check in der CI
