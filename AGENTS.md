@@ -88,6 +88,12 @@ src/
    [Dokumentations-Update](#dokumentations-update). Besonders gilt: **Die Roadmap beschreibt
    nur Zukunft.** Wird ein Roadmap-Thema geliefert, wandert es ins Changelog und
    **verschwindet aus der Roadmap** — dabei mindestens eine **Anschluss-Idee** ergänzen.
+10. **Stream-First:** Der **Transport wird vor dem Bau** entschieden, nicht nachgerüstet — Trigger
+    und Muster „ein Kern, zwei Transporte" stehen in
+    [`docs/development.md`](docs/development.md). Trifft ein Trigger zu, ist die `…/stream`-Variante
+    **primär** und wird mit dem Feature geliefert. **Keine Sync-Route ohne echten Aufrufer** (0.5.9
+    hat `POST /api/continuity/extract` genau deshalb gelöscht). Der Entscheid steht als
+    `Transport:`-Zeile im Plan.
 
 ---
 
@@ -122,8 +128,11 @@ Plot-Karten aus dem Storyboard ab (dedupliziert). Details: [`docs/pipeline.md`](
 
 1. `ModelStage` + Label + Key in `lib/generationSettings.ts`
 2. Server-Funktion in `src/server/story.ts`
-3. Route in `src/index.ts` (Validierung + `errorResponse`) — **plus** `…/stream`-Variante,
-   wenn die Stufe Prosa liefert oder lange läuft (siehe `docs/development.md`)
+3. Route in `src/index.ts` (Validierung + `errorResponse`) — **Transport zuerst entscheiden**
+   (Trigger-Katalog in [`docs/development.md`](docs/development.md)): greift die Stufe Prosa ab,
+   iteriert über mehr als ein Kapitel oder läuft potenziell länger als ~20 s, ist die
+   `…/stream`-Variante **primär** und kommt mit dem Feature. Die Sync-Route nur **mit** Aufrufer.
+   Entscheidung als `Transport:`-Zeile in den Plan.
 4. Service in `src/services/story.ts` (`postJson`; streaming: `streamEvents`)
 5. `WizardStep` + `STEPS` + Stage-Mapping + Schritt-UI im `BookWizard`
 6. Anzeige im `BookDetailView` (Plates/Buttons), Persistenz der Flags

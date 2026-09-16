@@ -74,20 +74,38 @@ Für Signierung, Installer und Auslieferung: [`release.md`](release.md)
 3. **Service:** dünner Wrapper in `src/services/*` über `postJson`.
 4. **UI:** View/Dialog konsumiert nur den Service.
 
-**Braucht die Antwort Fortschritt oder Textstücke?** Dann zusätzlich eine **SSE-Variante**:
+**Transport zuerst entscheiden (Stream-First).** Eine neue LLM-Funktion bekommt ihren Transport
+**vor** dem Bau festgelegt, nicht nachgerüstet. Drei Trigger — trifft **einer** zu, ist die
+`…/stream`-Variante **primär** und wird mit dem Feature geliefert:
 
-- Server: `sseResponse(async (emit) => …)` + Handler-Callbacks (`onDelta`, `onPartStart`, …);
-  der Nicht-Streaming-Aufruf bleibt **derselbe Code-Pfad** ohne Callback (siehe `expandChapter`).
+1. **Ausgabe > ~1.000 Token** oder Prosa.
+2. **Iteration über mehr als ein Kapitel / ein Element** (Batch über alle Kapitel, Kapitelschleife).
+3. **Dauer unbestimmt oder potenziell > ~20 s** — alles, was man bestellt und nie am Stück ansieht.
+
+Trifft keiner zu (eine kleine JSON-Antwort, ein einzelnes Kapitel), bleibt der normale Aufruf der
+richtige Weg — ein Stream ist kein Selbstzweck. Der Entscheid gehört als Zeile
+`Transport: Stream (Trigger 2 — Kapitel-Iteration)` in den Plan, damit er nicht im Kopf verloren
+geht. **Nachrüsten kostet doppelt**: Server-Refactor *plus* komplette Client-Verkabelung
+(Job-Center, Fortschritt, Abbrechen, `streamEvents`).
+
+**Das Muster: ein Kern, zwei Transporte.** Der Server-Pfad kennt den Transport nicht — die
+Handler-Callbacks (`onDelta`, `onPartStart`, …) sind optional, und der Sync-Weg ruft **denselben**
+Code ohne Callback (siehe `expandChapter`):
+
+- Server: `sseResponse(async (emit) => …)` + Handler-Callbacks.
 - Route: eigener Handler `…/stream`, Validierung **vor** dem Stream (Fehler dort = HTTP 400).
+  **Keine Sync-Route ohne echten Aufrufer** — 0.5.9 hat `POST /api/continuity/extract` genau
+  deshalb gelöscht; eine Leiche im Router ist teurer als eine Route weniger.
 - Service: `streamEvents("/api/…/stream", body, handler)` statt `postJson`; das Ergebnis kommt
   aus dem `done`-Ereignis (siehe `streamPass`, `streamStoryboard`).
-- UI: `StreamPreview` für Text, `Job.detail` für Zähler (siehe unten).
+- UI: `StreamPreview` für Text, `Job.detail` für Zähler und **Abbrechen** — von Anfang an, nicht
+  nachgerüstet.
 
-**Faustregel:** Lange **Prosa** streamt `delta` (Rohentwurf, Ausbau, Kohärenz, Stil).
-Kleine **JSON**-Antworten ohne Fortschritt (Timeline-Befund, Timeline-Korrektur) bleiben normale
-Aufrufe — ein Delta auf JSON wäre wertlos; sollen sie live zeigen, was sie finden, nutzen sie das
-**JSONL-Muster** (unten). Ein laufender Batch-Prozess (Storyboard) meldet dagegen **Fortschritt**
-(`phase`/`titles`/`batch`), keinen Text.
+**Welcher Stream-Typ:** Lange **Prosa** streamt `delta` (Rohentwurf, Ausbau, Kohärenz, Stil).
+**Listen und Befunde** über viele Objekte nutzen das **JSONL-Muster** (Timeline-Prüfung und
+-Korrektur, Weltenbau, Figuren, Kanon — unten). Ein **Batch über Kapitel** meldet dagegen
+**Fortschritt** (`phase`/`chapter`/`chapterDone`), keinen Text (Storyboard, Kanon-Scan). Ein
+einzelnes kurzes Objekt ohne Fortschritt bleibt ein normaler `postJson`-Aufruf.
 
 ### JSONL-Muster (Listen live melden)
 
