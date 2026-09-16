@@ -410,9 +410,16 @@ function importedTargetWords(words: number): number {
  * Baut aus dem gelesenen Manuskript ein **vollständiges** Buch: Manuskript, Storyboard
  * (Kapitelplan mit Kurzfassung + optional Szenen), Zählwerte und Ziel-Wörter.
  *
- * Der Text landet in `expanded` („das Manuskript") — genau dort, wo alle Pässe, Exporte und
- * Prüfungen lesen (`manuscriptOf` → `expanded || draft`). `draft` bleibt leer, weil es keinen
- * Rohentwurf gibt.
+ * Der Text landet in **`draft`** („Rohentwurf"), nicht in `expanded`: Importierter Text ist
+ * mitgebrachte Prosa, die den **Ausbau dieser App** noch nicht durchlaufen hat. Unabhängig davon,
+ * wie lang ein Kapitel ist — die Wortzahl sagt nichts darüber, ob es hier ausgearbeitet wurde.
+ * Wirkung: Das Kapitel steht in der Spalte „Rohentwurf", und der Weg über „Ausbau" bleibt offen,
+ * statt ein Kapitel vorzeitig als fertig auszuweisen.
+ *
+ * Das ist überall unproblematisch, weil jeder Leser denselben Vorrang kennt
+ * (`chapter.expanded || chapter.draft`): Exporte (EPUB, DOCX, PDF, Markdown), Pässe, Prüfungen,
+ * Kanon-Ableitung und Zählwerte. Der Editor zeigt beide Kästen — der importierte Text steht im
+ * Rohentwurf-Feld und ist dort editierbar.
  */
 export function buildImportedBook(parsed: ParsedManuscript, options: ImportBookOptions = {}): Book {
   const deriveScenes = options.deriveScenes ?? true;
@@ -431,8 +438,8 @@ export function buildImportedBook(parsed: ParsedManuscript, options: ImportBookO
   const manuscript: ChapterContent[] = parsed.chapters.map((chapter, index) => ({
     index,
     title: chapter.title,
-    draft: "",
-    expanded: chapter.text,
+    draft: chapter.text,
+    expanded: "",
     targetWords: importedTargetWords(chapter.words),
     characterIds: [],
     beatCharacters: plans[index]?.beats.map(() => []) ?? [],
@@ -451,12 +458,18 @@ export function buildImportedBook(parsed: ParsedManuscript, options: ImportBookO
     chapters: plans,
   };
 
-  const words = manuscript.reduce((sum, chapter) => sum + countWords(chapter.expanded), 0);
+  // Zählwerte und „hat Text" lesen denselben Vorrang wie Exporte und Pässe: expanded vor draft.
+  const words = manuscript.reduce(
+    (sum, chapter) => sum + countWords(chapter.expanded || chapter.draft),
+    0,
+  );
   const goalWords = manuscript.reduce(
     (sum, chapter) => sum + (chapter.targetWords ?? defaultTargetWords),
     0,
   );
-  const chaptersDone = manuscript.filter((chapter) => chapter.expanded.trim().length > 0).length;
+  const chaptersDone = manuscript.filter(
+    (chapter) => (chapter.expanded || chapter.draft).trim().length > 0,
+  ).length;
   const palette =
     COVER_PALETTE[Math.abs(options.paletteIndex ?? 0) % COVER_PALETTE.length] ?? FALLBACK_COVER;
 

@@ -8,7 +8,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
-_Nichts offen — nächste Themen siehe [`roadmap.md`](roadmap.md)._
+### Import legt Kapitel als Rohentwurf an
+
+- **Changed** **Importierte Kapitel gelten jetzt als Rohentwurf — unabhängig von ihrer Länge.**
+  Der Import schrieb den Manuskripttext bisher in den **Ausbau** (`expanded`) und ließ den
+  Rohentwurf leer; ein importiertes Buch stand damit sofort überall als „ausgebaut" da, obwohl es
+  den Ausbau dieser App nie gesehen hatte. Jetzt liegt der Text in `draft`: Das Kapitel steht in
+  der Rohentwurf-Spalte, der Assistent steigt beim **Rohentwurf** ein, und der Ausbau bleibt der
+  offene Schritt, der den Text auf die Ziel-Wörter bringt.
+  Verloren geht nichts: Alle Leser kennen denselben Vorrang (`expanded || draft`) — Exporte (EPUB,
+  DOCX, PDF, Markdown), Pässe, Prüfungen, Kanon-Ableitung und Zählwerte lesen den Rohentwurf,
+  solange kein Ausbau existiert. Wortzahl und „hat Text" wurden mitgezogen: Sie lasen vorher nur
+  `expanded` und hätten ein importiertes Buch sonst als leer ausgewiesen.
 
 ---
 

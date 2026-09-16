@@ -191,6 +191,16 @@ sind vorausgewählt.
 
 ## Import bestehender Manuskripte
 
+### Warum stehen importierte Kapitel unter „Rohentwurf"?
+
+Weil importierter Text den **Ausbau dieser App** noch nicht durchlaufen hat — unabhängig davon, wie
+lang das Kapitel ist. Die Wortzahl sagt nichts darüber, ob ein Kapitel hier ausgearbeitet wurde.
+Deshalb landet der Import im Feld `draft`: Das Kapitel steht in der Rohentwurf-Spalte, der
+Assistent steigt beim Rohentwurf ein, und der Weg über „Ausbau" bleibt offen. Verloren geht nichts —
+Exporte, Pässe, Prüfungen und die Kanon-Ableitung lesen den Rohentwurf, solange kein Ausbau
+existiert. Im Buch-Editor stehen beide Kästen nebeneinander, der importierte Text im
+Rohentwurf-Feld.
+
 ### Die Ableitung schreibt nichts — wozu die Vorschau?
 
 „Storyboard ableiten" und „Szenen ableiten" halten ihr Ergebnis **im Speicher** und zeigen es als

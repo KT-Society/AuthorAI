@@ -141,9 +141,12 @@ deshalb liegt eine solche Korrektur außerhalb der Kapitel-Version (siehe `roadm
 keine Figurenliste), die Zuordnung Name → ID macht der Client über `lib/characterMatch.ts`. Alle drei
 Listen müssen beim Schreiben dieselbe Länge behalten, sonst verrutschen die Indizes.
 
-**Import:** Ein importiertes Manuskript liegt in **`expanded`** (`draft` bleibt leer, weil es
-keinen Rohentwurf gibt). So liest es die gesamte Kette (`manuscriptOf` → `expanded || draft`)
-ohne Sonderfall: Pässe, Exporte, Wortzahlen, Prüfungen.
+**Import:** Ein importiertes Manuskript liegt im **`draft`** (Rohentwurf), **nicht** in `expanded` —
+unabhängig davon, wie lang die Kapitel sind. Mitgebrachte Prosa hat den Ausbau dieser App nicht
+durchlaufen, und die Wortzahl sagt darüber nichts aus. Wirkung: Das Kapitel steht in der
+Rohentwurf-Spalte, der Assistent steigt beim Rohentwurf ein, und der Ausbau bleibt der offene
+Schritt. Gelesen wird trotzdem überall, weil jeder Leser denselben Vorrang kennt
+(`expanded || draft`) — Exporte, Pässe, Prüfungen, Kanon-Ableitung und Zählwerte.
 
 ### Cover-Text (`src/data/cover.ts`)
 

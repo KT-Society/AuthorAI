@@ -46,12 +46,20 @@ Wer schon geschrieben hat, startet nicht bei der Idee: **Bibliothek → Importie
 | Kapitel | Die häufigste Überschriftsebene ist die Kapitel-Ebene; eine Überschrift darüber ist der Titel. Der eigene Export (`---` + `## Kapitel n: Titel`) wird **exakt** erkannt, ebenso der TXT-Export (`Kapitel n: Titel` als Zeile) |
 | Metadaten | YAML-Frontmatter (`title`, `subtitle`, `genre`, `tags`, `synopsis`) oder die Export-Zeile `*Genre · n Wörter · n Kapitel*`; im Dialog **editierbar** vor dem Anlegen |
 | Szenen | Szenentrenner (`***`, `---`, `* * *`, `— — —`) werden zu Szenen; Beat = erster Satz des Abschnitts (abschaltbar) |
-| Prosa | Inline-Auszeichnung wird entfernt (`**fett**`, Links, Code), Absätze bleiben. Der Text landet in `expanded` — dort, wo alle Pässe und Exporte lesen |
+| Prosa | Inline-Auszeichnung wird entfernt (`**fett**`, Links, Code), Absätze bleiben. Der Text landet im **Rohentwurf** (`draft`) |
 
 Danach ist das Buch **kein Sonderfall**: Kapitelplan mit Kurzfassungen (aus dem Kapitelanfang)
 füttert die Prüf-Prompts, Wortzahlen und Ziel-Wörter sind berechnet, und Figuren, Weltenbau und
 Kanon lassen sich wie gewohnt ableiten. Ohne erkennbare Struktur wird der Text **ein** Kapitel
 plus Hinweis — verloren geht nichts.
+
+**Importierter Text gilt als Rohentwurf — unabhängig von seiner Länge.** Er liegt in `draft`, nicht
+in `expanded`: Mitgebrachte Prosa hat den **Ausbau dieser App** noch nicht durchlaufen, und die
+Wortzahl sagt darüber nichts aus. Deshalb steht das Kapitel in der Spalte „Rohentwurf", der
+Wiedereinstieg im Assistenten landet beim Rohentwurf-Schritt, und der Weg über „Ausbau" (der den
+Text auf die Ziel-Wörter bringt) bleibt offen, statt ein Kapitel vorzeitig als fertig auszuweisen.
+Alle Leser kennen denselben Vorrang (`expanded || draft`), es geht also nichts verloren: Exporte,
+Pässe, Prüfungen und die Kanon-Ableitung lesen den Rohentwurf, solange kein Ausbau existiert.
 
 **Struktur nachleiten** (im Buch-Editor, für alles, was der Import nicht wissen kann):
 
