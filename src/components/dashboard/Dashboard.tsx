@@ -265,22 +265,39 @@ export function Dashboard({
     saveMeta(profileId, meta);
   }, [profileId, meta]);
 
-  // Import characters/world/plot that already exist in stored storyboards (one-time).
+  /**
+   * Storyboard-Daten in die Sammlungen spiegeln — **einmalig je Buch**.
+   *
+   * Der Merker `storyboardImported` ist entscheidend: Ohne ihn würde die Shell fehlende Einträge
+   * bei jedem Start neu aus den Storyboards ableiten und so ein „Alle löschen" still rückgängig
+   * machen. Bereits gespiegelte Bücher bleiben unangetastet.
+   */
   useEffect(() => {
+    const pending = books.filter((book) => !book.storyboardImported);
+    if (pending.length === 0) return;
+
     setCharacters((prev) => {
-      const additions = collectMissingCharacters(books, prev);
+      const additions = collectMissingCharacters(pending, prev);
       return additions.length > 0 ? [...additions, ...prev] : prev;
     });
     setWorlds((prev) => {
-      const additions = collectMissingWorld(books, prev);
+      const additions = collectMissingWorld(pending, prev);
       return additions.length > 0 ? [...additions, ...prev] : prev;
     });
     setPlotCards((prev) => {
-      const additions = collectMissingPlot(books, prev);
+      const additions = collectMissingPlot(pending, prev);
       return additions.length > 0 ? [...additions, ...prev] : prev;
     });
-    // Runs once for the loaded profile.
-  }, []);
+
+    const pendingIds = new Set(pending.map((book) => book.id));
+    setBooks((prev) =>
+      prev.map((book) =>
+        pendingIds.has(book.id) ? { ...book, storyboardImported: true } : book,
+      ),
+    );
+    // Läuft beim Laden des Profils (und nach einem Import ohne Ableitung).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [books.length]);
 
   const openBook = (id: string, chapterIndex = 0) => {
     setOpenBookId(id);
@@ -369,23 +386,36 @@ export function Dashboard({
   }, [notes]);
 
   const addBook = (book: Book, seriesId?: string) => {
-    setBooks((prev) => [book, ...prev]);
+    // Merker setzen: Die Ableitung unten läuft genau einmal für dieses Buch.
+    const fresh: Book = book.storyboardImported ? book : { ...book, storyboardImported: true };
+    setBooks((prev) => [fresh, ...prev]);
     // Neuen Band direkt an die gewählte Reihe hängen (er wird der nächste Band).
     if (seriesId) setSeries((prev) => addVolumeToSeries(prev, seriesId, book.id));
     setCharacters((prev) => {
-      const additions = collectMissingCharacters([book], prev);
+      const additions = collectMissingCharacters([fresh], prev);
       return additions.length > 0 ? [...additions, ...prev] : prev;
     });
     setWorlds((prev) => {
-      const additions = collectMissingWorld([book], prev);
+      const additions = collectMissingWorld([fresh], prev);
       return additions.length > 0 ? [...additions, ...prev] : prev;
     });
     setPlotCards((prev) => {
-      const additions = collectMissingPlot([book], prev);
+      const additions = collectMissingPlot([fresh], prev);
       return additions.length > 0 ? [...additions, ...prev] : prev;
     });
     openBook(book.id, 0);
   };
+
+  /**
+   * Merkt alle Bücher als „Storyboard bereits gespiegelt", damit ein geleerter Bereich nicht beim
+   * nächsten Start aus den Storyboards wieder aufgefüllt wird.
+   */
+  const markAllStoryboardsImported = () =>
+    setBooks((prev) =>
+      prev.some((book) => !book.storyboardImported)
+        ? prev.map((book) => ({ ...book, storyboardImported: true }))
+        : prev,
+    );
 
   const addCharacter = (character: Character) =>
     setCharacters((prev) => [character, ...prev]);
@@ -412,6 +442,27 @@ export function Dashboard({
     );
   };
 
+  /** Bereich „Charaktere" leeren — Kanon (Fakten/Beziehungen) der Figuren geht mit. */
+  const clearAllCharacters = () => {
+    setCharacters([]);
+    setFacts((prev) => prev.filter((fact) => fact.entityType !== "character"));
+    setRelations([]);
+    markAllStoryboardsImported();
+  };
+
+  /** Bereich „Weltenbau" leeren — Fakten zu Welteinträgen gehen mit. */
+  const clearAllWorlds = () => {
+    setWorlds([]);
+    setFacts((prev) => prev.filter((fact) => fact.entityType !== "world"));
+    markAllStoryboardsImported();
+  };
+
+  /** Bereich „Kontinuität" leeren: der gesamte Kanon (Fakten und Beziehungen). */
+  const clearAllCanon = () => {
+    setFacts([]);
+    setRelations([]);
+  };
+
   const deleteIdea = (id: string) => setIdeas((prev) => prev.filter((idea) => idea.id !== id));
   const clearIdeas = () => setIdeas([]);
   const clearActivity = () => setNotifications([]);
@@ -436,6 +487,7 @@ export function Dashboard({
    */
   const applyDerivedStoryboard = (book: Book) => {
     updateBook(book);
+    markAllStoryboardsImported();
     setCharacters((prev) => {
       const additions = collectMissingCharacters([book], prev);
       return additions.length > 0 ? [...additions, ...prev] : prev;
@@ -652,6 +704,7 @@ export function Dashboard({
                   )
                 }
                 onDeleteCharacter={deleteCharacter}
+                onClearAll={clearAllCharacters}
               />
             ) : activeNav === "continuity" ? (
               <ContinuityView
@@ -663,6 +716,7 @@ export function Dashboard({
                 series={series}
                 onFactsChange={setFacts}
                 onRelationsChange={setRelations}
+                onClearAll={clearAllCanon}
               />
             ) : activeNav === "world" ? (
             <WorldView
@@ -683,6 +737,7 @@ export function Dashboard({
                 setWorlds((prev) => prev.filter((item) => !drop.has(item.id)));
                 setFacts((prev) => prev.filter((fact) => !drop.has(fact.entityId)));
               }}
+              onClearAll={clearAllWorlds}
             />
             ) : activeNav === "plot" ? (
               <PlotBoardView
@@ -773,3 +828,4 @@ export function Dashboard({
 }
 
 export default Dashboard;
+

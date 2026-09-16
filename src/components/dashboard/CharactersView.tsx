@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Loader2, Plus, Search, Sparkles, Users, Wand2 } from "lucide-react";
+import { Loader2, Plus, Search, Sparkles, Trash2, Users, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,7 @@ export function CharactersView({
   onUpdateCharacter,
   onDeleteCharacter,
   onDeleteCharacters,
+  onClearAll,
 }: {
   books: Book[];
   characters: Character[];
@@ -54,6 +55,8 @@ export function CharactersView({
   onDeleteCharacter: (id: string) => void;
   /** Mehrere Figuren auf einmal entfernen (Dubletten-Aufräumen). */
   onDeleteCharacters: (ids: string[]) => void;
+  /** Leert den gesamten Bereich (Figuren inkl. ihrer Fakten und Beziehungen). */
+  onClearAll: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [bookFilter, setBookFilter] = useState<string>("all");
@@ -297,6 +300,29 @@ export function CharactersView({
           <Wand2 className="size-3.5" />
           {duplicateCount > 0 ? `Dubletten entfernen (${duplicateCount})` : "Dubletten entfernen"}
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="glass rounded-lg border-white/10 text-muted-foreground hover:border-brand-rose/40 hover:text-brand-rose"
+          onClick={() => {
+            const confirmed = window.confirm(
+              `Alle ${characters.length} Figuren löschen?\n\n` +
+                "Fakten und Beziehungen der Figuren werden mitgelöscht. Betroffene Projekte bleiben unverändert — " +
+                "im Buch können Figuren jederzeit erneut abgeleitet werden.",
+            );
+            if (!confirmed) return;
+            onClearAll();
+            showToast(
+              characters.length === 1 ? "1 Figur gelöscht" : `${characters.length} Figuren gelöscht`,
+              "ok",
+            );
+          }}
+          disabled={characters.length === 0}
+          title="Alle Figuren dieses Profils löschen (inkl. ihrer Fakten und Beziehungen)"
+        >
+          <Trash2 className="size-3.5" />
+          Alle löschen
+        </Button>
       </div>
 
       {extractError ? (
@@ -392,3 +418,4 @@ export function CharactersView({
     </div>
   );
 }
+

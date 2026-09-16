@@ -27,6 +27,12 @@ export interface Book {
   coverBackLayers?: import("./cover").CoverTextLayer[];
   /** Projekt-Vorgabe für Ziel-Wörter pro Kapitel (Kapitel können sie überschreiben). */
   defaultTargetWords?: number;
+  /**
+   * Das Storyboard dieses Buchs wurde **einmalig** in die Sammlungen gespiegelt (Figuren,
+   * Weltenbau, Plot-Karten) — die Shell leitet daraus nur noch bei Büchern ohne diesen Merker ab.
+   * Ohne ihn würde „Alle löschen" beim nächsten App-Start rückgängig gemacht.
+   */
+  storyboardImported?: boolean;
   storyboard?: Storyboard;
   manuscript?: ChapterContent[];
 }

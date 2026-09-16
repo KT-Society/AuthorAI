@@ -265,6 +265,28 @@ Antwort zeigt eine neue `/covers/…`-URL.
 
 ---
 
+## Leeren von Bereichen
+
+### Ich habe alles gelöscht — kommen die Einträge wieder?
+
+Nein. Die Shell spiegelt fehlende Storyboard-Daten nur noch für Bücher **ohne** den Merker
+`storyboardImported` (gesetzt beim Anlegen/Import, nachgezogen einmalig für bestehende Profile).
+Eine geleerte Sammlung bleibt leer — auch einzeln gelöschte Figuren bzw. Welteneinträge kommen
+nicht mehr zurück. Wer die Ableitung bewusst wieder will: im Buch **„Storyboard ableiten"**
+(Figuren/Welt/Plot) bzw. in „Charaktere" **„Figuren aus Manuskript ableiten"**.
+
+### „Alle löschen" ist ausgegraut
+
+Dann ist der Bereich bereits leer — der Knopf ist nur aktiv, wenn es etwas zu löschen gibt.
+
+### Nach „Alle löschen" fehlen Fakten
+
+Gewollt: Fakten hängen an Figuren bzw. Welteinträgen und verschwinden mit ihnen (das ist die
+Kettenwirkung, die den Kanon konsistent hält). Der Kanon lässt sich über **„Vorschläge ableiten"**
+in der Kontinuität neu aufbauen.
+
+---
+
 ## Daten & Profile
 
 ### Beispiele sind nach dem Löschen wieder da

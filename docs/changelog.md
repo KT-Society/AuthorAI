@@ -8,6 +8,23 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Bereiche leeren („Alle löschen")
+
+- **Added** **„Alle löschen" in Charaktere, Weltenbau und Kontinuität**: Die drei Bereiche haben
+  jetzt einen Button im Kopf (`Trash2`, deaktiviert wenn leer) — mit **Rückfrage**, die Anzahl und
+  Folgen nennt. Gelöscht wird mit **Kettenwirkung**: Figuren nehmen ihre Fakten und Beziehungen mit,
+  Welteneinträge ihre Fakten, der Kanon beide Sammlungen. Die Storyboards der Projekte bleiben
+  unangetastet; alles lässt sich dort (bzw. bei Figuren über die Figuren-Extraktion) neu ableiten.
+- **Fixed** **Gelöschtes kam beim nächsten Start zurück**: Die Shell spiegelt fehlende
+  Storyboard-Daten (Figuren, Weltenbau, Plot-Karten) bei **jedem** Start nach — ein geleerter
+  Bereich wäre also beim nächsten Öffnen wieder aufgetaucht. Jedes Buch trägt jetzt den Merker
+  **`storyboardImported`**: Gespiegelt wird nur, was noch keinen Merker hat, danach ist das Buch
+  „erledigt". Damit ist „Alle löschen" dauerhaft, und auch **einzeln** gelöschte Figuren bzw.
+  Welteneinträge bleiben gelöscht (vorher wurden sie beim nächsten Start nachgezogen). Bestehende
+  Profile werden beim ersten Start nach dem Update einmalig markiert — dort ändert sich nichts.
+- **Changed** **Leeren bleibt leer**: Eine bewusst geleerte Sammlung bleibt leer (Regel „`[]` =
+  bewusst geleert"), es greifen also weder Seeds noch Storyboard-Ableitung.
+
 ### Manuskript-Import (Markdown)
 
 - **Added** **Vorhandene Manuskripte importieren**: In der **Bibliothek** und in der Top-Bar gibt

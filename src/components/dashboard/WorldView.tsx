@@ -44,6 +44,7 @@ export function WorldView({
   onUpdate,
   onDelete,
   onDeleteMany,
+  onClearAll,
 }: {
   entries: WorldEntry[];
   books: Book[];
@@ -52,6 +53,8 @@ export function WorldView({
   onUpdate: (entry: WorldEntry) => void;
   onDelete: (id: string) => void;
   onDeleteMany: (ids: string[]) => void;
+  /** Leert den gesamten Bereich (Welteneinträge inkl. ihrer Fakten). */
+  onClearAll: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<WorldCategory | "all">("all");
@@ -312,6 +315,31 @@ export function WorldView({
           <Wand2 className="size-3.5" />
           Dubletten entfernen
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="glass rounded-lg border-white/10 text-muted-foreground hover:border-brand-rose/40 hover:text-brand-rose"
+          onClick={() => {
+            const confirmed = window.confirm(
+              `Alle ${entries.length} Welteneinträge löschen?\n\n` +
+                "Fakten zu diesen Einträgen werden mitgelöscht. Storyboards der Projekte bleiben unverändert — " +
+                "im Buch kann der Weltenbau jederzeit erneut abgeleitet werden.",
+            );
+            if (!confirmed) return;
+            onClearAll();
+            showToast(
+              entries.length === 1
+                ? "1 Welteneintrag gelöscht"
+                : `${entries.length} Welteneinträge gelöscht`,
+              "ok",
+            );
+          }}
+          disabled={entries.length === 0}
+          title="Alle Welteneinträge dieses Profils löschen (inkl. ihrer Fakten)"
+        >
+          <Trash2 className="size-3.5" />
+          Alle löschen
+        </Button>
       </div>
 
       {error ? (
@@ -549,3 +577,4 @@ export function WorldView({
     </div>
   );
 }
+

@@ -118,6 +118,10 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 - **Tastatur-Shortcuts** (Kapitel wechseln, speichern, nächste Stufe)
 - **Sortieren/Filtern** konsequent überall (Welt, Plot, Notizen)
 - **Dark/Hell-Umschalter** (aktuell Dark-only by design)
+- **Undo für „Alle löschen"**: Das Leeren ganzer Bereiche ist endgültig (nur Rückfrage) —
+  ein Sicherungs-Snapshot mit „Rückgängig" im Toast wäre der bequemere Weg
+- **Papierkorb statt endgültig**: gelöschte Figuren/Welteneinträge/Kanon-Einträge parken und
+  einzeln wiederherstellen, statt sie sofort zu entfernen
 
 ---
 

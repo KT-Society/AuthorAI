@@ -86,6 +86,7 @@ export function ContinuityView({
   series = [],
   onFactsChange,
   onRelationsChange,
+  onClearAll,
 }: {
   books: Book[];
   characters: Character[];
@@ -95,6 +96,8 @@ export function ContinuityView({
   series?: Series[];
   onFactsChange: (facts: CanonFact[]) => void;
   onRelationsChange: (relations: CharacterRelation[]) => void;
+  /** Leert den gesamten Kanon (Fakten und Beziehungen). */
+  onClearAll: () => void;
 }) {
   const [tab, setTab] = useState<"facts" | "relations">("facts");
   const [query, setQuery] = useState("");
@@ -456,6 +459,27 @@ export function ContinuityView({
               <Wand2 className="size-3.5" />
               {duplicateCanonCount > 0 ? `Dubletten entfernen (${duplicateCanonCount})` : "Dubletten entfernen"}
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="glass rounded-lg border-white/10 text-muted-foreground hover:border-brand-rose/40 hover:text-brand-rose"
+              onClick={() => {
+                const total = facts.length + relations.length;
+                const confirmed = window.confirm(
+                  `Gesamten Kanon löschen (${facts.length} Fakten · ${relations.length} Beziehungen)?\n\n` +
+                    "Der Kanon ist die verbindliche Grundlage aller Prüf-Pässe — Figuren und Weltenbau bleiben erhalten, " +
+                    "nur Fakten und Beziehungen verschwinden. Er lässt sich jederzeit neu ableiten.",
+                );
+                if (!confirmed) return;
+                onClearAll();
+                showToast(total === 1 ? "1 Kanon-Eintrag gelöscht" : `${total} Kanon-Einträge gelöscht`, "ok");
+              }}
+              disabled={facts.length + relations.length === 0}
+              title="Alle Fakten und Beziehungen dieses Profils löschen"
+            >
+              <Trash2 className="size-3.5" />
+              Alle löschen
+            </Button>
           </>
         }
       />
@@ -771,3 +795,4 @@ export function ContinuityView({
     </div>
   );
 }
+

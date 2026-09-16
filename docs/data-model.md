@@ -34,10 +34,18 @@ interface Book {
   coverLayers?: CoverTextLayer[];      // persistierte Front-Text-Layer
   coverBackLayers?: CoverTextLayer[];  // persistierte Back-Text-Layer
   defaultTargetWords?: number;         // Projekt-Vorgabe je Kapitel
+  /** Storyboard einmalig in die Sammlungen gespiegelt (Figuren/Welt/Plot) — siehe unten. */
+  storyboardImported?: boolean;
   storyboard?: Storyboard;
   manuscript?: ChapterContent[];
 }
 ```
+
+**`storyboardImported`** verhindert, dass Löschungen von selbst zurückkommen: Die Shell leitet
+fehlende Storyboard-Daten (Figuren, Weltenbau, Plot-Karten) beim Start nach — aber nur für Bücher
+**ohne** diesen Merker. Gesetzt wird er beim Anlegen/Import eines Buchs und beim Nachziehen
+bestehender Profile; damit ist ein geleerter Bereich (`[]`) dauerhaft leer. Die Storyboards selbst
+bleiben unverändert und lassen sich jederzeit erneut ableiten ("Storyboard ableiten").
 
 ### Storyboard (`src/data/story.ts`)
 
