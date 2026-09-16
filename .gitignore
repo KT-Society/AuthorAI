@@ -9,6 +9,13 @@ covers
 data
 *.tgz
 
+# backups
+backup/
+*.bak
+*.old
+*.rar
+*.zip
+
 # code coverage
 coverage
 *.lcov
