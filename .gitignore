@@ -10,7 +10,6 @@ data
 *.tgz
 
 # backups
-backup/
 *.bak
 *.old
 *.rar
