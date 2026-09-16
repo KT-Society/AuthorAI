@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Cpu, Database, Download, KeyRound, Loader2, Palette, Plug, Save, Server, Settings, ShieldCheck, Upload, X } from "lucide-react";
+import { Cpu, Database, Download, Gauge, KeyRound, Loader2, Minimize2, Palette, Plug, Save, Server, Settings, ShieldCheck, Trash2, Upload, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,8 +29,14 @@ import {
   writeStyleProfile,
 } from "@/lib/generationSettings";
 import type { ModelStage } from "@/lib/generationSettings";
-import { fetchStoreInfo } from "@/services/state";
-import type { StoreInfo } from "@/services/state";
+import {
+  clearCache,
+  compactStore,
+  downloadStoreBackup,
+  fetchCacheStats,
+  fetchStoreInfo,
+} from "@/services/state";
+import type { CacheStats, StoreInfo } from "@/services/state";
 import {
   DEFAULT_STYLE_PROFILE,
   STYLE_PRESETS,
@@ -50,6 +56,20 @@ import { showToast } from "@/lib/toast";
 
 const STATUS_OK = "#4caf50";
 const STATUS_FAIL = "#ff5252";
+
+/** Bytes menschenlesbar: „2,4 MB" statt „2.516.582 B". */
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0).replace(".", ",")} ${units[unit]}`;
+}
 
 /** Anzeigenamen der gespeicherten Sammlungen. */
 export function SettingsDialog({
@@ -86,10 +106,18 @@ export function SettingsDialog({
   const [config, setConfig] = useState<AppConfig | null>(null);
   /** Belegung der SQLite-Datenbank (kein Browserspeicher-Limit mehr). */
   const [store, setStore] = useState<StoreInfo | null>(null);
+  /** Antwort-Cache: rein flüchtig, nur zur Transparenz. */
+  const [cache, setCache] = useState<CacheStats | null>(null);
+  const [storeBusy, setStoreBusy] = useState(false);
+  const [cacheBusy, setCacheBusy] = useState(false);
+  /** Inline-Bestätigung statt `window.confirm` — gleicher Ton wie der Rest des Dialogs. */
+  const [compactConfirm, setCompactConfirm] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    setCompactConfirm(false);
     void fetchStoreInfo().then((info) => setStore(info));
+    void fetchCacheStats().then((info) => setCache(info));
     setModel(readModel());
     setStageModels(readStageModelsRaw());
     setLanguage(readLanguage() ?? DEFAULT_LANGUAGE);
@@ -149,6 +177,53 @@ export function SettingsDialog({
       setProviderError(err instanceof Error ? err.message : "Test fehlgeschlagen.");
     } finally {
       setProviderBusy(false);
+    }
+  };
+
+  /** Sicherung herunterladen — der Server löscht die Kopie nach dem Stream selbst. */
+  const handleDownloadBackup = async () => {
+    setStoreBusy(true);
+    try {
+      await downloadStoreBackup();
+      showToast("Sicherung heruntergeladen", "ok");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Sicherung fehlgeschlagen.", "error");
+    } finally {
+      setStoreBusy(false);
+    }
+  };
+
+  /** Verdichtet die Datenbank: WAL-Checkpoint + VACUUM. */
+  const handleCompact = async () => {
+    setCompactConfirm(false);
+    setStoreBusy(true);
+    try {
+      const result = await compactStore();
+      showToast(
+        result.saved > 0
+          ? `Datenbank komprimiert — ${formatBytes(result.saved)} gespart`
+          : "Datenbank komprimiert — kein Einsparpotenzial",
+        "ok",
+      );
+      void fetchStoreInfo().then((info) => setStore(info));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Komprimieren fehlgeschlagen.", "error");
+    } finally {
+      setStoreBusy(false);
+    }
+  };
+
+  /** Leert den flüchtigen Antwort-Cache. */
+  const handleClearCache = async () => {
+    setCacheBusy(true);
+    try {
+      await clearCache();
+      setCache(await fetchCacheStats());
+      showToast("Cache geleert", "ok");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Cache leeren fehlgeschlagen.", "error");
+    } finally {
+      setCacheBusy(false);
     }
   };
 
@@ -553,6 +628,131 @@ export function SettingsDialog({
                     event.target.value = "";
                   }}
                 />
+              </div>
+
+              <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                <p className="text-[11px] text-muted-foreground">
+                  {store ? (
+                    <>
+                      Datenbank: <strong>{formatBytes(store.sizeBytes)}</strong>
+                      {" · "}
+                      {store.profiles} {store.profiles === 1 ? "Profil" : "Profile"}
+                      {" · "}
+                      {store.totalRows} {store.totalRows === 1 ? "Sammlung" : "Sammlungen"}
+                    </>
+                  ) : (
+                    "Datenbank: …"
+                  )}
+                </p>
+                {store?.file ? (
+                  <p
+                    className="mt-1 truncate text-[10px] text-muted-foreground"
+                    title={store.file}
+                  >
+                    {store.file}
+                  </p>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    className="glass rounded-xl border-white/10"
+                    onClick={() => void handleDownloadBackup()}
+                    disabled={storeBusy}
+                    title="Konsistente SQLite-Kopie als .db-Datei herunterladen"
+                  >
+                    {storeBusy ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Download className="size-4" />
+                    )}
+                    Sicherung herunterladen
+                  </Button>
+                  {compactConfirm ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] text-muted-foreground">
+                        Datenbank jetzt verdichten?
+                      </span>
+                      <Button
+                        size="sm"
+                        className="rounded-xl bg-gradient-to-r from-brand-violet to-brand-indigo font-semibold text-white"
+                        onClick={() => void handleCompact()}
+                        disabled={storeBusy}
+                      >
+                        Ja, komprimieren
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => setCompactConfirm(false)}
+                        className="text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="glass rounded-xl border-white/10"
+                      onClick={() => setCompactConfirm(true)}
+                      disabled={storeBusy}
+                      title="WAL-Reste zurückschreiben und freien Platz freigeben"
+                    >
+                      <Minimize2 className="size-4" />
+                      Datenbank komprimieren
+                    </Button>
+                  )}
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Die Sicherung ist eine konsistente Kopie der SQLite-Datei — kein JSON-Export.
+                  Beim Import bleibt das aktuelle Profil unverändert.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <Gauge className="size-3.5" />
+                Antwort-Cache
+              </label>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                  <span>
+                    Trefferquote:{" "}
+                    <strong>
+                      {cache && cache.hits + cache.misses > 0
+                        ? `${Math.round((cache.hits / (cache.hits + cache.misses)) * 100)} %`
+                        : "—"}
+                    </strong>
+                  </span>
+                  <span>
+                    Treffer: <strong>{cache ? cache.hits : "…"}</strong>
+                  </span>
+                  <span>
+                    Fehlschläge: <strong>{cache ? cache.misses : "…"}</strong>
+                  </span>
+                  <span>
+                    Einträge: <strong>{cache ? cache.size : "…"}</strong>
+                  </span>
+                  <span>{cache ? (cache.enabled ? "aktiv" : "deaktiviert (AUTHORAI_CACHE=0)") : "…"}</span>
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Wiederholbare Analysen (Prüfungen, Extraktionen) werden kurzzeitig
+                  zwischengespeichert. Der Cache ist <strong>flüchtig</strong> — ein Neustart
+                  leert ihn, kreative Generierungen werden nie gecacht.
+                </p>
+                <Button
+                  variant="outline"
+                  className="glass mt-3 rounded-xl border-white/10"
+                  onClick={() => void handleClearCache()}
+                  disabled={cacheBusy}
+                >
+                  {cacheBusy ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-4" />
+                  )}
+                  Cache leeren
+                </Button>
               </div>
             </div>
 

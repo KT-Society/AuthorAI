@@ -3,11 +3,14 @@
 Was als Nächstes kommen kann — nach Wirkung sortiert, nicht nach Aufwand.
 Diese Liste ist ein Ideenpool, keine Zusage.
 
-> **Letzte Prüfung gegen den Code: 16.09.2026 (Stand 0.5.9).** Jeder der 74 Einträge wurde
-> daraufhin geprüft, ob seine Begründung („heute ist es so …") noch stimmt und ob er an anderer
-> Stelle etwas blockiert. Ein **_Vorsicht:_**-Hinweis nennt einen echten Stolperstein — kein
-> Verbot, aber er gehört in die Planung, bevor Arbeit hineingeht. Ein **_Halb da:_**-Hinweis sagt,
-> dass ein Teil schon existiert und der Aufwand dadurch kleiner ist als gedacht.
+> **Letzte Prüfung gegen den Code: 16.09.2026 (Stand 0.6.0).** Die zehn Themen des
+> 0.6.0-Pakets sind **geliefert** und aus dieser Liste entfernt — für jedes steht eine
+> **Anschluss-Idee** in derselben Liste (die Roadmap ist Zukunft, kein Release-Archiv). Jeder
+> verbleibende Eintrag wurde daraufhin geprüft, ob seine Begründung („heute ist es so …") noch
+> stimmt und ob er an anderer Stelle etwas blockiert. Ein **_Vorsicht:_**-Hinweis nennt einen
+> echten Stolperstein — kein Verbot, aber er gehört in die Planung, bevor Arbeit hineingeht. Ein
+> **_Halb da:_**-Hinweis sagt, dass ein Teil schon existiert und der Aufwand dadurch kleiner ist
+> als gedacht.
 
 ---
 
@@ -25,14 +28,9 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   „vor Kohärenz-Prüfung" / „vor Stil-Prüfung" — es fehlt die dritte Spalte.
 
 ### Import & Austausch (Anschlüsse an den Markdown-Import)
-- **Figuren je Szene ableiten**: Die Szenen-Ableitung liefert Beat, Zeit, Schauplatz und POV —
-  wer in der Szene vorkommt, fehlt noch (das Feld `beatCharacters` bleibt leer)
-  *Halb da:* Das Feld ist bereits **durchverkabelt** — die Szenen-Vorgabe reicht es an den Prompt
-  durch (`server/story.ts`); es wird nur nirgends gefüllt (nur `[]` geschrieben). Der Aufwand ist
-  damit im Wesentlichen Prompt + Übernahme.
-- **Ableitung als Vorschau**: „Storyboard/Szenen ableiten" schreibt direkt (mit Rückfrage beim
-  Überschreiben) — ein Diff wie bei Kanon und Timeline wäre der bequemere Weg
-  *Muster da:* Die Diff-Vorschau existiert zweimal (Kanon-Korrektur, Timeline-Korrektur).
+- **Figuren beim Import zuordnen**: Der Manuskript-Import schreibt `beatCharacters` bislang als
+  leere Listen — die Figuren je Szene ließen sich beim Einlesen aus den Namen im Text zuordnen
+  (dieselbe Zuordnung wie bei der Szenen-Ableitung).
 - **DOCX-Import**: Autoren liefern oft `.docx` — Überschriften und Absätze aus dem Word-XML lesen
   *Korrektur:* Die ZIP-Bausteine im Repo sind **nur ein Writer** (`lib/zip.ts`, unkomprimiert) —
   für den Export gebaut. Ein DOCX ist **deflate-komprimiert**: Reader und Inflate fehlen, das
@@ -61,15 +59,16 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   könnte er laufen, während man woanders arbeitet (Fortschritt und Abbruch inklusive)
   *Vorsicht:* Der Scan schreibt **nichts selbst** — übernommen wird erst nach Bestätigung im
   Review. Ein Job müsste den erreichten Stand retten, nicht die Vorschläge (die bleiben flüchtig).
-- **Belege im Kanon sichtbar machen**: Der wörtliche Beleg (`CanonFact.quote`) wird im
-  Vorschlagsdialog gezeigt, aber nicht im Fakten-Editor — dort gehört er hin, damit man einen
-  Fakt gegen die Stelle im Text prüfen kann
 - **Fakt → Textstelle springen**: Aus dem Beleg direkt ins Kapitel an die zitierte Stelle (baut auf
   dem Widerspruchs-Marker unten auf)
   *Vorsicht:* Der Beleg trägt **keinen Offset** im Kapiteltext. Eine gespeicherte Position wäre
   nach jeder Textänderung falsch — gesucht werden muss zur Laufzeit.
 - **Widerspruchs-Marker im Editor**: gemeldete Zitate direkt im Kapiteltext hervorheben und
   dorthin springen, statt sie nur als Liste zu zeigen
+  *Jetzt machbar:* Der Fakten-Check prüft Zitate seit 0.6.0 gegen den Kapiteltext
+  (`quoteVerified`) — ein Marker darf sich damit ausschließlich auf **bestätigte** Zitate stützen
+  und kann nicht mehr ins Leere zeigen. Der Editor selbst ist noch eine reine Textfläche; das ist
+  der eigentliche Aufwand.
   *Vorsicht — Voraussetzung fehlt:* Bei der **Extraktion** wird jedes Zitat gegen den Kapiteltext
   geprüft (`quoteMatchesText`), beim **Fakten-Check** dagegen nur auf „nicht leer"
   (`server/continuity.ts`, `normalizeViolations`). Ein Marker kann deshalb ins Leere zeigen. Erst
@@ -135,13 +134,11 @@ Diese Liste ist ein Ideenpool, keine Zusage.
 ## Mittelfristig
 
 ### Inhalt & Qualität
-- **Figuren zusammenführen statt löschen**: Dubletten-Aufräumen hängt Fakten und Beziehungen der
-  entfernten Figur an die behaltene um (heute werden sie mitgelöscht)
-  *Vorsicht:* Ein Zusammenführen muss die Verweise sauber umbiegen (Fakten und Beziehungen hängen
-  an der Figuren-ID) — und die Regel „`[]` heißt bewusst geleert" darf dabei nicht verletzt werden.
-- **Dubletten-Vorschau vor dem Löschen**: anzeigen, was zusammenfällt und was dabei verloren geht
-  *Halb da:* Der Vergleich und die Zählung existieren (`lib/characterMatch.ts`), die Bestätigung
-  nennt bereits Zahlen — es fehlt die **Liste**: wer fällt weg, welche Fakten hängen daran.
+- **Dubletten-Aufräumen auch für Weltenbau und Kanon**: Figuren lassen sich seit 0.6.0 mit Vorschau
+  zusammenführen — für Welten-Einträge und doppelte Fakten/Beziehungen fehlt dasselbe
+  (die Erkennung `lib/worldMatch.ts` bzw. `lib/factMatch.ts` gibt es schon).
+- **Undo für das Zusammenführen**: Der Merge verschiebt Fakten und Beziehungen endgültig; ein
+  Snapshot im Toast (Vorbild „Alle löschen" aus der UI-Liste) wäre der bequemere Weg.
 - **Arc-Vorschläge aus dem Manuskript**: die Extraktion schlägt Beziehungs-Verläufe
   (Intensität je Kapitel) vor, statt sie von Hand zu pflegen
   *Vorsicht:* Die Extraktion **entdoppelt Beziehungen über Kapitel hinweg** — genau das
@@ -181,14 +178,6 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   *Vorsicht:* Restore, Diff und das Speicher-Budget rechnen alle mit dem **Volltext**. Delta-
   Speicherung berührt damit drei Baustellen gleichzeitig — sorgfältig abwägen, der Gewinn ist heute
   gering (kein Browser-Limit mehr).
-- **Datenbank-Backup und -Kompaktierung**: `VACUUM`/WAL-Checkpoint aus den Einstellungen,
-  Sicherung der `.db`-Datei im laufenden Betrieb
-  *Halb da:* `GET /api/store/info` und der Client-Helfer existieren, der WAL-Modus ist an — die
-  Route wird aber **nirgends angezeigt** (geladen und wieder vergessen). Die Anzeige ist der
-  billigste Einstieg.
-- **Sicherung im laufenden Betrieb**: Das Workspace-Archiv (`backup/backup.py`) nimmt die
-  SQLite-Datei samt `-wal`/`-shm` mit — sauberer wäre ein `VACUUM INTO`-Snapshot aus dem
-  laufenden Server, damit die Sicherung ohne Serverstopp konsistent ist
 - **Mehrere Datenbank-Profile (Dateien)**: Projekte als eigene `.db` öffnen/wechseln
   *Vorsicht:* Fachdaten laufen ausschließlich über `store.ts` + `/api/state` (harte Regel 3).
   `databaseFile()`, Store-Info und die Cover-Freigabe hängen alle an **einer** Datei — ein Wechsel
@@ -202,9 +191,6 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   sofort los — dazwischen wäre ein Blick/Umbenennen möglich, bevor Detailarbeit bezahlt wird
   *Vorsicht:* Heute ist das **ein** SSE-Aufruf; ein Zwischenstopp macht daraus zwei Requests
   (neue Route) → Transport-Entscheid nötig.
-- **Rohentwurf-Queue im Job-Center**: „Alle Rohentwürfe" im Assistenten hat nur den lokalen
-  Balken; als Job überlebt der Fortschritt das Schließen (wie Ausbau und Prüfungen im Editor)
-  *Halb da:* Dasselbe Muster existiert im Buch-Editor schon — der Assistent nutzt es nur nicht.
 - **Typprüfung als Skript**: `tsc --noEmit` (o. ä.) in den Check aufnehmen — `bun run check`
   prüft nur Syntax, Imports und Links und übersieht Laufzeitfehler wie einen `[0]`-Zugriff auf
   einen `Series | undefined`-Rückgabewert
@@ -212,8 +198,6 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   mit hoher Wahrscheinlichkeit Altlasten auf. Erst den Umfang messen, dann entscheiden: bestehende
   Fehler werden nicht stillschweigend mitgeschleppt (Zero-Warning), aber auch nicht heimlich
   gefixt. Der erste Schritt ist ein **Melde-Lauf**, kein Blockade-Gate für die CI.
-- **Wortstand live im Editor**: Der Kapitel-Zähler springt heute erst nach dem Abschluss auf den
-  neuen Wert — während des Streams könnte er schon mitlaufen (die Vorschau kennt die Zahl bereits)
 - **Laufenden Stream wirklich abbrechen**: „Abbrechen" im Job-Center wirkt erst zwischen den
   Kapiteln; ein bereits laufender Aufruf läuft zu Ende (Abbruch am Server fehlt)
   *Vorsicht:* Das ist eine Kette über drei Schichten: der Job kennt nur ein flüchtiges Flag, der
@@ -237,9 +221,6 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   werden, die heute in den Komponenten liegen.
 - **Desktop-Benachrichtigung** bei Job-Abschluss (heute nur Toast)
 - **Kosten-/Token-Tracking** pro Lauf (Transparenz über API-Nutzung)
-- **Cache-Transparenz**: Trefferquote und gesparte Aufrufe in der UI anzeigen
-  *Halb da:* `cacheStats()` (Treffer, Fehlschläge, Größe) existiert schon — es fehlen nur Route
-  und Anzeige.
 - **Persistenter Cache**: Antworten optional über Neustarts hinweg behalten (opt-in)
   *Vorsicht:* Der Cache ist bewusst **flüchtig**. Ein Platten-Cache braucht einen definierten Ort
   außerhalb der `state`-Sammlung (harte Regel 3) und eine Größen-/Lebensdauer-Entscheidung.
@@ -255,9 +236,9 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   Kanon mit.
 - **Tastatur-Shortcuts** (Kapitel wechseln, speichern, nächste Stufe)
   *Halb da:* Bisher gibt es nur `Escape`/`Enter` in Dialogen.
-- **Sortieren/Filtern** konsequent überall (Welt, Plot, Notizen)
-  *Korrektur:* **Filtern** existiert in Welt, Plot und Notizen bereits. Es fehlt vor allem das
-  **Sortieren** — das hat bislang nur die Bibliothek.
+- **Sortieren in den übrigen Listen**: Weltenbau, Plot-Board und Recherche sind sortierbar —
+  offen sind die Figuren-Liste und die Kanon-Fakten (Filter gibt es dort bereits).
+  Anschluss an „Sortieren/Filtern konsequent überall", das damit für drei von fünf Listen erledigt ist.
 - **Dark/Hell-Umschalter** (aktuell Dark-only by design)
   *Vorsicht:* Die Hell-Tokens existieren, aber der Glass-Stil ist auf dunkel gerechnet
   (weiße Transparenzen, harte Schatten). Hell ist mehr als ein Klassenwechsel — sonst wird es

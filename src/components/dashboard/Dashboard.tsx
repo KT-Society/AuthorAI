@@ -48,7 +48,8 @@ import type { ProfileBackup } from "@/lib/backup";
 import { emptyMetaToday, normalizeMeta, recordWords } from "@/lib/streak";
 import { showToast } from "@/lib/toast";
 import { findMatchingEntry } from "@/lib/worldMatch";
-import { findMatchingCharacter } from "@/lib/characterMatch";
+import { findMatchingCharacter, dedupeCharacters, characterNamesMatch } from "@/lib/characterMatch";
+import { findDuplicateFact, findDuplicateRelation } from "@/lib/factMatch";
 import {
   makeNotification,
   NotificationsContext,
@@ -442,6 +443,106 @@ export function Dashboard({
     );
   };
 
+  /**
+   * Figuren-Dubletten **zusammenführen** statt löschen.
+   *
+   * `deleteCharacter` nimmt Fakten und Beziehungen der Figur mit — beim Aufräumen von Dubletten
+   * war das stiller Datenverlust. Hier wandern sie auf die behaltene Figur; Aussagen, die dort
+   * schon stehen (unscharf verglichen), werden zusammengefasst statt doppelt geführt. Zum Schluss
+   * fallen die entfernten Figuren samt ihren Verweisen in Manuskript und Storyboard weg — sonst
+   * zeigen Szenen-Chips und Figurenlisten ins Leere.
+   */
+  const mergeDuplicates = () => {
+    const { kept, removed } = dedupeCharacters(characters);
+    if (removed.length === 0) {
+      showToast("Keine Dubletten gefunden", "info");
+      return;
+    }
+
+    const toOf = new Map<string, string>();
+    for (const character of removed) {
+      const target = findMatchingCharacter(character, kept);
+      if (target && target.id !== character.id) toOf.set(character.id, target.id);
+    }
+    if (toOf.size === 0) {
+      showToast("Keine Dubletten gefunden", "info");
+      return;
+    }
+
+    // Fakten: umbiegen, Dubletten zusammenfassen.
+    const nextFacts: CanonFact[] = [];
+    let movedFacts = 0;
+    let mergedFacts = 0;
+    for (const fact of facts) {
+      const target = toOf.get(fact.entityId);
+      if (!target) {
+        nextFacts.push(fact);
+        continue;
+      }
+      if (findDuplicateFact({ statement: fact.statement, entityId: target }, nextFacts)) {
+        mergedFacts += 1;
+        continue;
+      }
+      movedFacts += 1;
+      nextFacts.push({ ...fact, entityId: target });
+    }
+
+    // Beziehungen: umbiegen, Selbstbezug und Dubletten verwerfen.
+    const nextRelations: CharacterRelation[] = [];
+    let movedRelations = 0;
+    let mergedRelations = 0;
+    for (const relation of relations) {
+      const from = toOf.get(relation.fromId) ?? relation.fromId;
+      const to = toOf.get(relation.toId) ?? relation.toId;
+      const next = { ...relation, fromId: from, toId: to };
+      if (from === to || findDuplicateRelation(next, nextRelations)) {
+        mergedRelations += 1;
+        continue;
+      }
+      if (from !== relation.fromId || to !== relation.toId) movedRelations += 1;
+      nextRelations.push(next);
+    }
+
+    setFacts(nextFacts);
+    setRelations(nextRelations);
+    setCharacters((prev) => prev.filter((character) => !toOf.has(character.id)));
+
+    // Verweise mitziehen: Manuskript (Kapitel-Figuren und Szenen-Figuren) und Storyboard-Liste.
+    const dedupeNames = (list: Book["storyboard"]["characters"]) => {
+      const names: string[] = [];
+      const result: Book["storyboard"]["characters"] = [];
+      for (const entry of list) {
+        if (names.some((name) => characterNamesMatch(name, entry.name))) continue;
+        names.push(entry.name);
+        result.push(entry);
+      }
+      return result;
+    };
+    setBooks((prev) =>
+      prev.map((book) => ({
+        ...book,
+        manuscript: book.manuscript?.map((chapter) => ({
+          ...chapter,
+          characterIds: chapter.characterIds?.map((id) => toOf.get(id) ?? id),
+          beatCharacters: chapter.beatCharacters?.map((scene) =>
+            scene.map((id) => toOf.get(id) ?? id),
+          ),
+        })),
+        storyboard: {
+          ...book.storyboard,
+          characters: dedupeNames(book.storyboard.characters),
+        },
+      })),
+    );
+
+    const rescued = mergedFacts + mergedRelations;
+    showToast(
+      `Dubletten zusammengeführt · ${movedFacts} Fakten und ${movedRelations} Beziehungen übernommen` +
+        (rescued > 0 ? `, ${rescued} zusammengefasst` : ""),
+      "ok",
+    );
+  };
+
   /** Bereich „Charaktere" leeren — Kanon (Fakten/Beziehungen) der Figuren geht mit. */
   const clearAllCharacters = () => {
     setCharacters([]);
@@ -703,6 +804,7 @@ export function Dashboard({
                     prev.map((item) => (item.id === character.id ? character : item)),
                   )
                 }
+                onMergeDuplicates={mergeDuplicates}
                 onDeleteCharacter={deleteCharacter}
                 onClearAll={clearAllCharacters}
               />

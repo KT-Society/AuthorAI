@@ -20,6 +20,13 @@ import type { ResearchResult } from "@/services/research";
 
 import { Panel, PanelHeader, ViewHeader } from "./primitives";
 
+type SortKey = "date" | "title";
+
+const SORTS: Record<SortKey, string> = {
+  date: "Datum (neueste zuerst)",
+  title: "Titel A–Z",
+};
+
 export function ResearchView({
   notes,
   books,
@@ -33,6 +40,7 @@ export function ResearchView({
 }) {
   const [query, setQuery] = useState("");
   const [bookFilter, setBookFilter] = useState<string>("all");
+  const [sort, setSort] = useState<SortKey>("date");
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [answer, setAnswer] = useState("");
@@ -50,7 +58,7 @@ export function ResearchView({
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return notes.filter((note) => {
+    const filtered = notes.filter((note) => {
       const matchesBook = bookFilter === "all" || note.bookId === bookFilter;
       const matchesQuery =
         normalized.length === 0 ||
@@ -59,7 +67,13 @@ export function ResearchView({
         note.tags.some((tag) => tag.toLowerCase().includes(normalized));
       return matchesBook && matchesQuery;
     });
-  }, [notes, query, bookFilter]);
+    // "Datum (neueste zuerst)" entspricht der bisherigen Reihenfolge: neue Notizen werden vorn
+    // eingefügt. Der Titel-Sort liefert eine feste alphabetische Sicht.
+    return [...filtered].sort((a, b) => {
+      if (sort === "title") return a.title.localeCompare(b.title, "de");
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [notes, query, bookFilter, sort]);
 
   const newId = () => `research-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -163,6 +177,18 @@ export function ResearchView({
                 {books.map((book) => (
                   <SelectItem key={book.id} value={book.id}>
                     {book.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={sort} onValueChange={(value) => setSort(value as SortKey)}>
+              <SelectTrigger size="sm" className="glass w-48 border-white/10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="glass-strong border-white/10">
+                {(Object.keys(SORTS) as SortKey[]).map((key) => (
+                  <SelectItem key={key} value={key}>
+                    {SORTS[key]}
                   </SelectItem>
                 ))}
               </SelectContent>

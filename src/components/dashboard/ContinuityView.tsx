@@ -713,6 +713,14 @@ export function ContinuityView({
                     }
                     className="glass mt-1.5 h-8 rounded-lg border-white/10 text-xs"
                   />
+                  {fact.quote ? (
+                    <p
+                      className="mt-1.5 rounded-lg border border-white/5 bg-white/[0.03] px-2 py-1 text-[11px] italic text-foreground/70"
+                      title="Wörtlicher Beleg aus dem Manuskript — die Grundlage dieses Fakts"
+                    >
+                      „{fact.quote}“
+                    </p>
+                  ) : null}
                 </div>
                 <button
                   type="button"

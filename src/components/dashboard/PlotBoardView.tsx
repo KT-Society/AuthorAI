@@ -20,6 +20,13 @@ import type { PlotCard, PlotStatus } from "@/data/plot";
 import { Badge, EmptyState, Panel, ViewHeader } from "./primitives";
 import type { Tone } from "./primitives";
 
+type SortKey = "chapter" | "act";
+
+const SORTS: Record<SortKey, string> = {
+  chapter: "Kapitelnummer",
+  act: "Akt",
+};
+
 const STATUS_TONE: Record<PlotStatus, Tone> = {
   idea: "amber",
   planned: "cyan",
@@ -47,6 +54,7 @@ export function PlotBoardView({
   const [act, setAct] = useState(PLOT_ACTS[0] ?? "Akt I");
   const [status, setStatus] = useState<PlotStatus>("idea");
   const [dialogBookId, setDialogBookId] = useState(books[0]?.id ?? "");
+  const [sort, setSort] = useState<SortKey>("chapter");
 
   const bookTitle = (id: string) => books.find((book) => book.id === id)?.title ?? "";
 
@@ -54,6 +62,22 @@ export function PlotBoardView({
     () => cards.filter((card) => bookFilter === "all" || card.bookId === bookFilter),
     [cards, bookFilter],
   );
+
+  // Weiterhin je Board-Spalte sortiert: die Spalte ist bereits der Status, deshalb ordnet die
+  // Auswahl die Karten innerhalb einer Spalte und bricht die Spaltenlogik nicht auf. Eine
+  // Sortierung „nach Status" gibt es bewusst nicht — in einer Status-Spalte bewegt sie nichts.
+  const actRank = (value: string) => {
+    const index = PLOT_ACTS.indexOf(value);
+    return index === -1 ? PLOT_ACTS.length : index;
+  };
+  const compareCards = (a: PlotCard, b: PlotCard) => {
+    switch (sort) {
+      case "act":
+        return actRank(a.act) - actRank(b.act) || a.order - b.order;
+      default:
+        return a.order - b.order;
+    }
+  };
 
   const openNew = (initialStatus: PlotStatus) => {
     setEditingId(null);
@@ -119,6 +143,18 @@ export function PlotBoardView({
                 ))}
               </SelectContent>
             </Select>
+            <Select value={sort} onValueChange={(value) => setSort(value as SortKey)}>
+              <SelectTrigger size="sm" className="glass w-44 border-white/10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="glass-strong border-white/10">
+                {(Object.keys(SORTS) as SortKey[]).map((key) => (
+                  <SelectItem key={key} value={key}>
+                    {SORTS[key]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               onClick={() => openNew("idea")}
               className="h-10 rounded-xl bg-gradient-to-r from-brand-violet to-brand-indigo px-4 font-semibold text-white shadow-[0_0_30px_-10px_hsl(258_90%_66%/0.95)]"
@@ -141,7 +177,7 @@ export function PlotBoardView({
           {PLOT_STATUSES.map((columnStatus) => {
             const columnCards = visible
               .filter((card) => card.status === columnStatus)
-              .sort((a, b) => a.order - b.order);
+              .sort(compareCards);
             return (
               <Panel key={columnStatus} className="flex flex-col p-4">
                 <div className="mb-3 flex items-center justify-between">

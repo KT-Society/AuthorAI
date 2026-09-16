@@ -11,6 +11,35 @@ Repository: <https://github.com/KT-Society/AuthorAI>
 > bricht ab, wenn die Zielversion hier fehlt. Beim Bump also **vorher** nachziehen —
 > siehe [`docs/release.md`](docs/release.md).
 
+## [0.6.0] — 2026-09-16
+
+- **Der Kanon ist jetzt nachprüfbar**: Der Fakten-Check hält jedes gemeldete Zitat gegen den
+  Kapiteltext (wie schon die Extraktion) und kennzeichnet Befunde ohne wörtlichen Beleg als
+  **„ohne Beleg"** — sie bleiben erhalten und werden gezählt, statt still zu verschwinden. Der
+  Beleg steht außerdem dort, wo der Fakt gepflegt wird (Figuren-Panel und Faktenliste).
+- **Figuren je Szene**: Die Szenen-Ableitung erkennt, wer in einer Szene vorkommt (Namen aus dem
+  Text, höchstens fünf, nie erfunden) und ordnet sie den Figuren des Projekts zu. Szenen-Chips,
+  Timeline und Generierung wissen damit, wer auftritt.
+- **Ableitungen schreiben erst nach der Vorschau**: „Storyboard ableiten" und „Szenen ableiten"
+  zeigen ihr Ergebnis als Diff — je Feld beziehungsweise je Kapitel — und schreiben erst nach dem
+  Übernehmen. Beim Storyboard wählt man danach zwischen „alles überschreiben" und „nur leere Felder
+  füllen"; bei Szenen lassen sich einzelne Kapitel abwählen. Die Rückfrage vor dem Lauf ist weg
+  (sie war geraten, bevor das Ergebnis bekannt war).
+- **Figuren-Dubletten werden zusammengeführt statt gelöscht**: Der Aufräum-Dialog zeigt vorab, wer
+  bleibt, wer verschwindet und was daran hängt. Beim Zusammenführen wandern Fakten und Beziehungen
+  auf die behaltene Figur; doppelte Aussagen werden zusammengefasst. Vorher waren sie mitgelöscht
+  worden — stiller Datenverlust genau dort, wo man aufräumt.
+- **Sicherung im laufenden Betrieb**: Die Einstellungen laden eine konsistente Kopie der Datenbank
+  als Datei herunter (`VACUUM INTO`, ohne die lebende Datei anzufassen), komprimieren sie auf
+  Wunsch (Checkpoint + `VACUUM`, mit Angabe der gesparten Bytes) und zeigen endlich Pfad, Größe und
+  Umfang — die Anzeige war vorher ein toter Pfad.
+- **Cache-Transparenz**: Trefferquote, Treffer, Fehlschläge und Umfang des Antwort-Caches stehen in
+  den Einstellungen, samt „Cache leeren". Die Zählung gab es im Server schon, benutzt wurde sie nie.
+- **Komfort im Alltag**: „Alle Rohentwürfe" im Assistenten läuft jetzt als Job (Fortschritt und
+  Abbruch überleben das Schließen), der Kapitel-Kopf zählt **während** des Streams mit, und
+  Weltenbau, Plot-Board und Recherche lassen sich sortieren, ohne die bisherige Reihenfolge zu
+  verlieren.
+
 ## [0.5.9] — 2026-09-16
 
 - **Kanon belegt statt geraten**: Die Fakten-Ableitung liest den **Manuskript-Text, Kapitel für

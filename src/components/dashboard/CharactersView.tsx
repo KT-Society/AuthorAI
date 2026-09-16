@@ -19,11 +19,14 @@ import type { CanonFact, CharacterRelation } from "@/data/continuity";
 import type { StoryCharacter } from "@/data/story";
 import { manuscriptOf } from "@/lib/bookManuscript";
 import { dedupeCharacters, findMatchingCharacter } from "@/lib/characterMatch";
+import { findDuplicateFact, findDuplicateRelation } from "@/lib/factMatch";
 import { readLanguage, readStageModel } from "@/lib/generationSettings";
 import { showToast } from "@/lib/toast";
 import { streamCharactersExtract } from "@/services/story";
 
 import { CharacterCard } from "./CharacterCard";
+import { CharacterDuplicatesDialog } from "./CharacterDuplicatesDialog";
+import type { CharacterDuplicateEntry } from "./CharacterDuplicatesDialog";
 import { CharacterEditorDialog } from "./CharacterEditorDialog";
 import { CharacterExtractDialog } from "./CharacterExtractDialog";
 import { CharacterGenerator } from "./CharacterGenerator";
@@ -41,6 +44,7 @@ export function CharactersView({
   onUpdateCharacter,
   onDeleteCharacter,
   onDeleteCharacters,
+  onMergeDuplicates,
   onClearAll,
 }: {
   books: Book[];
@@ -55,6 +59,8 @@ export function CharactersView({
   onDeleteCharacter: (id: string) => void;
   /** Mehrere Figuren auf einmal entfernen (Dubletten-Aufräumen). */
   onDeleteCharacters: (ids: string[]) => void;
+  /** Dubletten **zusammenführen**: Fakten und Beziehungen wandern auf die behaltene Figur. */
+  onMergeDuplicates: () => void;
   /** Leert den gesamten Bereich (Figuren inkl. ihrer Fakten und Beziehungen). */
   onClearAll: () => void;
 }) {
@@ -68,6 +74,7 @@ export function CharactersView({
   const [extractBusy, setExtractBusy] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<StoryCharacter[] | null>(null);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
 
   const runExtract = async () => {
     const book = books.find((item) => item.id === extractBookId);
@@ -179,29 +186,59 @@ export function CharactersView({
     setCandidates(null);
   };
 
-  /** Bestehende Dubletten aufräumen (behält je Figur den ersten Eintrag). */
-  const removeDuplicates = () => {
+  /**
+   * Die erkannten Dubletten-Paare samt dem, was daran hängt — Grundlage der Vorschau.
+   * Gezählt wird, was **verloren** ginge (Fakten und Beziehungen der entfernbaren Figur) und was
+   * davon bei der behaltenen Figur schon steht (wird zusammengefasst, nicht doppelt geführt).
+   */
+  const duplicateEntries = useMemo((): CharacterDuplicateEntry[] => {
     const { kept, removed } = dedupeCharacters(characters);
-    if (removed.length === 0) {
-      showToast("Keine Dubletten gefunden", "info");
-      return;
-    }
-    const confirmed = window.confirm(
-      `${removed.length} Dublette${removed.length === 1 ? "" : "n"} entfernen? Es bleiben ${kept.length} Figuren.` +
-        `\n\nBehalten wird jeweils der erste Eintrag. Fakten und Beziehungen der entfernten Figuren werden mitgelöscht.`,
-    );
-    if (!confirmed) return;
+    return removed.map((character) => {
+      const target = findMatchingCharacter(character, kept);
+      const attachedFacts = facts.filter((fact) => fact.entityId === character.id);
+      const attachedRelations = relations.filter(
+        (relation) => relation.fromId === character.id || relation.toId === character.id,
+      );
+      const duplicateFacts = target
+        ? attachedFacts.filter((fact) =>
+            findDuplicateFact({ statement: fact.statement, entityId: target.id }, facts),
+          ).length
+        : 0;
+      const duplicateRelations = target
+        ? attachedRelations.filter((relation) =>
+            findDuplicateRelation(
+              {
+                ...relation,
+                fromId: relation.fromId === character.id ? target.id : relation.fromId,
+                toId: relation.toId === character.id ? target.id : relation.toId,
+              },
+              relations,
+            ),
+          ).length
+        : 0;
+      return {
+        keptName: target?.name ?? "—",
+        removedName: character.name,
+        facts: attachedFacts.length,
+        relations: attachedRelations.length,
+        duplicateFacts,
+        duplicateRelations,
+      };
+    });
+  }, [characters, facts, relations]);
+
+  /** Wie viele Dubletten stecken aktuell in der Liste? (für die Button-Beschriftung) */
+  const duplicateCount = duplicateEntries.length;
+
+  /** Wie bisher: Dubletten entfernen, **ohne** Zusammenführen — Fakten und Beziehungen gehen mit. */
+  const removeDuplicatesOnly = () => {
+    const { removed } = dedupeCharacters(characters);
     onDeleteCharacters(removed.map((character) => character.id));
+    setDuplicateOpen(false);
     showToast(
       removed.length === 1 ? "1 Dublette entfernt" : `${removed.length} Dubletten entfernt`,
     );
   };
-
-  /** Wie viele Dubletten stecken aktuell in der Liste? (für die Button-Beschriftung) */
-  const duplicateCount = useMemo(
-    () => dedupeCharacters(characters).removed.length,
-    [characters],
-  );
 
   const booksWithCharacters = useMemo(() => {
     const ids = new Set(
@@ -293,12 +330,12 @@ export function CharactersView({
               ? "bg-gradient-to-r from-brand-amber to-brand-rose font-semibold text-white"
               : "glass border-white/10",
           )}
-          onClick={removeDuplicates}
+          onClick={() => setDuplicateOpen(true)}
           disabled={characters.length < 2}
-          title="Figuren mit gleichem Namen zusammenfassen — Anreden wie Prinzessin werden ignoriert"
+          title="Figuren mit gleichem Namen zusammenfassen — Anreden wie Prinzessin werden ignoriert. Zeigt vorher, was zusammengeführt wird."
         >
           <Wand2 className="size-3.5" />
-          {duplicateCount > 0 ? `Dubletten entfernen (${duplicateCount})` : "Dubletten entfernen"}
+          {duplicateCount > 0 ? `Dubletten prüfen (${duplicateCount})` : "Dubletten prüfen"}
         </Button>
         <Button
           size="sm"
@@ -414,6 +451,17 @@ export function CharactersView({
         onRelationsChange={onRelationsChange}
         onClose={() => setEditing(null)}
         onSave={onUpdateCharacter}
+      />
+
+      <CharacterDuplicatesDialog
+        open={duplicateOpen}
+        entries={duplicateEntries}
+        onClose={() => setDuplicateOpen(false)}
+        onMerge={() => {
+          onMergeDuplicates();
+          setDuplicateOpen(false);
+        }}
+        onDeleteOnly={removeDuplicatesOnly}
       />
     </div>
   );

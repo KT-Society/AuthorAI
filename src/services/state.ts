@@ -62,3 +62,71 @@ export async function fetchStoreInfo(): Promise<StoreInfo | null> {
     return null;
   }
 }
+
+export interface CompactResult {
+  before: number;
+  after: number;
+  saved: number;
+}
+
+/**
+ * Lädt eine konsistente Datenbank-Kopie als Datei herunter.
+ *
+ * Der Server streamt die Kopie und löscht sie danach selbst — der Client hält nichts zurück.
+ */
+export async function downloadStoreBackup(): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch("/api/store/backup", { method: "POST" });
+  } catch {
+    throw new Error("Server nicht erreichbar. Läuft `bun run dev`?");
+  }
+  if (!response.ok) {
+    let message = `Serverfehler (${response.status})`;
+    try {
+      const data = (await response.json()) as { error?: string };
+      if (data?.error) message = data.error;
+    } catch {
+      // Generische Meldung behalten.
+    }
+    throw new Error(message);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = /filename="([^"]+)"/.exec(disposition);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = match?.[1] ?? "authorai.db";
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+/** WAL-Checkpoint und VACUUM; liefert Vorher/Nachher in Bytes. */
+export async function compactStore(): Promise<CompactResult> {
+  return postJson<CompactResult>("/api/store/compact", {});
+}
+
+export interface CacheStats {
+  size: number;
+  hits: number;
+  misses: number;
+  enabled: boolean;
+}
+
+/** Trefferquote des flüchtigen Antwort-Caches. */
+export async function fetchCacheStats(): Promise<CacheStats | null> {
+  try {
+    const response = await fetch("/api/cache");
+    if (!response.ok) return null;
+    return (await response.json()) as CacheStats;
+  } catch {
+    return null;
+  }
+}
+
+/** Leert den Antwort-Cache. */
+export async function clearCache(): Promise<void> {
+  await postJson("/api/cache/clear", {});
+}

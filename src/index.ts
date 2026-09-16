@@ -18,7 +18,17 @@ import {
   repairCanonChapters,
 } from "./server/continuity";
 import type { CanonRepairTarget, CanonViolation } from "./server/continuity";
-import { clearState, readState, storeInfo, writeState, writeStateBulk } from "./server/store";
+import { cacheClear, cacheStats } from "./server/cache";
+import {
+  clearState,
+  compactStore,
+  createSnapshot,
+  readState,
+  removeSnapshot,
+  storeInfo,
+  writeState,
+  writeStateBulk,
+} from "./server/store";
 import { isStateCollection } from "./data/state";
 import {
   providerStatus,
@@ -1262,6 +1272,72 @@ const chapters = asManuscriptChapters(body.chapters);
       async GET() {
         try {
           return Response.json(storeInfo());
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Konsistente Datenbank-Kopie als Download. Synchron: die Kopie ist klein und lokal.
+    "/api/store/backup": {
+      async POST() {
+        let snapshot: string | null = null;
+        try {
+          snapshot = createSnapshot();
+          const file = Bun.file(snapshot);
+          // Erst nach dem vollständigen Stream löschen — Windows hält die Datei sonst noch.
+          const body = file.stream().pipeThrough(
+            new TransformStream({
+              flush() {
+                if (snapshot) removeSnapshot(snapshot);
+              },
+            }),
+          );
+          return new Response(body, {
+            headers: {
+              "Content-Type": "application/vnd.sqlite3",
+              "Content-Length": String(file.size),
+              // Der Snapshot heißt bereits `authorai-<YYYYMMDD-HHMMSS>.db`.
+              "Content-Disposition": `attachment; filename="${path.basename(snapshot)}"`,
+              "Cache-Control": "no-store",
+            },
+          });
+        } catch (err) {
+          if (snapshot) removeSnapshot(snapshot);
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // WAL-Checkpoint + VACUUM. Synchron: reine Dateiarbeit ohne Kapitel-Iteration.
+    "/api/store/compact": {
+      async POST() {
+        try {
+          const { before, after } = compactStore();
+          return Response.json({ ok: true, before, after, saved: before - after });
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Trefferquote des flüchtigen Antwort-Caches (Transparenz in den Einstellungen).
+    "/api/cache": {
+      async GET() {
+        try {
+          return Response.json(cacheStats());
+        } catch (err) {
+          return errorResponse(err);
+        }
+      },
+    },
+
+    // Leert den Antwort-Cache; der nächste identische Aufruf rechnet wieder echt.
+    "/api/cache/clear": {
+      async POST() {
+        try {
+          cacheClear();
+          return Response.json({ ok: true });
         } catch (err) {
           return errorResponse(err);
         }

@@ -92,7 +92,7 @@ interface ChapterContent {
   expanded: string;            // Ausbau
   targetWords?: number;        // Kapitel-Ziel (sonst Buch-Vorgabe)
   characterIds?: string[];     // Figuren im Kapitel
-  beatCharacters?: string[][]; // Figuren je Szene (parallel zu storyboard.beats)
+  beatCharacters?: string[][]; // Figuren-IDs je Szene (parallel zu storyboard.beats)
   sceneMeta?: SceneMeta[];     // POV/Schauplatz/Zeit/Wortziel je Szene
   consistencyNotes?: string;   // Prüfbericht (zeilenweise)
   consistencyChecked?: boolean;
@@ -135,6 +135,11 @@ interface SceneConstraint {
 **Timeline-Quick-Fix** (`time`/`setting` in `sceneMeta`, korrigierte Szenen-Texte im Beat) —
 deshalb liegt eine solche Korrektur außerhalb der Kapitel-Version (siehe `roadmap.md`,
 „Szenen-Struktur versionieren").
+
+`beatCharacters` ist die **dritte** parallele Liste (Index `n` = Figuren der Szene `n`) und speichert
+**Figuren-IDs**. Gefüllt wird sie von der Szenen-Ableitung: Das Modell liefert nur **Namen** (es kennt
+keine Figurenliste), die Zuordnung Name → ID macht der Client über `lib/characterMatch.ts`. Alle drei
+Listen müssen beim Schreiben dieselbe Länge behalten, sonst verrutschen die Indizes.
 
 **Import:** Ein importiertes Manuskript liegt in **`expanded`** (`draft` bleibt leer, weil es
 keinen Rohentwurf gibt). So liest es die gesamte Kette (`manuscriptOf` → `expanded || draft`)

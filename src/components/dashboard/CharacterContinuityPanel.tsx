@@ -140,6 +140,14 @@ export function FactsPanel({
                   placeholder="Quelle (z. B. Kapitel 3)"
                   className="glass h-7 rounded-lg border-white/10 text-[11px]"
                 />
+                {fact.quote ? (
+                  <p
+                    className="rounded-lg border border-white/5 bg-white/[0.03] px-2 py-1 text-[11px] italic text-foreground/70"
+                    title="Wörtlicher Beleg aus dem Manuskript — die Grundlage dieses Fakts"
+                  >
+                    „{fact.quote}“
+                  </p>
+                ) : null}
               </div>
 
               <button

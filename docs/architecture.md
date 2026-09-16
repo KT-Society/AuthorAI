@@ -187,6 +187,8 @@ Typen + Seed-Daten, frei von UI-Logik:
   Wiedereinstieg), `CharacterGenerator`, `CharacterEditorDialog`,
   `CharacterExtractDialog`, `ContinuityExtractDialog`, `CanonCheckDialog`, `WorldExtractDialog`,
   `TimelineDialog`, `VersionDiffDialog`, `CanonRepairPreviewDialog`, `TimelineRepairPreviewDialog`,
+  `DerivePreviewDialog` (Vorschau einer Struktur-Ableitung vor dem Schreiben),
+  `CharacterDuplicatesDialog` (Figuren-Dubletten: Vorschau und Zusammenführen),
   `CoverEditorDialog`,
   `CoverVariantsDialog`, `SeriesDialog`, `SettingsDialog`, `ProfileGate`
 - **Bausteine:** `primitives.tsx` (Panel, Badge, ProgressBar, Sparkline, ViewHeader, …),
@@ -276,7 +278,10 @@ Wichtig: Der Client **ersetzt** den Text und committet sofort → Persistenz nac
 - **Fachdaten** (`books`, `characters`, `world`, `plot`, `research`, `ideas`, `coverPresets`,
   `notifications`, `facts`, `relations`, `series`, `meta`) liegen in **SQLite**
   (`<runtimeRoot>/data/authorai.db`) — eine Zeile je Profil + Sammlung, erreichbar **nur**
-  über `server/store.ts` und die Routen `/api/state` + `/api/store/info`.
+  über `server/store.ts` und die Routen `/api/state` + `/api/store/info`. Dasselbe Modul
+  bedient auch die **Wartung**: `POST /api/store/backup` (konsistente Kopie über `VACUUM INTO`
+  in eine neue Datei) und `POST /api/store/compact` (WAL-Checkpoint + `VACUUM`) — kein anderer
+  Teil der App fasst die Datei an.
 - **Ablauf:** Beim Start/Profilwechsel lädt `hydrateState()` einmal alle Sammlungen in den
   Cache (`lib/persistence.ts`); gelesen wird danach **synchron**, geschrieben gebündelt
   (400 ms) per `PUT /api/state`. Kein Size-Limit mehr (vorher: ~5 MB `localStorage`).

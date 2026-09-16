@@ -116,6 +116,26 @@ OpenAI-kompatiblen Anbieter** umschalten. Bei „Eigener Anbieter" kommen **Base
 
 ---
 
+## Speicher, Sicherung & Cache
+
+In den **Einstellungen** stehen drei Dinge, die vorher unsichtbar waren:
+
+- **Datenbank**: Pfad, belegte Größe (inklusive `-wal`/`-shm`) und Umfang. Die Anzeige nutzt
+  `GET /api/store/info` — der Aufruf lief vorher schon, das Ergebnis wurde aber nie gerendert.
+- **Sicherung herunterladen**: `POST /api/store/backup` liefert eine konsistente Kopie
+  (`VACUUM INTO` in eine neue Datei) als Download. Das ist die Sicherung **im laufenden Betrieb** —
+  die lebende Datenbank wird nicht angefasst. Für den kompletten Arbeitsstand gibt es weiterhin das
+  Operator-Skript `backup/backup.py` (siehe [`development.md`](development.md)); das ist eine andere
+  Ebene und ersetzt diese Kopie nicht.
+- **Datenbank komprimieren**: `POST /api/store/compact` (WAL-Checkpoint + `VACUUM`) nach Rückfrage;
+  das Ergebnis nennt die gesparten Bytes.
+- **Antwort-Cache**: Trefferquote, Treffer, Fehlschläge, Umfang und Schalter-Zustand
+  (`GET /api/cache`, leeren per `POST /api/cache/clear`). Der Cache ist **bewusst flüchtig** —
+  nichts überlebt einen Neustart, und die Anzeige behauptet nichts anderes;
+  `AUTHORAI_CACHE=0` schaltet ihn ab.
+
+---
+
 ## Profile
 
 - Profile werden lokal verwaltet (`authorai.profiles`, `authorai.currentProfile`).

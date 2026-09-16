@@ -129,7 +129,8 @@ src/
 | Soul-Synthese | `POST /api/generate` |
 | Recherche | `POST /api/research` |
 | Cover | `POST /api/cover`, `POST /api/cover/save`, `DELETE /api/cover/:file` |
-| Speicher | `GET\|PUT\|DELETE /api/state`, `GET /api/store/info` |
+| Speicher | `GET\|PUT\|DELETE /api/state`, `GET /api/store/info` · Sicherung: `POST /api/store/backup` · Kompaktierung: `POST /api/store/compact` |
+| Antwort-Cache | `GET /api/cache` · Leeren: `POST /api/cache/clear` |
 | LLM-Anbieter | `GET\|PUT /api/provider` · Test: `POST /api/provider/test` |
 
 Beim Speichern eines Buchs leitet die Shell **automatisch** Charaktere, Weltenbau und

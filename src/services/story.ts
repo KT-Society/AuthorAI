@@ -545,12 +545,14 @@ export interface SceneDeriveRequest {
   language: string;
 }
 
-/** Eine aus dem Text gelesene Szene (Beat-Zeile + optionale Zeit/Schauplatz/POV). */
+/** Eine aus dem Text gelesene Szene (Beat-Zeile + optionale Zeit/Schauplatz/POV/Figuren). */
 export interface DerivedScene {
   text: string;
   time: string;
   setting: string;
   pov: string;
+  /** Figuren **als Namen** — die Zuordnung Name → ID macht der Aufrufer (er kennt die Figuren). */
+  characters: string[];
 }
 
 /** Normalisiert eine Szenen-Zeile (Live-Ereignis wie Abschluss). */
@@ -558,11 +560,22 @@ function asDerivedScene(value: unknown): DerivedScene | null {
   const item = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const text = typeof item.text === "string" ? item.text.trim() : "";
   if (!text) return null;
+  const rawCharacters = Array.isArray(item.characters)
+    ? item.characters
+    : typeof item.characters === "string"
+      ? item.characters.split(",")
+      : [];
+  const characters: string[] = [];
+  for (const entry of rawCharacters) {
+    const name = typeof entry === "string" ? entry.trim() : "";
+    if (name && !characters.includes(name)) characters.push(name);
+  }
   return {
     text,
     time: typeof item.time === "string" ? item.time.trim() : "",
     setting: typeof item.setting === "string" ? item.setting.trim() : "",
     pov: typeof item.pov === "string" ? item.pov.trim() : "",
+    characters,
   };
 }
 

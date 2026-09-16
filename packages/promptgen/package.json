@@ -1,7 +1,7 @@
 {
   "name": "canon-slug-generator",
   "private": true,
-  "version": "0.5.9",
+  "version": "0.6.0",
   "author": "KT-Society & Echo",
   "maintainers": ["KT-Society", "Echo"],
   "license": "MIT",

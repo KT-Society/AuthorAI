@@ -1906,6 +1906,40 @@ export interface DerivedScene {
   time: string;
   setting: string;
   pov: string;
+  /**
+   * Figuren **als Namen**, die in dieser Szene vorkommen — höchstens `MAX_SCENE_CHARACTERS`,
+   * und nur, was der Text hergibt. Der Server kennt **keine** Figurenliste und kann deshalb keine
+   * IDs liefern: Die Zuordnung Name → ID macht der Client (`findMatchingCharacter`).
+   */
+  characters: string[];
+}
+
+/** Mehr als eine Handvoll Namen pro Szene ist fast immer Modell-Rauschen. */
+const MAX_SCENE_CHARACTERS = 5;
+
+/**
+ * Figuren-Namen einer abgeleiteten Szene lesen — tolerant gegenüber der Modelllaune: Es kommen
+ * sowohl ein Array als auch ein Komma-String vor. Leeres und Aufzählungszeichen fallen weg,
+ * Wiederholungen werden entfernt, die Liste ist begrenzt.
+ */
+function sceneCharacters(raw: unknown): string[] {
+  const list = Array.isArray(raw)
+    ? raw.map((item) => str(item))
+    : str(raw)
+        .split(",")
+        .map((item) => item.trim());
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const name of list) {
+    const clean = name.trim().replace(/^\s*[-•*]\s*/, "");
+    if (!clean || clean.length > 60) continue;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(clean);
+    if (result.length >= MAX_SCENE_CHARACTERS) break;
+  }
+  return result;
 }
 
 /** Wortbudget eines Szenen-Teils. Größer als bei den Pässen: die Antwort ist klein. */
@@ -1927,9 +1961,12 @@ Rules:
 - time: only if the text states it ("am nächsten Morgen", "drei Tage später"); otherwise "".
 - setting: the place of that scene, using the text's names; "" if it never says.
 - pov: the viewpoint of that scene if it changes or is clear; otherwise "".
+- characters: who ACTS in this scene — names EXACTLY as written in the text, at most 5, comma
+  separated ("Aria, Theron"); "" when the scene names nobody. Only names that literally appear in
+  this text. NEVER invent a name, never use a description ("the stranger") instead of a name.
 - NEVER invent plot, names or places. No spoilers, no interpretation, no quotes of prose.
 
-${jsonlFormatBlock(language, `{"text":"…","time":"…","setting":"…","pov":"…"}`)}
+${jsonlFormatBlock(language, `{"text":"…","time":"…","setting":"…","pov":"…","characters":["Aria","Theron"]}`)}
 Rules: one line per scene, in order; all text in ${language}.`;
 }
 
@@ -1981,6 +2018,7 @@ export async function deriveScenesStream(
       time: str(raw.time),
       setting: str(raw.setting),
       pov: str(raw.pov),
+      characters: sceneCharacters(raw.characters),
     };
     scenes.push(scene);
     if (live) handlers.onScene?.(scene);

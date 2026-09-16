@@ -74,7 +74,7 @@ import { MODEL_STAGE_LABELS, readCanonWarn, readLanguage, readStageModel, readSt
 import { manuscriptOf } from "@/lib/bookManuscript";
 import { copyText } from "@/lib/clipboard";
 import { looksTruncated } from "@/lib/prose";
-import { characterNamesMatch } from "@/lib/characterMatch";
+import { characterNamesMatch, findMatchingCharacter } from "@/lib/characterMatch";
 import { textHash } from "@/lib/textHash";
 import { createJob, createJobStreamReporter, finishJob, isCancelled, updateJob } from "@/lib/jobs";
 import { streamJson } from "@/services/stream";
@@ -121,6 +121,8 @@ import type {
 import type { CanonRepairChange } from "./CanonRepairPreviewDialog";
 import { BookWizard } from "./BookWizard";
 import { VersionDiffDialog } from "./VersionDiffDialog";
+import { DerivePreviewDialog } from "./DerivePreviewDialog";
+import type { DeriveMode, DerivePreview } from "./DerivePreviewDialog";
 import { SeriesDialog } from "./SeriesDialog";
 import { TimelineDialog } from "./TimelineDialog";
 import type { TimelineEntry } from "./TimelineDialog";
@@ -245,6 +247,15 @@ export function BookDetailView({
   const [coverVariantsOpen, setCoverVariantsOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [canonCheckOpen, setCanonCheckOpen] = useState(false);
+  /**
+   * Eine Ableitung, die auf Bestätigung wartet. Sie liegt **im Speicher**, nicht im State des
+   * Buchs: Verwerfen darf die Daten nicht anfassen — der bezahlte Modellaufruf ist dann einfach weg.
+   */
+  const [derivePreview, setDerivePreview] = useState<DerivePreview | null>(null);
+  const pendingDeriveRef = useRef<{
+    storyboard?: Awaited<ReturnType<typeof streamDeriveStoryboard>>;
+    scenes: { index: number; scenes: DerivedScene[]; title: string }[];
+  }>({ scenes: [] });
   /** null = alle Kapitel prüfen · Zahl = nur dieses Kapitel (Einzelkapitel-Button). */
   const [canonOnly, setCanonOnly] = useState<number | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -259,6 +270,12 @@ export function BookDetailView({
   const [streamText, setStreamText] = useState<string | null>(null);
   /** Zusatzinfo in der Vorschau (z. B. „Teil 2/5"). */
   const [streamLabel, setStreamLabel] = useState<string | null>(null);
+  /**
+   * Zu welchem Kapitel der laufende Stream gehört. Nötig, weil eine Queue („alles ausbauen")
+   * weiterläuft, während der Nutzer ein anderes Kapitel ansieht — ohne diese Zuordnung stünde im
+   * Kapitel-Kopf der Wortstand eines fremden Kapitels.
+   */
+  const [streamChapter, setStreamChapter] = useState<number | null>(null);
 
   /**
    * Überarbeitung (Kohärenz/Stil) mit Live-Vorschau: Der Server chunkt das Kapitel und schickt
@@ -274,6 +291,7 @@ export function BookDetailView({
   ): Promise<PassResult> => {
     setStreamText("");
     setStreamLabel(`${MODEL_STAGE_LABELS[kind]}-Prüfung · Kapitel ${chapterIndex + 1}`);
+    setStreamChapter(chapterIndex);
     let part = 1;
     let parts = 1;
     const reporter = jobId
@@ -843,6 +861,7 @@ export function BookDetailView({
     }
     setStreamText(null);
     setStreamLabel(null);
+    setStreamChapter(null);
     setBusy(null);
   };
 
@@ -859,7 +878,8 @@ export function BookDetailView({
     setError(null);
     setBusy(`Rohentwurf Kapitel ${index + 1}…`);
     setStreamText("");
-    setStreamLabel(`Rohentwurf · Kapitel ${index + 1}`);
+      setStreamLabel(`Rohentwurf · Kapitel ${index + 1}`);
+      setStreamChapter(index);
     try {
       // Streaming: Der Text wächst live mit (Fallback im Server, falls kein SSE).
       const draft = await streamJson(
@@ -881,6 +901,7 @@ export function BookDetailView({
     } finally {
       setStreamText(null);
       setStreamLabel(null);
+    setStreamChapter(null);
       setBusy(null);
     }
   };
@@ -909,6 +930,7 @@ export function BookDetailView({
     setBusy(`${MODEL_STAGE_LABELS[kind]}-Prüfung Kapitel ${index + 1}…`);
     setStreamText("");
     setStreamLabel(`${MODEL_STAGE_LABELS[kind]}-Prüfung · Kapitel ${index + 1}`);
+    setStreamChapter(index);
     if ((manuscript[index]?.expanded ?? "").trim()) pushSnapshot(index, `vor ${MODEL_STAGE_LABELS[kind]}-Prüfung`);
     try {
       const request = {
@@ -934,6 +956,7 @@ export function BookDetailView({
     } finally {
       setStreamText(null);
       setStreamLabel(null);
+    setStreamChapter(null);
       setBusy(null);
     }
   };
@@ -952,6 +975,7 @@ export function BookDetailView({
     setBusy(`Ausbau Kapitel ${index + 1}…`);
     setStreamText("");
     setStreamLabel(`Ausbau · Kapitel ${index + 1}`);
+    setStreamChapter(index);
     if ((manuscript[index]?.expanded ?? "").trim()) pushSnapshot(index, "vor Ausbau");
     try {
       // Streaming: Der Ausbau ist die längste Einzelantwort — hier lohnt die Live-Vorschau.
@@ -976,6 +1000,7 @@ export function BookDetailView({
     } finally {
       setStreamText(null);
       setStreamLabel(null);
+    setStreamChapter(null);
       setBusy(null);
     }
   };
@@ -1021,6 +1046,7 @@ export function BookDetailView({
       setBusy(`Ausbau ${position + 1}/${pending.length} · Kapitel ${chapterIndex + 1}…`);
       setStreamText("");
       setStreamLabel(`Ausbau · Kapitel ${chapterIndex + 1}/${pending.length}`);
+      setStreamChapter(chapterIndex);
       const reporter = createJobStreamReporter(
         jobId,
         (words) => `Ausbau · ${words.toLocaleString("de-DE")} Wörter`,
@@ -1072,6 +1098,7 @@ export function BookDetailView({
     }
     setStreamText(null);
     setStreamLabel(null);
+    setStreamChapter(null);
     setBusy(null);
   };
 
@@ -1384,22 +1411,9 @@ export function BookDetailView({
     }
 
     const existing = book.storyboard;
-    const hasContent = Boolean(
-      existing.genre ||
-        existing.logline ||
-        existing.synopsis ||
-        existing.tone ||
-        existing.pov ||
-        existing.chapters.some((plan) => plan.summary.trim() || plan.pov.trim() || plan.setting.trim()),
-    );
-    const overwrite =
-      !hasContent ||
-      window.confirm(
-        "Vorhandene Storyboard-Angaben überschreiben?\n\n" +
-          "Betrifft Genre, Logline, Synopsis, Ton, POV, Kapitel-Kurzfassungen, POV/Schauplatz und Foreshadowing.\n" +
-          "Szenen-Beats bleiben unangetastet.\n\n" +
-          "Abbrechen = nur leere Felder füllen.",
-      );
+    // Kein Vorab-Dialog mehr („überschreiben? — abbrechen = nur leere Felder füllen"): Der Lauf
+    // wird **immer** gemacht und danach am Diff entschieden. Vorher zu raten hieß, den bereits
+    // bezahlten Aufruf wegzuwerfen oder blind zu überschreiben.
 
     setError(null);
     setDeriveText("");
@@ -1442,70 +1456,33 @@ export function BookDetailView({
         },
       );
 
-      const pick = (derived: string, current: string) =>
-        overwrite ? derived || current : current || derived;
-
-      const plans = existing.chapters.map((plan, index) => {
-        const derived = result.chapters.find((entry) => entry.index === index);
-        if (!derived) return plan;
-        return {
-          ...plan,
-          summary: pick(derived.summary, plan.summary),
-          pov: pick(derived.pov, plan.pov),
-          setting: pick(derived.setting, plan.setting),
-          foreshadowing:
-            overwrite && derived.foreshadowing.length > 0
-              ? derived.foreshadowing
-              : plan.foreshadowing.length > 0
-                ? plan.foreshadowing
-                : derived.foreshadowing,
-        };
-      });
-
-      // Figuren zusammenführen: vorhandene zuerst, neue nach Namen ergänzt (keine Dubletten).
-      const names = new Set(existing.characters.map((entry) => entry.name.trim().toLowerCase()));
-      const characters = [...existing.characters];
-      for (const candidate of result.characters) {
-        const key = candidate.name.trim().toLowerCase();
-        if (!key || names.has(key)) continue;
-        names.add(key);
-        characters.push(candidate);
-      }
-
-      const next: Book = {
-        ...book,
-        storyboard: {
-          ...existing,
-          title: existing.title || result.meta.title,
-          subtitle: pick(result.meta.subtitle, existing.subtitle),
-          genre: pick(result.meta.genre, existing.genre) || "Roman",
-          logline: pick(result.meta.logline, existing.logline),
-          synopsis: pick(result.meta.synopsis, existing.synopsis),
-          tone: pick(result.meta.tone, existing.tone),
-          pov: pick(result.meta.pov, existing.pov),
-          themes: overwrite && result.meta.themes.length > 0 ? result.meta.themes : existing.themes,
-          characters,
-          chapters: plans,
+      pendingDeriveRef.current = { storyboard: result, scenes: [] };
+      setDerivePreview({
+        kind: "storyboard",
+        plan: {
+          rows: [
+            { label: "Untertitel", before: existing.subtitle, after: result.meta.subtitle },
+            { label: "Genre", before: existing.genre, after: result.meta.genre },
+            { label: "Logline", before: existing.logline, after: result.meta.logline },
+            { label: "Synopsis", before: existing.synopsis, after: result.meta.synopsis },
+            { label: "Ton", before: existing.tone, after: result.meta.tone },
+            { label: "POV", before: existing.pov, after: result.meta.pov },
+          ],
+          chapters: result.chapters.map((chapter) => {
+            const current = existing.chapters.find((plan) => plan.index === chapter.index);
+            return {
+              index: chapter.index,
+              title: current?.title ?? "",
+              before: current?.summary ?? "",
+              after: chapter.summary,
+            };
+          }),
+          characters: result.characters.map((character) => character.name),
+          themes: result.meta.themes,
         },
-        updatedAt: new Date().toISOString(),
-      };
-
-      if (onStoryboardDerived) onStoryboardDerived(next);
-      else onUpdate(next);
+      });
       updateJob(jobId, { done: 1 + (result.chapters.length > 0 ? 1 : 0) });
-      finishJob(
-        jobId,
-        "done",
-        result.characters.length > 0
-          ? `Storyboard abgeleitet · ${result.characters.length} Figuren`
-          : "Storyboard abgeleitet",
-      );
-      showToast(
-        result.characters.length > 0
-          ? `Storyboard abgeleitet · ${result.characters.length} Figuren erkannt`
-          : "Storyboard abgeleitet",
-        "ok",
-      );
+      finishJob(jobId, "done", "Storyboard abgeleitet — Vorschau offen");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unbekannter Fehler.";
       setError(message);
@@ -1516,6 +1493,118 @@ export function BookDetailView({
     }
   };
 
+  /** Der aktuelle Szenen-Stand eines Kapitels — Grundlage für den Vorher-Nachher-Vergleich. */
+  const currentSceneState = (index: number) => {
+    const chapter = manuscriptRef.current[index];
+    return {
+      beats: [...(structurePlans()[index]?.beats ?? [])],
+      metas: [...(chapter?.sceneMeta ?? [])],
+      characters: [...(chapter?.beatCharacters ?? [])],
+    };
+  };
+
+  /**
+   * Schreibt ein abgeleitetes Storyboard ins Buch — **erst nach** der Vorschau.
+   * `mode` entscheidet, ob vorhandene Angaben ersetzt oder nur leere Felder gefüllt werden.
+   */
+  const applyStoryboardDerive = (
+    result: Awaited<ReturnType<typeof streamDeriveStoryboard>>,
+    mode: DeriveMode,
+  ) => {
+    const overwrite = mode === "overwrite";
+    const existing = book.storyboard;
+    const pick = (derived: string, current: string) =>
+      overwrite ? derived || current : current || derived;
+
+    const plans = existing.chapters.map((plan) => {
+      const derived = result.chapters.find((entry) => entry.index === plan.index);
+      if (!derived) return plan;
+      return {
+        ...plan,
+        summary: pick(derived.summary, plan.summary),
+        pov: pick(derived.pov, plan.pov),
+        setting: pick(derived.setting, plan.setting),
+        foreshadowing:
+          overwrite && derived.foreshadowing.length > 0
+            ? derived.foreshadowing
+            : plan.foreshadowing.length > 0
+              ? plan.foreshadowing
+              : derived.foreshadowing,
+      };
+    });
+
+    // Figuren zusammenführen: vorhandene zuerst, neue nach Namen ergänzt (keine Dubletten).
+    const names = new Set(existing.characters.map((entry) => entry.name.trim().toLowerCase()));
+    const characters = [...existing.characters];
+    for (const candidate of result.characters) {
+      const key = candidate.name.trim().toLowerCase();
+      if (!key || names.has(key)) continue;
+      names.add(key);
+      characters.push(candidate);
+    }
+
+    const next: Book = {
+      ...book,
+      storyboard: {
+        ...existing,
+        title: existing.title || result.meta.title,
+        subtitle: pick(result.meta.subtitle, existing.subtitle),
+        genre: pick(result.meta.genre, existing.genre) || "Roman",
+        logline: pick(result.meta.logline, existing.logline),
+        synopsis: pick(result.meta.synopsis, existing.synopsis),
+        tone: pick(result.meta.tone, existing.tone),
+        pov: pick(result.meta.pov, existing.pov),
+        themes: overwrite && result.meta.themes.length > 0 ? result.meta.themes : existing.themes,
+        characters,
+        chapters: plans,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (onStoryboardDerived) onStoryboardDerived(next);
+    else onUpdate(next);
+    showToast(
+      result.characters.length > 0
+        ? `Storyboard übernommen · ${result.characters.length} Figuren erkannt`
+        : "Storyboard übernommen",
+      "ok",
+    );
+  };
+
+  /**
+   * Wendet eine **bestätigte** Ableitung an: Szenen je ausgewähltem Kapitel oder das Storyboard im
+   * gewählten Modus. Bis hierher hat nichts geschrieben — Verwerfen ist deshalb folgenlos.
+   */
+  const applyDerivePreview = (mode: DeriveMode, chapterIndices: number[]) => {
+    const pending = pendingDeriveRef.current;
+    pendingDeriveRef.current = { scenes: [] };
+    setDerivePreview(null);
+
+    if (pending.storyboard) {
+      applyStoryboardDerive(pending.storyboard, mode);
+      return;
+    }
+
+    const chosen = pending.scenes.filter((entry) => chapterIndices.includes(entry.index));
+    if (chosen.length === 0) return;
+
+    let manuscript = manuscriptRef.current;
+    let plans = structurePlans();
+    for (const entry of chosen) {
+      const next = applyDerivedScenes(entry.index, entry.scenes, manuscript, plans);
+      manuscript = next.manuscript;
+      plans = next.plans;
+    }
+    manuscriptRef.current = manuscript;
+    commit(manuscript, plans.length > 0 ? plans : undefined);
+
+    if (chosen.length === 1) {
+      showToast(`Kapitel ${(chosen[0]?.index ?? 0) + 1}: Szenen übernommen`, "ok");
+    } else {
+      showToast(`${chosen.length} Kapitel: Szenen übernommen`, "ok");
+    }
+  };
+
   /** Übernimmt abgeleitete Szenen in Beat-Liste und Szenen-Metadaten eines Kapitels. */
   const applyDerivedScenes = (
     index: number,
@@ -1523,6 +1612,32 @@ export function BookDetailView({
     baseManuscript: ChapterContent[],
     basePlans: ChapterPlan[],
   ): { manuscript: ChapterContent[]; plans: ChapterPlan[] } => {
+    // Namen → IDs: Die Ableitung liefert nur **Namen** (der Server kennt keine Figurenliste), und
+    // ein Name ohne passende Figur wird NICHT als neue Figur erfunden — er fällt weg und wird
+    // gezählt, damit niemand rätselt, warum ein Chip fehlt.
+    const unmatched = new Set<string>();
+    const charactersPerScene = scenes.map((scene) => {
+      const ids: string[] = [];
+      for (const name of scene.characters) {
+        const character = findMatchingCharacter({ name, bookId: book.id }, characters);
+        if (!character) {
+          unmatched.add(name);
+          continue;
+        }
+        if (!ids.includes(character.id)) ids.push(character.id);
+      }
+      return ids;
+    });
+    if (unmatched.size > 0) {
+      const names = [...unmatched].join(", ");
+      showToast(
+        unmatched.size === 1
+          ? `„${names}" ist keiner Figur zugeordnet — dort bleibt der Chip leer`
+          : `${unmatched.size} Namen ohne Figur: ${names}`,
+        "info",
+      );
+    }
+
     const nextPlans = basePlans.map((plan, i) =>
       i === index ? { ...plan, beats: scenes.map((scene) => scene.text) } : plan,
     );
@@ -1535,7 +1650,9 @@ export function BookDetailView({
               setting: scene.setting || undefined,
               pov: scene.pov || undefined,
             })),
-            beatCharacters: scenes.map(() => []),
+            // Gleiche Länge und Reihenfolge wie `beats` und `sceneMeta` — darauf verlassen sich
+            // Pipeline-Vorgabe und Timeline-Prüfung.
+            beatCharacters: charactersPerScene,
           }
         : chapter,
     );
@@ -1579,20 +1696,20 @@ export function BookDetailView({
           },
         },
       );
-      const next = applyDerivedScenes(
-        index,
-        scenes,
-        manuscriptRef.current,
-        structurePlans(),
-      );
-      manuscriptRef.current = next.manuscript;
-      commit(next.manuscript, plans.length > 0 ? next.plans : undefined);
-      showToast(
-        scenes.length === 1
-          ? `Kapitel ${index + 1}: 1 Szene abgeleitet`
-          : `Kapitel ${index + 1}: ${scenes.length} Szenen abgeleitet`,
-        "ok",
-      );
+      pendingDeriveRef.current = {
+        scenes: [{ index, scenes, title: chapter?.title ?? `Kapitel ${index + 1}` }],
+      };
+      setDerivePreview({
+        kind: "scenes",
+        entries: [
+          {
+            index,
+            title: chapter?.title ?? `Kapitel ${index + 1}`,
+            scenes,
+            before: currentSceneState(index),
+          },
+        ],
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
@@ -1625,12 +1742,12 @@ export function BookDetailView({
       kind: "scenes",
       total: targets.length,
     });
-    let currentManuscript = manuscriptRef.current.map((chapter) => ({ ...chapter }));
-    let currentPlans = structurePlans().map((plan) => ({
-      ...plan,
-      beats: [...plan.beats],
-    }));
+    // Nur noch gelesen (Kapiteltext und Hinweis) — geschrieben wird erst nach der Vorschau.
+    const currentManuscript = manuscriptRef.current;
+    const currentPlans = structurePlans();
     let failure: string | null = null;
+    /** Alle Kapitel-Ergebnisse sammeln — geschrieben wird erst nach der gemeinsamen Vorschau. */
+    const collected: { index: number; scenes: DerivedScene[]; title: string }[] = [];
 
     for (const [position, { index }] of targets.entries()) {
       if (isCancelled(jobId)) break;
@@ -1657,11 +1774,7 @@ export function BookDetailView({
             },
           },
         );
-        const next = applyDerivedScenes(index, scenes, currentManuscript, currentPlans);
-        currentManuscript = next.manuscript;
-        currentPlans = next.plans;
-        manuscriptRef.current = currentManuscript;
-        commit(currentManuscript, plans.length > 0 ? currentPlans : undefined);
+        collected.push({ index, scenes, title: chapter?.title ?? `Kapitel ${index + 1}` });
         updateJob(jobId, { done: position + 1, detail: `${scenes.length} Szenen` });
       } catch (err) {
         failure = err instanceof Error ? err.message : "Unbekannter Fehler.";
@@ -1677,7 +1790,17 @@ export function BookDetailView({
       finishJob(jobId, "error", failure);
     } else {
       updateJob(jobId, { done: targets.length });
-      finishJob(jobId, "done", `${targets.length} Kapitel in Szenen gegliedert`);
+      finishJob(jobId, "done", `${targets.length} Kapitel in Szenen gegliedert — Vorschau offen`);
+      // Erst jetzt die gemeinsame Vorschau: Was gefunden wurde, bleibt auch dann erhalten, wenn
+      // der Nutzer nur einen Teil übernehmen will.
+      pendingDeriveRef.current = { scenes: collected };
+      setDerivePreview({
+        kind: "scenes",
+        entries: collected.map((entry) => ({
+          ...entry,
+          before: currentSceneState(entry.index),
+        })),
+      });
     }
     setBusy(null);
   };
@@ -3078,7 +3201,15 @@ export function BookDetailView({
                 <details open className="mt-1 rounded-xl border border-white/10 bg-white/5 p-3">
                   <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
                     Kapiteltext (ausgebaut) —{" "}
-                    {countWords(expandedBuffer).toLocaleString("de-DE")} Wörter
+                    {/* Läuft der Stream zu **diesem** Kapitel, zählt der Kopf schon mit — sonst
+                        (Queue im Hintergrund, anderes Kapitel offen) gilt weiter der Buchwert. */}
+                    {countWords(
+                      streamText !== null && streamChapter === safeIndex ? streamText : expandedBuffer,
+                    ).toLocaleString("de-DE")}{" "}
+                    Wörter
+                    {streamText !== null && streamChapter === safeIndex ? (
+                      <span className="ml-2 font-normal text-brand-cyan">live</span>
+                    ) : null}
                     {isDirty ? (
                       <span className="ml-2 font-normal text-brand-amber">speichert…</span>
                     ) : (
@@ -3503,6 +3634,15 @@ export function BookDetailView({
         onGenerated={(urls) => {
           onUpdate({ ...book, coverVariants: [...urls, ...(book.coverVariants ?? [])] });
           setCoverVariantsOpen(false);
+        }}
+      />
+
+      <DerivePreviewDialog
+        preview={derivePreview}
+        onApply={applyDerivePreview}
+        onDiscard={() => {
+          pendingDeriveRef.current = { scenes: [] };
+          setDerivePreview(null);
         }}
       />
     </div>

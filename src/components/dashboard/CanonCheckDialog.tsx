@@ -697,6 +697,14 @@ export function CanonCheckDialog({
                                         Teil {violation.part}
                                       </span>
                                     ) : null}
+                                    {violation.quoteVerified === false ? (
+                                      <span
+                                        className="ml-2 rounded-full border border-brand-amber/40 bg-brand-amber/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-amber"
+                                        title="Das Zitat steht nicht wörtlich im Kapiteltext — das Modell hat umformuliert oder erfunden. Der Befund kann trotzdem stimmen, ist aber nicht belegt."
+                                      >
+                                        ohne Beleg
+                                      </span>
+                                    ) : null}
                                   </span>
                                   <span className="mt-1 block text-xs italic text-foreground/85">
                                     „{violation.quote}“

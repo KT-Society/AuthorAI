@@ -58,14 +58,21 @@ plus Hinweis — verloren geht nichts.
 | Aktion | Was sie tut | Route |
 | --- | --- | --- |
 | **„Storyboard ableiten"** | Meta-Angaben (Titel, Genre, Logline, Synopsis, Themen, Ton, POV), **Figurenliste** und je Kapitel Kurzfassung/POV/Schauplatz/Foreshadowing aus dem Manuskript | `POST /api/storyboard/derive/stream` |
-| **„Szenen ableiten"** | Beats mit Zeit, Schauplatz und POV je Kapitel — einzeln im Szenen-Bereich oder für **alle** Kapitel als Job im Job-Center | `POST /api/chapter/scenes/stream` |
+| **„Szenen ableiten"** | Beats mit Zeit, Schauplatz, POV und **Figuren** je Kapitel — einzeln im Szenen-Bereich oder für **alle** Kapitel als Job im Job-Center | `POST /api/chapter/scenes/stream` |
 
 Beides nutzt das **Storyboard-Model**, ist **gechunkt** (Meta/Figuren, dann Kapitel in Batches à 8;
 lange Kapitel in Teile von ~2.500 Wörtern) und **gestreamt** — Metadaten, Figuren, Kapitel und
-Szenen treffen einzeln in der Live-Vorschau ein, der Fortschritt steht im Job-Center. Überschrieben
-wird nur nach Rückfrage, und geraten wird nicht: Was der Text nicht hergibt, bleibt leer. Die
-abgeleiteten Figuren landen wie beim Anlegen eines Buchs in „Charaktere", „Weltenbau" und im
-Plot-Board.
+Szenen treffen einzeln in der Live-Vorschau ein, der Fortschritt steht im Job-Center. Geraten wird
+nicht: Was der Text nicht hergibt, bleibt leer. Die abgeleiteten Figuren landen wie beim Anlegen
+eines Buchs in „Charaktere", „Weltenbau" und im Plot-Board.
+
+**Geschrieben wird erst nach der Vorschau.** Beide Ableitungen halten ihr Ergebnis im Speicher und
+zeigen es als **Diff** (Storyboard: je Feld und je Kapitel-Kurzfassung; Szenen: je Kapitel die
+Beats samt Zeit, Schauplatz, POV und Figuren). Erst „Übernehmen" schreibt; beim Storyboard wählt
+man dabei zwischen **„alles überschreiben"** und **„nur leere Felder füllen"**, bei Szenen lassen
+sich einzelne Kapitel abwählen. „Verwerfen" kostet damit nur den bereits bezahlten Modellaufruf,
+nie Daten — vorher schrieben beide Ableitungen direkt (das Storyboard nach einer Rückfrage, die
+vor dem Ergebnis geraten war).
 
 ---
 
@@ -340,6 +347,12 @@ RELATIONS (binding — keep these dynamics consistent):
 
 - **Einzelprüfung**: `POST /api/continuity/check` prüft ein Kapitel nur gegen den Kanon und
   nennt Fakt, Zitat und Lösungsvorschlag. Gecacht — identische Prüfung kostet nichts.
+  **Jedes Zitat wird gegen den geprüften Text gehalten** (`quoteMatchesText`, dieselbe Prüfung wie
+  bei der Extraktion): `quoteVerified: false` heißt, das Modell hat umformuliert oder erfunden.
+  Solche Befunde bleiben erhalten und werden als „ohne Beleg" markiert und gezählt (`unverified`) —
+  bewusst keine stille Löschung, denn der Hinweis „hier stimmt etwas nicht, aber belegen kann ich es
+  nicht" ist selbst eine Information. Nur bestätigte Zitate dürfen später im Kapiteltext markiert
+  werden.
 - **Queue mit Live-Ergebnissen**: `POST /api/continuity/check/stream` prüft alle Kapitel
   **parallel** (Standard 3 gleichzeitig, `concurrency` bis 6) und schickt jedes Ergebnis als
   SSE-Ereignis. Die Ergebnisliste füllt sich also während des Laufs; ein fehlerhaftes Kapitel

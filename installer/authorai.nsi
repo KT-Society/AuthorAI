@@ -15,7 +15,7 @@
 Unicode true
 
 !define APP_NAME "AuthorAI"
-!define APP_VERSION "0.5.9"
+!define APP_VERSION "0.6.0"
 !define APP_PUBLISHER "KT-Society & Echo"
 !define APP_EXE "authorai.exe"
 
@@ -25,7 +25,7 @@ InstallDir "$LOCALAPPDATA\Programs\${APP_NAME}"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
 
-VIProductVersion "0.5.9.0"
+VIProductVersion "0.6.0.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} Setup"
 VIAddVersionKey "FileVersion" "${APP_VERSION}"

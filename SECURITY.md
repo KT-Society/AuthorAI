@@ -6,7 +6,7 @@
 
 | Version | Unterstützt |
 | --- | --- |
-| 0.5.x | ✅ |
+| 0.6.x | ✅ |
 | < 0.5 | ❌ |
 
 ## Sicherheitslücken melden

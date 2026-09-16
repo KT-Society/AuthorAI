@@ -8,6 +8,98 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+_Nichts offen — nächste Themen siehe [`roadmap.md`](roadmap.md)._
+
+---
+
+## [0.6.0] — 2026-09-16
+
+### Datenbank sicherbar im laufenden Betrieb, Cache transparent
+
+- **Added** **Sicherung aus der App heraus** (`POST /api/store/backup`): eine konsistente Kopie der
+  Datenbank als Download, erzeugt mit `VACUUM INTO` in eine **neue** Datei — die lebende Datenbank
+  wird nicht angefasst, und die Kopie enthält keine WAL-Reste. Damit lässt sich sichern, ohne den
+  Server zu stoppen. Die Kopie wird nach dem Stream aufgeräumt (unter Windows mit kurzen
+  Wiederholungen, weil die Datei dort noch gesperrt ist).
+- **Added** **Kompaktierung** (`POST /api/store/compact`): WAL-Checkpoint + `VACUUM`, mit Rückfrage
+  in den Einstellungen; das Ergebnis nennt die gesparten Bytes. Nötig, weil die Datenbank im
+  WAL-Modus läuft und mit der Zeit Platz liegen lässt.
+- **Fixed** **Die Speicher-Anzeige war ein toter Pfad:** `GET /api/store/info` wurde beim Öffnen der
+  Einstellungen geladen und das Ergebnis nie gerendert. Jetzt stehen Pfad, Größe (inklusive
+  `-wal`/`-shm`) und Umfang dort, wo man sie sucht.
+- **Added** **Cache-Transparenz** (`GET /api/cache`, leeren per `POST /api/cache/clear`): Die
+  Einstellungen zeigen Trefferquote, Treffer, Fehlschläge und Umfang des Antwort-Caches. Die
+  Zählung existierte im Server schon (`cacheStats()`), wurde aber nirgends benutzt. Die Anzeige
+  sagt ausdrücklich, dass der Cache flüchtig ist — nichts überlebt einen Neustart, und
+  `AUTHORAI_CACHE=0` schaltet ihn ab.
+
+### Figuren je Szene und geprüfte Kanon-Belege
+
+- **Added** **Die Szenen-Ableitung erkennt jetzt, wer in einer Szene vorkommt.** Bisher blieb
+  `beatCharacters` immer leer — obwohl das Feld bis in die Pipeline-Prompts durchverkabelt war
+  (die Szenen-Vorgabe reicht es als `characters` weiter). Der Auftrag verlangt nun **Namen, die
+  wörtlich im Text stehen** (höchstens fünf je Szene, nie erfunden); die Zuordnung Name → Figur
+  macht der Client, weil nur dort die Figurenliste liegt. Ein Name ohne passende Figur legt
+  **keine** neue Figur an, sondern wird gemeldet. Wirkung: Szenen-Chips, Timeline und die
+  Figuren-Vorgabe der Generierung wissen endlich, wer auftritt.
+- **Changed** **Fakten-Check: Zitate werden geprüft — und trotzdem nicht verworfen.** Bei der
+  Kanon-Extraktion wurde jedes Zitat schon gegen den Kapiteltext gehalten, beim Fakten-Check
+  dagegen nur auf „nicht leer" geprüft. Ein Befund trägt jetzt `quoteVerified`; nicht gefundene
+  Zitate erscheinen als **„ohne Beleg"** markiert und werden zusätzlich gezählt („2 Befunde ohne
+  wörtlichen Beleg im Text"). Bewusst **keine** stille Löschung: „hier stimmt etwas nicht, aber
+  belegen kann ich es nicht" ist eine Information, kein Müll.
+- **Added** **Der Beleg steht jetzt auch dort, wo der Fakt gepflegt wird** — im Figuren-Panel und
+  in der Faktenliste der Kontinuität (vorher nur im Vorschlagsdialog). Damit lässt sich ein Fakt
+  gegen die Stelle im Manuskript nachprüfen.
+
+### Ableitungen schreiben nicht mehr direkt (Vorschau mit Diff)
+
+- **Changed** **„Storyboard ableiten" und „Szenen ableiten" schreiben erst nach Bestätigung.**
+  Beide haben das Ergebnis bisher direkt in den State geschrieben — bei einem teuren Lauf ein
+  Blindflug. Jetzt zeigt eine Vorschau je Kapitel den Diff (Beats, Zeit, Schauplatz, POV, Figuren)
+  beziehungsweise je Feld (Genre, Logline, Synopsis, Ton, POV) und schreibt erst nach dem
+  Übernehmen. Szenen-Kapitel lassen sich einzeln abwählen.
+- **Changed** **Die Rückfrage „überschreiben?" vor dem Storyboard-Lauf ist weg** — sie war
+  geraten, bevor das Ergebnis bekannt war. Stattdessen wählt man **nach** dem Lauf am Diff:
+  „alles überschreiben" oder „nur leere Felder füllen". Verwerfen kostet damit nur den bereits
+  bezahlten Modellaufruf, nie Daten.
+- **Added** **„Alle Szenen ableiten" sammelt jetzt alle Kapitel und zeigt eine gemeinsame
+  Vorschau** (statt je Kapitel sofort zu schreiben) — ein misslungenes Kapitel lässt sich
+  abwählen, ohne den Rest zu verlieren.
+
+### Figuren-Dubletten werden zusammengeführt statt gelöscht
+
+- **Added** **Vorschau vor dem Aufräumen**: Der Dialog zeigt je Paar, wer bleibt und wer
+  verschwindet, wie viele Fakten und Beziehungen daran hängen und wie viele davon bei der
+  behaltenen Figur **schon stehen** (werden zusammengefasst, nicht doppelt geführt).
+- **Added** **„Zusammenführen"**: Fakten und Beziehungen der entfernten Figur wandern auf die
+  behaltene; Aussagen werden unscharf verglichen und zusammengefasst, Beziehungen mit gleicher
+  Richtung und Art nur einmal geführt, Selbstbezüge fallen weg. Verweise in Kapitel-Figuren,
+  Szenen-Figuren und der Storyboard-Figurenliste werden mitgezogen.
+  Ursache: Bisher wurden Fakten und Beziehungen beim Aufräumen **mitgelöscht** — stiller
+  Datenverlust an genau der Stelle, an der man aufräumt.
+- **Changed** Der Knopf heißt jetzt „Dubletten prüfen (n)" und öffnet die Vorschau; das alte
+  Verhalten („nur entfernen") bleibt als ausdrücklich benannte zweite Wahl erhalten.
+
+### Job-Center und Editor: Rohentwurf-Lauf und lebender Wortstand
+
+- **Added** **„Alle Rohentwürfe" im Assistenten ist jetzt ein Job** — Fortschritt und Abbruch
+  liegen im Job-Center und überleben das Schließen des Assistenten (dasselbe Muster wie beim
+  Ausbau im Buch-Editor). Bisher gab es nur einen lokalen Balken.
+- **Added** **Der Kapitel-Kopf zählt während des Streams mit.** Der Wortstand sprang bisher erst
+  nach dem Abschluss auf den neuen Wert. Er zählt jetzt live — **nur** wenn der Stream zum offenen
+  Kapitel gehört (bei einer Queue im Hintergrund stünde sonst die Zahl eines fremden Kapitels im
+  Kopf), erkennbar an der Markierung „live".
+
+### Sortieren in Welt, Plot und Notizen
+
+- **Added** **Sortierung in den drei Listen**, die bisher nur filtern konnten: Weltenbau
+  (Standard, Name A–Z, Kategorie, zuletzt angelegt), Plot-Board (Kapitelnummer, Akt — innerhalb
+  der Status-Spalten) und Recherche (Datum, Titel A–Z). Der Standard stellt jeweils exakt die
+  bisherige Reihenfolge wieder her; die Sortierung ist reine Ansicht und berührt die Persistenz
+  nicht. Bewusst **nicht** dabei: „nach Status" im Plot-Board — die Spalte ist der Status, ein
+  solcher Eintrag würde nichts bewegen.
+
 ### Werkzeuge: Workspace-Sicherung dokumentiert
 
 - **Added** **`backup/backup.py` ist jetzt beschrieben — und zwar so, wie es sich wirklich

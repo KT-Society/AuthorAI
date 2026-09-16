@@ -187,12 +187,26 @@ Das Kapitel wird serverseitig gechunkt und je Teil einmal geprüft.
 ```json
 {
   "ok": false,
-  "summary": "2 Widersprüche zum Kanon gefunden.",
+  "summary": "2 Widersprüche zum Kanon gefunden. 1 Befund ohne wörtlichen Beleg im Text.",
+  "unverified": 1,
   "violations": [
-    { "fact": "Elias ist 27", "quote": "Elias, ein alter Mann", "fix": "Alter korrigieren.", "part": 1 }
+    {
+      "fact": "Elias ist 27",
+      "quote": "Elias, ein alter Mann",
+      "fix": "Alter korrigieren.",
+      "part": 1,
+      "quoteVerified": false
+    }
   ]
 }
 ```
+
+Jeder Befund wird gegen **genau den geprüften Text** gehalten (`quoteMatchesText`, dieselbe Prüfung
+wie bei der Kanon-Extraktion): `quoteVerified: true` heißt, das Zitat steht wörtlich im Kapitel;
+`false` heißt, das Modell hat umformuliert oder erfunden. Solche Befunde werden **nicht** verworfen —
+sie bleiben in `violations` und werden zusätzlich in `unverified` gezählt, damit die Anzeige ehrlich
+sagen kann, wie belastbar ein Befund ist. Nur bestätigte Zitate dürfen später im Editor markiert
+werden.
 
 Ohne Kanon antwortet die Route mit **HTTP 400**, bei Token-Abbruch mit **HTTP 502**.
 Der Aufruf ist **cachebar** (identische Prüfung = keine neuen Kosten).
@@ -343,6 +357,45 @@ Unbekannte Sammlungen → **HTTP 400**; im Bulk werden sie still übersprungen (
 Belegung der Datenbank für die Einstellungen: `{ file, sizeBytes, profiles, totalRows, rows[] }`.
 `sizeBytes` enthält **auch** `-wal`/`-shm` (WAL schreibt verzögert — sonst wäre die Anzeige zu
 klein).
+
+### `POST /api/store/backup`
+
+Liefert eine **konsistente Kopie der Datenbank** als Download. Erzeugt wird sie mit `VACUUM INTO`
+in eine **neue** Datei — die lebende Datenbank wird nie verschoben oder umbenannt (unter Windows
+bleibt sie unmittelbar nach dem Schließen kurz gesperrt), und die Kopie enthält keine WAL-Reste.
+
+**Response:** keine JSON-Antwort, sondern die Datei selbst —
+`Content-Type: application/vnd.sqlite3`, `Cache-Control: no-store` und
+`Content-Disposition: attachment; filename="authorai-<YYYYMMDD-HHMMSS>.db"`.
+
+Die Kopie liegt in einem eigenen Temp-Verzeichnis und wird **nach dem vollständigen Stream**
+gelöscht (mit kurzen Wiederholungen, weil Windows die Datei vorher noch hält). Leerer Body,
+keine Parameter. Ausgelöst in den Einstellungen über „Sicherung herunterladen".
+
+### `POST /api/store/compact`
+
+`PRAGMA wal_checkpoint(TRUNCATE)` → `VACUUM` → erneuter Checkpoint. Bewusst **synchron**: reine
+Dateiarbeit, keine Kapitel-Iteration, Dauer im Millisekunden- bis Sekundenbereich.
+
+**Response**
+
+```json
+{ "ok": true, "before": 4194304, "after": 3145728, "saved": 1048576 }
+```
+
+`before`/`after` sind Bytes **inklusive** `-wal`/`-shm` (sonst zeigte der Gewinn zu wenig). Der
+Checkpoint nach dem `VACUUM` entfernt den dabei entstandenen Rest-WAL. Leerer Body, keine
+Parameter; in den Einstellungen mit Rückfrage ausgelöst, das Ergebnis nennt die gesparten Bytes.
+
+### `GET /api/cache`
+
+Trefferquote des **flüchtigen** Antwort-Caches (nichts überlebt einen Neustart, das sagt die
+Anzeige auch): `{ size, hits, misses, enabled }`. `enabled: false`, wenn `AUTHORAI_CACHE=0` gesetzt
+ist. Synchron — winzige JSON-Antwort ohne Kapitelbezug.
+
+### `POST /api/cache/clear`
+
+Leert den Cache und setzt die Zähler zurück. Response `{ "ok": true }`.
 
 ---
 
@@ -610,10 +663,10 @@ also keine verschobenen Kurzfassungen). Ohne Manuskript-Text → **HTTP 400 vor 
 
 ### `POST /api/chapter/scenes/stream`
 
-Leitet die **Szenen eines Kapitels** aus seiner Prosa ab (Beats mit Zeit, Schauplatz, POV) — die
-Grundlage für Timeline-Prüfung und Szenen-Editor. Gestreamt (JSONL); lange Kapitel zerlegt der
-Server vorher **absatzsicher** in Teile von ~2.500 Wörtern. Für ein ganzes Buch läuft das im
-Editor als Job über alle Kapitel.
+Leitet die **Szenen eines Kapitels** aus seiner Prosa ab (Beats mit Zeit, Schauplatz, POV und
+Figuren) — die Grundlage für Timeline-Prüfung und Szenen-Editor. Gestreamt (JSONL); lange Kapitel
+zerlegt der Server vorher **absatzsicher** in Teile von ~2.500 Wörtern. Für ein ganzes Buch läuft
+das im Editor als Job über alle Kapitel; geschrieben wird erst nach der **Diff-Vorschau**.
 
 **Request**
 
@@ -632,7 +685,7 @@ Editor als Job über alle Kapitel.
 ```json
 data: {"type":"start","parts":2}
 data: {"type":"part","done":1,"total":2}                    ← bei mehrteiligen Kapiteln
-data: {"type":"scene","scene":{"text":"…","time":"…","setting":"…","pov":"…"}}
+data: {"type":"scene","scene":{"text":"…","time":"…","setting":"…","pov":"…","characters":["Aria","Theron"]}}
 data: {"type":"done","scenes":[ … ]}
 ```
 
@@ -640,6 +693,12 @@ data: {"type":"done","scenes":[ … ]}
 wenn der Text sie nicht hergibt. Szenen ohne `text` werden verworfen; identische Zeilen über eine
 Teil-Grenze hinweg werden **nicht** gedoppelt (live wie im Ergebnis). Liefert das Modell **keine**
 Szenen → **502**; leerer Kapiteltext → **HTTP 400** (ohne Modell-Aufruf).
+
+`characters` enthält **Namen** (höchstens fünf je Szene), die wörtlich im Text vorkommen — der Server
+kennt keine Figurenliste und kann deshalb **keine IDs** liefern. Das Modell darf sowohl ein Array als
+auch einen Komma-String schicken; beides wird normalisiert. Die Zuordnung Name → Figuren-ID macht der
+**Client** (`findMatchingCharacter`); ein Name ohne passende Figur legt keine Figur an, sondern wird
+gemeldet.
 
 ### `POST /api/world/extract`
 

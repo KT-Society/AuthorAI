@@ -128,12 +128,16 @@ export interface CanonViolation {
   fix: string;
   /** Teil des Kapitels (bei gechunkter Prüfung), 1-basiert. */
   part?: number;
+  /** Steht das Zitat wörtlich im geprüften Text? `false` = umformuliert oder erfunden. */
+  quoteVerified?: boolean;
 }
 
 export interface CanonCheckResult {
   ok: boolean;
   summary: string;
   violations: CanonViolation[];
+  /** Anzahl der Befunde ohne wörtlichen Beleg im Text. */
+  unverified?: number;
 }
 
 export interface CanonCheckRequest {
@@ -153,6 +157,7 @@ export async function checkCanon(input: CanonCheckRequest): Promise<CanonCheckRe
     ok: data.ok === true,
     summary: typeof data.summary === "string" ? data.summary : "",
     violations: Array.isArray(data.violations) ? data.violations : [],
+    unverified: typeof data.unverified === "number" ? data.unverified : 0,
   };
 }
 

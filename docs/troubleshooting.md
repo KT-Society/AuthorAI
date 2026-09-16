@@ -191,6 +191,20 @@ sind vorausgewählt.
 
 ## Import bestehender Manuskripte
 
+### Die Ableitung schreibt nichts — wozu die Vorschau?
+
+„Storyboard ableiten" und „Szenen ableiten" halten ihr Ergebnis **im Speicher** und zeigen es als
+Diff: je Feld beziehungsweise je Kapitel, was sich ändern würde. Erst „Übernehmen" schreibt. Beim
+Storyboard wählt man dabei **„alles überschreiben"** oder **„nur leere Felder füllen"**, bei Szenen
+lassen sich einzelne Kapitel abwählen. Vorher schrieb die Ableitung direkt — bei einem Lauf über
+40 Kapitel war das ein Blindflug.
+
+### Ich habe die Vorschau verworfen — ist der Lauf verloren?
+
+Der **Modellaufruf** ja (er war schon bezahlt), die **Daten** nein: Verwerfen fasst Manuskript,
+Storyboard und Szenen nicht an. Wenn dir einzelne Kapitel nicht gefallen, ist der übliche Weg:
+Vorschau öffnen, unerwünschte Kapitel **abwählen**, Rest übernehmen.
+
 ### Der Import findet nur ein Kapitel
 
 Dann enthielt die Datei keine (wiederkehrenden) Überschriften. Der Import nimmt den Text
@@ -285,7 +299,35 @@ Gewollt: Fakten hängen an Figuren bzw. Welteinträgen und verschwinden mit ihne
 Kettenwirkung, die den Kanon konsistent hält). Der Kanon lässt sich über **„Vorschläge ableiten"**
 in der Kontinuität neu aufbauen.
 
+## Figuren & Dubletten
+
+### Nach dem Zusammenführen fehlen Fakten
+
+Sollten sie nicht. Beim **Zusammenführen** bleiben Fakten und Beziehungen erhalten: Sie wandern auf
+die behaltene Figur, und nur Aussagen, die dort **schon stehen** (unscharf verglichen), werden
+zusammengefasst statt doppelt geführt. Der Dialog nennt beide Zahlen vorab — „3 Fakten, 1 davon
+gibt es schon". Wer gar nichts zusammenführen will: „Nur entfernen" tut weiterhin genau das
+Alte (Fakten und Beziehungen der entfernten Figuren gehen dann mit).
+
+### Ein Figurenname wird nicht zugeordnet (Szene bleibt leer)
+
+Die Szenen-Ableitung liefert **Namen** aus dem Text — sie kennt die Figurenliste nicht. Beim
+Übernehmen wird jeder Name gegen die Figuren des Projekts verglichen (Anreden und Ränge werden
+ignoriert, „Prinzessin Lysara" findet „Lysara"). Findet sich keine Figur, wird **keine** neue
+angelegt: Der Name fällt weg und wird gemeldet („Name ohne Figur"). Figur anlegen, dann die
+Szenen-Ableitung für das Kapitel wiederholen.
+
+---
+
 ## Kanon & Kontinuität
+
+### Was heißt „ohne Beleg" bei einem Befund?
+
+Der Fakten-Check prüft jedes gemeldete Zitat gegen **genau den Kapiteltext** — dieselbe Prüfung wie
+bei der Kanon-Extraktion. Steht das Zitat nicht wörtlich dort, hängt am Befund das Kennzeichen
+**„ohne Beleg"**, und der Bericht zählt sie („2 Befunde ohne wörtlichen Beleg im Text"). Der Befund
+wird **nicht** gelöscht: Er kann trotzdem stimmen — nur nachweisen lässt er sich nicht. Ein Marker
+im Kapiteltext darf sich später ausschließlich auf bestätigte Zitate stützen.
 
 ### Es kommen nur Fakten der ersten Kapitel an
 

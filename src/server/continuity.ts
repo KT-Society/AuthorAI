@@ -565,12 +565,20 @@ export interface CanonViolation {
   fix: string;
   /** Teil des Kapitels (bei gechunkter Prüfung), 1-basiert. */
   part?: number;
+  /**
+   * Steht das Zitat **wörtlich** im geprüften Text? `false` heißt: Das Modell hat umformuliert
+   * oder erfunden. Der Befund bleibt erhalten (er kann trotzdem echt sein) — nur ein Marker im
+   * Text darf sich später ausschließlich auf bestätigte Zitate stützen.
+   */
+  quoteVerified?: boolean;
 }
 
 export interface CanonCheckResult {
   ok: boolean;
   summary: string;
   violations: CanonViolation[];
+  /** Anzahl der Befunde ohne wörtlichen Beleg im Text (Teil von `violations`). */
+  unverified: number;
 }
 
 const MAX_VIOLATIONS = 20;
@@ -607,8 +615,17 @@ ${part}
 Check this part against the canon now and return the JSON, entirely in ${input.language}.`;
 }
 
-/** Normalisiert die Modellantwort und wirft Unbrauchbares weg. */
-function normalizeViolations(value: unknown, part: number): CanonViolation[] {
+/**
+ * Normalisiert die Modellantwort und wirft Unbrauchbares weg.
+ *
+ * Jedes Zitat wird gegen **genau den geprüften Text** gehalten (`quoteMatchesText`) — dieselbe
+ * Prüfung, die die Kanon-Extraktion schon macht. Ein Befund mit erfundenem oder umformuliertem
+ * Zitat wird aber **nicht** verworfen, sondern als unbestätigt markiert
+ * (`quoteVerified: false`): „hier stimmt etwas nicht, aber belegen kann ich es nicht" ist mehr
+ * wert als eine stille Löschung. Verlässlich wird daraus erst die Grundlage für einen Marker im
+ * Kapiteltext — der darf sich später nur auf bestätigte Zitate stützen.
+ */
+function normalizeViolations(value: unknown, part: number, partText: string): CanonViolation[] {
   const raw = asRecord(value).violations;
   const result: CanonViolation[] = [];
   for (const entry of Array.isArray(raw) ? raw : []) {
@@ -616,7 +633,13 @@ function normalizeViolations(value: unknown, part: number): CanonViolation[] {
     const fact = str(item.fact);
     const quote = str(item.quote);
     if (!fact || !quote) continue; // ohne beide Seiten ist es keine überprüfbare Meldung
-    result.push({ fact, quote, fix: str(item.fix), part });
+    result.push({
+      fact,
+      quote,
+      fix: str(item.fix),
+      part,
+      quoteVerified: quoteMatchesText(quote, partText),
+    });
   }
   return result;
 }
@@ -660,7 +683,7 @@ export async function checkCanon(input: CanonCheckInput): Promise<CanonCheckResu
       );
     }
 
-    for (const violation of normalizeViolations(parseJson(content), index + 1)) {
+    for (const violation of normalizeViolations(parseJson(content), index + 1, chunks[index] ?? "")) {
       // Dubletten über Teile hinweg vermeiden (gleicher Fakt + gleiches Zitat).
       const key = `${nameKey(violation.fact)}|${nameKey(violation.quote)}`;
       if (violations.some((item) => `${nameKey(item.fact)}|${nameKey(item.quote)}` === key)) continue;
@@ -670,15 +693,23 @@ export async function checkCanon(input: CanonCheckInput): Promise<CanonCheckResu
     if (violations.length >= MAX_VIOLATIONS) break;
   }
 
+  const unverified = violations.filter((violation) => violation.quoteVerified === false).length;
   const ok = violations.length === 0;
+  const base = ok
+    ? "Keine Widersprüche zum Kanon gefunden."
+    : violations.length === 1
+      ? "1 Widerspruch zum Kanon gefunden."
+      : `${violations.length} Widersprüche zum Kanon gefunden.`;
   return {
     ok,
-    summary: ok
-      ? "Keine Widersprüche zum Kanon gefunden."
-      : violations.length === 1
-        ? "1 Widerspruch zum Kanon gefunden."
-        : `${violations.length} Widersprüche zum Kanon gefunden.`,
+    // Ehrlich bleiben: Ein Befund ohne wörtlichen Beleg ist schwächer — das gehört in den Bericht,
+    // nicht unter den Tisch. Die Zahl steht getrennt, damit man sie nicht mit den Befunden verwechselt.
+    summary:
+      unverified === 0
+        ? base
+        : `${base} ${unverified === 1 ? "1 Befund" : `${unverified} Befunde`} ohne wörtlichen Beleg im Text.`,
     violations,
+    unverified,
   };
 }
 

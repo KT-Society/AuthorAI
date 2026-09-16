@@ -65,6 +65,7 @@ import { fetchConfig } from "@/services/generate";
 import type { AppConfig } from "@/services/generate";
 import { buildCoverPrompt, generateCover } from "@/services/cover";
 import { streamPass, streamStoryboard } from "@/services/story";
+import { createJob, createJobStreamReporter, finishJob, isCancelled, updateJob } from "@/lib/jobs";
 import type { PassResult } from "@/services/story";
 import { streamJson } from "@/services/stream";
 import { streamCanonCheck, streamCanonRepair } from "@/services/continuity";
@@ -520,20 +521,44 @@ export function BookWizard({
     if (!id || !storyboard) return;
     setError(null);
     const total = chapters.length;
+    /**
+     * Als Job statt nur als lokaler Balken: Der Lauf über alle Kapitel dauert Minuten und soll das
+     * Schließen des Assistenten überleben — Fortschritt, Wortstand und Abbruch wie im Buch-Editor.
+     */
+    const jobId = createJob({
+      title: storyboard.title ? `${storyboard.title}: Rohentwürfe` : "Rohentwürfe schreiben",
+      kind: "draft",
+      total,
+    });
+    let done = 0;
+    let failure: string | null = null;
     setProgress({ done: 0, total });
     for (let index = 0; index < total; index += 1) {
+      if (isCancelled(jobId)) break;
       if ((drafts[index] ?? "").trim()) {
-        setProgress({ done: index + 1, total });
+        done += 1;
+        updateJob(jobId, { done });
+        setProgress({ done, total });
         continue;
       }
       setBusy(`Rohentwurf ${index + 1}/${total}…`);
       setStreamText("");
       setStreamLabel(`Rohentwurf · Kapitel ${index + 1}/${total}`);
+      updateJob(jobId, { label: `Kapitel ${index + 1}` });
+      const reporter = createJobStreamReporter(
+        jobId,
+        (words) => `Kapitel ${index + 1} · ${words.toLocaleString("de-DE")} Wörter`,
+      );
       try {
         const draft = await streamJson(
           "/api/chapter/draft/stream",
           { storyboard, chapterIndex: index, model: id, language, canon: seriesData.canon },
-          { onDelta: (delta) => setStreamText((prev) => `${prev ?? ""}${delta}`) },
+          {
+            onDelta: (delta) => {
+              setStreamText((prev) => `${prev ?? ""}${delta}`);
+              reporter(delta);
+            },
+          },
         );
         setDrafts((prev) => {
           const next = [...prev];
@@ -542,15 +567,25 @@ export function BookWizard({
         });
         onWordsWritten(countWords(draft));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
+        failure = err instanceof Error ? err.message : "Unbekannter Fehler.";
+        setError(failure);
         break;
       }
-      setProgress({ done: index + 1, total });
+      done += 1;
+      updateJob(jobId, { done });
+      setProgress({ done, total });
     }
     setStreamText(null);
     setStreamLabel(null);
     setBusy(null);
     setProgress(null);
+    if (isCancelled(jobId)) {
+      finishJob(jobId, "cancelled", `Rohentwürfe abgebrochen · ${done} Kapitel fertig`);
+    } else if (failure) {
+      finishJob(jobId, "error", failure);
+    } else {
+      finishJob(jobId, "done", `${done} von ${total} Kapiteln mit Rohentwurf`);
+    }
   };
 
   const runExpand = async (index: number) => {

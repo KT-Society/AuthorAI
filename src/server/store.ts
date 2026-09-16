@@ -13,6 +13,7 @@
 
 import { Database } from "bun:sqlite";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { isStateCollection } from "../data/state";
@@ -138,6 +139,74 @@ function fileSize(file: string): number {
   }
 }
 
+/** Zeitstempel für Dateinamen: `YYYYMMDD-HHMMSS` (lokal, sortierbar). */
+export function timestampSlug(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return (
+    `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}` +
+    `-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+  );
+}
+
+/** Belegte Bytes auf Platte, inklusive WAL/SHM — sonst wäre die Anzeige zu klein. */
+export function storeSize(): number {
+  const file = databaseFile();
+  return [file, `${file}-wal`, `${file}-shm`].reduce((sum, part) => sum + fileSize(part), 0);
+}
+
+/**
+ * Konsistente Kopie der Datenbank in eine **neue** Datei (`VACUUM INTO`).
+ *
+ * Die lebende Datei wird nie verschoben oder umbenannt — unter Windows bleibt sie unmittelbar
+ * nach dem Schließen kurz gesperrt. Rückgabe ist der Pfad der Kopie; der Aufrufer löscht sie.
+ */
+export function createSnapshot(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "authorai-snapshot-"));
+  const target = path.join(dir, `authorai-${timestampSlug()}.db`);
+  try {
+    // VACUUM INTO schreibt eine sortierte, konsistente Sicherung ohne WAL-Reste.
+    store().query("VACUUM INTO ?").run(target);
+  } catch (err) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    throw err;
+  }
+  return target;
+}
+
+/** WAL-Reste in die Hauptdatei schreiben und die Datei komprimieren. */
+export function compactStore(): { before: number; after: number } {
+  const db = store();
+  // TRUNCATE entfernt zusätzlich die -wal-Datei, sonst würde sie den Gewinn wieder auffressen.
+  db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+  const before = storeSize();
+  db.exec("VACUUM;");
+  // Nach VACUUM kann ein Rest-WAL entstehen — der Aufruf entfernt ihn für eine ehrliche Anzeige.
+  db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+  return { before, after: storeSize() };
+}
+
+/**
+ * Löscht eine Snapshot-Datei. Unter Windows kann die Datei noch kurz gesperrt sein —
+ * deshalb ein paar Versuche mit kurzer Pause; scheitert alles, räumt das Temp-Verzeichnis
+ * das nächste System auf.
+ */
+export function removeSnapshot(file: string): void {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      fs.rmSync(file, { force: true });
+      const dir = path.dirname(file);
+      // Nur unser eigenes mkdtemp-Verzeichnis entfernen — nie darüber hinaus.
+      if (path.basename(dir).startsWith("authorai-snapshot-")) {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+      return;
+    } catch {
+      // Windows hält die Datei kurz nach dem Schreiben — kurz warten und erneut versuchen.
+      Bun.sleepSync(50);
+    }
+  }
+}
+
 /** Belegung für die Anzeige in den Einstellungen. */
 export function storeInfo(): {
   file: string;
@@ -155,7 +224,7 @@ export function storeInfo(): {
 
   // WAL: frisch Geschriebenes liegt noch in `-wal`/`-shm` — sonst wäre die Anzeige zu klein.
   const file = databaseFile();
-  const sizeBytes = fileSize(file) + fileSize(`${file}-wal`) + fileSize(`${file}-shm`);
+  const sizeBytes = storeSize();
 
   const profiles = store()
     .query<{ count: number }, []>("SELECT COUNT(DISTINCT profile_id) AS count FROM state")

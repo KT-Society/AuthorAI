@@ -36,6 +36,15 @@ import { Badge, EmptyState, Panel, ViewHeader } from "./primitives";
 import { WORLD_CATEGORY_TONE, WorldExtractDialog } from "./WorldExtractDialog";
 import type { WorldCandidate } from "./WorldExtractDialog";
 
+type SortKey = "default" | "name" | "category" | "updated";
+
+const SORTS: Record<SortKey, string> = {
+  default: "Standard",
+  name: "Name A–Z",
+  category: "Kategorie",
+  updated: "Zuletzt angelegt",
+};
+
 export function WorldView({
   entries,
   books,
@@ -58,6 +67,7 @@ export function WorldView({
 }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<WorldCategory | "all">("all");
+  const [sort, setSort] = useState<SortKey>("default");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -198,7 +208,7 @@ export function WorldView({
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return entries.filter((entry) => {
+    const filtered = entries.filter((entry) => {
       const matchesCategory = category === "all" || entry.category === category;
       const matchesQuery =
         normalized.length === 0 ||
@@ -207,7 +217,28 @@ export function WorldView({
         entry.tags.some((tag) => tag.toLowerCase().includes(normalized));
       return matchesCategory && matchesQuery;
     });
-  }, [entries, query, category]);
+    // "Standard" lässt die Eingabereihenfolge unangetastet — die Ansicht zeigt dann exakt das,
+    // was gespeichert ist (neue Einträge werden vorn eingefügt), ohne stilles Umsortieren.
+    if (sort === "default") return filtered;
+    const categoryRank = (value: WorldCategory) => {
+      const index = WORLD_CATEGORIES.indexOf(value);
+      return index === -1 ? WORLD_CATEGORIES.length : index;
+    };
+    return [...filtered].sort((a, b) => {
+      switch (sort) {
+        case "name":
+          return a.title.localeCompare(b.title, "de");
+        case "category":
+          return (
+            categoryRank(a.category) - categoryRank(b.category) ||
+            a.title.localeCompare(b.title, "de")
+          );
+        default:
+          // Kein eigenes Änderungsdatum im Modell — der bestehende Stand ist die Anlagezeit.
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    });
+  }, [entries, query, category, sort]);
 
   const openNew = () => {
     setEditingId(null);
@@ -340,6 +371,20 @@ export function WorldView({
           <Trash2 className="size-3.5" />
           Alle löschen
         </Button>
+        <div className="ml-auto">
+          <Select value={sort} onValueChange={(value) => setSort(value as SortKey)}>
+            <SelectTrigger size="sm" className="glass w-48 border-white/10">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="glass-strong border-white/10">
+              {(Object.keys(SORTS) as SortKey[]).map((key) => (
+                <SelectItem key={key} value={key}>
+                  {SORTS[key]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {error ? (
