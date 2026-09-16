@@ -40,6 +40,7 @@ Keys siehe [`configuration.md`](configuration.md).
 | `bun run --cwd packages/promptgen dev` | nur promptgen |
 | `bun run version:bump <x.y.z>` | App-Version an allen Stellen + Changelog-Abschnitt setzen (`--dry-run`, `--force`) |
 | `bun run check` | Syntax-, Import- und Markdown-Link-Checks (`scripts/check.ts`) |
+| `python backup/backup.py` | Workspace-Archiv (RAR/ZIP) nach `backup/` — **kein** Bun-Task, operaterseitig (siehe unten) |
 | `ALL_DRY=1 bun run scripts/all.ts dev` | Tasks nur auflisten (Dry-Run) |
 
 Für Signierung, Installer und Auslieferung: [`release.md`](release.md)
@@ -54,6 +55,67 @@ Für Signierung, Installer und Auslieferung: [`release.md`](release.md)
 - **Zero-Warning-Haltung:** Warnungen (Build, Typen, Lint) gelten als Mangel und werden
   an der Wurzel behoben — nicht ignoriert.
 - **Bestehende Testfehler** werden nicht eigenmächtig angefasst; neue Fehler schon.
+
+---
+
+## Workspace-Sicherung (`backup/backup.py`)
+
+Ein **eigenständiges Python-Skript** (kein Bun-Task, kein App-Bestandteil) für den **Operator**:
+Es packt den kompletten Repository-Stand in ein Archiv — als Sicherung **vor** Version-Bumps,
+größeren Umbauten, Datenbank-Eingriffen oder einem Release.
+
+```bash
+python backup/backup.py                 # fragt interaktiv nach dem Format
+python backup/backup.py --format rar    # RAR erzwingen (Fallback ZIP ohne WinRAR)
+python backup/backup.py --format zip    # ZIP erzwingen
+```
+
+| | |
+| --- | --- |
+| **Ablage** | `backup/WORKSPACE_v<version>_backup_<YYYYmmdd_HHMMSS>.<ext>` |
+| **Version** | Überschrift `## [x.y.z]` aus dem Root-`CHANGELOG.md`, sonst `version` aus `package.json`; für den Dateinamen fallen alle Nicht-Alphanumerik-Zeichen weg (`0.5.9` → `v059`) |
+| **Format** | RAR mit maximaler Kompression (`-m5`) über WinRAR aus `PATH` oder Standard-Installationspfad; ist kein WinRAR da → automatisch ZIP (Deflate Level 9). Ohne TTY und ohne `--format` ebenfalls ZIP |
+| **Aufräumen** | Nach jedem Lauf bleiben die **50 neuesten** Archive in `backup/`, ältere werden gelöscht |
+| **Log** | Vollständig auf stdout: Dateizahl, Gesamtgröße, Fortschritt alle 500 Dateien, Dauer |
+| **Robustheit** | Nicht lesbare Dateien/Ordner werden übersprungen statt abzubrechen; RAR-Lauf mit 1 h Timeout |
+
+**Nicht im Archiv:** `node_modules`, `.turbo`, `.build` und bereits vorhandene Archive
+(`*.rar`, `*.zip`). Vom `backup/`-Ordner selbst wird nur der Inhalt übersprungen, der ein Archiv
+ist — Dateien darin, die **keine** Archive sind, bleiben im Backup.
+
+**Enthalten** (gitignorierte Laufzeitdaten ausdrücklich mit, weil das Skript das Dateisystem
+scannt und nicht Git):
+
+| Pfad | Warum es wichtig ist |
+| --- | --- |
+| `.env` | **Enthält die API-Keys** → Archive sind vertraulich, nie weitergeben oder hochladen |
+| `data/` | `authorai.db` **plus** `-shm`/`-wal` — die Profildaten |
+| `covers/`, `release/` | Erzeugte Cover und vorhandene Builds/Installer (treiben die Archivgröße) |
+| `.git/` | komplette Repository-Historie |
+| `.echo/` | persönliche Agent-Konfiguration (ebenfalls mit `.env` darin) |
+
+> **Vor der Sicherung den Dev-Server stoppen.** SQLite läuft im WAL-Modus: bei laufendem Server
+> können Schreibvorgänge noch in `-wal`/`-shm` stehen — eine Kopie im laufenden Betrieb ist
+> unnötig riskant, obwohl beide Dateien mitgesichert werden.
+
+> **`backup.py` reist mit.** Das Skript überspringt sein `backup/`-Verzeichnis, nimmt daraus aber
+> jede Datei mit, die kein Archiv ist — `backup.py` selbst gehört dazu, damit ein wiederhergestellter
+> Stand sofort weiter sichern kann. (Bis 0.5.9 war die Sonderregel im Code wirkungslos: der ganze
+> Ordner wurde übersprungen, **bevor** sie greifen konnte — geprüft an einem echten Archiv.)
+> `backup/backup.py` ist versioniert (Git, nicht ignoriert); die Archive sind über
+> `*.rar`/`*.zip` in `.gitignore` abgedeckt.
+
+**Wiederherstellen**
+
+1. Archiv entpacken.
+2. Den Inhalt über den Workspace legen (bestehende Dateien ersetzen).
+3. `bun install` — `node_modules` ist bewusst nicht im Archiv.
+4. Dev-Server starten; `.env`, `data/authorai.db` und `backup/backup.py` sind enthalten, das
+   Profil ist also sofort da — und das Sicherungs-Skript auch.
+
+Das ist **nicht** zu verwechseln mit dem **Projekt-Backup** der Anwendung: Das ist eine
+App-Funktion und exportiert einzelne Profildaten als JSON aus dem Browser
+(siehe [`architecture.md`](architecture.md)).
 
 ---
 

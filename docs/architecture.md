@@ -195,6 +195,9 @@ Typen + Seed-Daten, frei von UI-Logik:
   `ImportMarkdownDialog.tsx` (Manuskript-Import mit Vorschau der erkannten Kapitel),
   `CharacterContinuityPanel.tsx`
   (Fakten-/Beziehungs-Panels im Charakter-Editor), `ToastHost`
+- **Karten, Listen & Panels:** `BookCard`, `BookLibrary` (Raster, Filter und Suche der Bibliothek),
+  `CharacterCard`, `IdeaList`, `StatGrid` (Kennzahlen-Raster), `ActivityFeed` (Aktivität),
+  `ContinueHero` („Weiter schreiben"), `GoalPanel` (Ziele/Statistiken)
 
 Die UI-Basis liegt in `src/components/ui/*` (shadcn-Stil, Radix-basiert).
 

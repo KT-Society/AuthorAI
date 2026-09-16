@@ -23,9 +23,16 @@ bun run --cwd packages/promptgen dev   # nur promptgen
 ALL_DRY=1 bun run scripts/all.ts dev   # Tasks nur auflisten
 bun run check                # Syntax-, Import- und Markdown-Link-Checks
 bun run version:bump <x.y.z> # App-Version an allen Stellen setzen (--dry-run zum Prüfen)
+
+python backup/backup.py      # Workspace-Archiv (RAR/ZIP) nach backup/ — nur Operator
 ```
 
 Ports: Root **3000**, promptgen **3001** (`PORT` überschreibbar).
+
+Die Workspace-Sicherung ist **kein Bun-Task** und läuft außerhalb der App: `python backup/backup.py`
+(Format wahlweise `python backup/backup.py --format rar|zip`). Sie archiviert den **Workspace**,
+nicht die Profildaten — Inhalt, Ausschlüsse und Wiederherstellung:
+[`docs/development.md`](docs/development.md).
 
 ---
 
@@ -37,6 +44,10 @@ Ports: Root **3000**, promptgen **3001** (`PORT` überschreibbar).
   Die **Engine** (Environment, Config, Soul-Synthese) wird von der Root-App über den
   TS-Alias **`@promptgen/*`** genutzt.
 - **Task-Runner**: `scripts/all.ts` führt `dev`/`build`/`start` für Root **und** Workspaces aus.
+- **`backup/backup.py`**: eigenständiges Python-Skript des **Operators** — packt den kompletten
+  Workspace als RAR/ZIP nach `backup/` (ohne `node_modules`, `.turbo`, `.build` und vorhandene
+  Archive; die Laufzeitdaten `data/` und `covers/` sind **enthalten**). Kein App-Bestandteil,
+  wird nicht ausgeliefert.
 - **Server-Speicher**: Alle Fachdaten liegen in **SQLite** (`bun:sqlite`) unter
   `<runtimeRoot>/data/authorai.db` (gitignored) — kein `localStorage`-Limit mehr. Die App lädt
   sie beim Start einmal (`hydrateState`) und arbeitet im Speicher; geschrieben wird gebündelt
@@ -154,7 +165,7 @@ Doku ist Teil der Lieferung, nicht Nacharbeit. **Vor jedem „fertig"** prüfen,
 | Neue Module, Views, Dialoge, Schichten | `docs/architecture.md` (Modul-/View-Tabellen) |
 | Env-Variablen, Settings-Keys, Modelle | `docs/configuration.md` |
 | Filtern/Suchen/Sortieren, neue Einstellungen | `docs/development.md` bzw. die betroffene Feature-Doku |
-| **Version** | `bun run version:bump <x.y.z>` — schreibt `package.json`, promptgen, beide Installer, README, `docs/README.md`, `SECURITY.md` und den Changelog-Abschnitt |
+| **Version** | `bun run version:bump <x.y.z>` — schreibt `package.json`, promptgen, beide Installer, README, `docs/README.md`, `SECURITY.md` und den Changelog-Abschnitt. **Achtung:** das Root-`CHANGELOG.md` (Startseiten-Zusammenfassung) muss die Zielversion **vorher** tragen — der Bump bricht sonst ab (`docs/release.md`) |
 | Release, Signierung, Installer | `docs/release.md` |
 | Commands, Checklisten, harte Regeln | **diese Datei** (`AGENTS.md`) |
 
@@ -188,8 +199,8 @@ Wurzel behoben. **Bestehende** Testfehler werden nicht eigenmächtig angefasst �
 
 ## Arbeitsweise in diesem Repo
 
-- **Der Operator führt aus:** `bun install`, Builds, Datenbank-/Cover-Backups,
-  Git-Commits und Pushes.
+- **Der Operator führt aus:** `bun install`, Builds, Workspace-Sicherungen
+  (`python backup/backup.py`), Datenbank-/Cover-Backups, Git-Commits und Pushes.
 - **Der Agent schreibt:** Code, Fixes, Pläne, Implementierungen — und verifiziert statisch.
 - Neue Pläne unter `.echo/plans/` beginnen mit `new_`; nach Abschluss auf `done_` umbenennen.
 - **Doku aktuell halten** — welche Datei bei welcher Änderung nachgezogen wird, steht in

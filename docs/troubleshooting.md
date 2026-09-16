@@ -366,6 +366,57 @@ unterschiedliche Profile wie getrennte Bibliotheken.
 
 ---
 
+## Workspace-Sicherung (`backup/backup.py`)
+
+### Ich will vor einem Umbau den kompletten Stand sichern
+
+```bash
+python backup/backup.py                 # fragt nach dem Format
+python backup/backup.py --format zip     # ohne Rückfrage
+```
+
+Läuft außerhalb der App (kein Bun-Task) und legt
+`backup/WORKSPACE_v<version>_backup_<Zeitstempel>.<ext>` an. **Vorher den Dev-Server stoppen** —
+die SQLite-Datenbank läuft im WAL-Modus. Details: [`development.md`](development.md).
+
+### RAR wird nicht gefunden
+
+Kein Problem: Meldet das Skript „RAR/WinRAR nicht gefunden", wechselt es automatisch auf **ZIP**.
+Für RAR muss WinRAR installiert sein (oder `rar`/`winrar` im `PATH` liegen).
+
+### Der Dateiname trägt eine falsche Version
+
+Das Skript liest die **erste** Versions-Überschrift (`## [x.y.z]`) aus dem Root-`CHANGELOG.md`;
+erst wenn es keine findet, nimmt es `version` aus `package.json`. Beide Wege waren zwischenzeitlich
+gestört — das Root-`CHANGELOG.md` hatte gar keine Versions-Überschriften und hing sieben Releases
+zurück, deshalb kam die Version immer aus `package.json`. Behoben: Das Dokument führt jetzt
+`## [x.y.z]`-Überschriften. Stimmt der Wert trotzdem nicht, steht im Dokument **nicht** die neueste
+Version oben (die erste Überschrift gewinnt). Punkte entfallen im Dateinamen (`0.5.9` → `v059`).
+
+### Das Archiv ist riesig
+
+Erwartet. Ausgeschlossen sind nur `node_modules`, `.turbo`, `.build` und vorhandene Archive —
+**enthalten** sind dagegen `.git/` (Historie), `release/` (Builds und Installer), `covers/` und
+`data/` (Datenbank). Release-Ordner vorher aufräumen, wenn das Archiv klein bleiben soll.
+
+### Nach dem Entpacken fehlt `backup.py`
+
+Sollte nicht mehr vorkommen. Bis 0.5.9 übersprang das Skript sein **eigenes** `backup/`-Verzeichnis
+vollständig — die Sonderregel für `backup.py` war dadurch wirkungslos und das Skript fehlte im
+Archiv. Jetzt nimmt es aus `backup/` jede Datei mit, die kein Archiv ist; `backup.py` ist damit
+enthalten. Bei einem **alten** Archiv das Skript aus dem Git-Repository nachkopieren.
+
+### Wie hole ich einen Stand zurück?
+
+1. Archiv entpacken.
+2. Inhalt über den Workspace kopieren (bestehende Dateien ersetzen).
+3. `bun install` (die `node_modules` fehlen bewusst).
+4. Server starten — `.env` und `data/authorai.db` sind im Archiv, das Profil ist sofort wieder da.
+
+> Entpackte Archive enthalten die **API-Keys** aus `.env`. Nicht weitergeben, nicht hochladen.
+
+---
+
 ## Wenn nichts hilft
 
 1. Terminal-Output des Dev-Servers lesen (dort stehen die API-Fehler).

@@ -105,8 +105,17 @@ class WorkspaceBackup:
                             # Überspringe ausgeschlossene Ordner
                             if name_lower in self.excluded_dirs:
                                 continue
-                            # Überspringe den Ziel-Backup-Ordner
+                            # Überspringe den Ziel-Backup-Ordner — aber nicht blind: Dateien darin,
+                            # die keine Archive sind (z. B. backup.py selbst, siehe should_exclude),
+                            # gehören ins Backup, damit ein wiederhergestellter Stand sichern kann.
                             if entry_path.resolve() == self.backup_dir:
+                                with os.scandir(entry_path) as kept_entries:
+                                    for kept in kept_entries:
+                                        kept_path = Path(kept.path)
+                                        if kept.is_file() and not self.should_exclude(kept_path):
+                                            files_to_backup.append(str(kept_path))
+                                            with suppress(OSError):
+                                                total_size += kept.stat().st_size
                                 continue
                             # Rekursiver Aufruf
                             scan_directory(entry.path)

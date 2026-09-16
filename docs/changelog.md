@@ -8,7 +8,49 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
-_Nichts offen — nächste Themen siehe [`roadmap.md`](roadmap.md)._
+### Werkzeuge: Workspace-Sicherung dokumentiert
+
+- **Added** **`backup/backup.py` ist jetzt beschrieben — und zwar so, wie es sich wirklich
+  verhält.** Das eigenständige Python-Skript (kein Bun-Task, kein App-Bestandteil) packt den
+  kompletten Workspace als RAR/ZIP nach `backup/`: Aufruf, Ablage, Version im Dateinamen, Format
+  samt RAR→ZIP-Fallback, Ausschlüsse, Aufräumen (50 neueste Archive) und die Wiederherstellung
+  stehen in [`development.md`](development.md), die Fehlerfälle in
+  [`troubleshooting.md`](troubleshooting.md). In `AGENTS.md` sind Befehl, Einordnung und die
+  Operator-Zuordnung ergänzt.
+- **Fixed** **`backup.py` fehlte im eigenen Archiv**: Das Skript überspringt sein
+  `backup/`-Verzeichnis, damit sich Archive nicht selbst einpacken — dabei fiel auch das Skript
+  selbst heraus, obwohl `should_exclude` es ausdrücklich behalten wollte (toter Code, an einem
+  echten 80-MB-Archiv nachgeprüft: 0 Treffer für `backup.py`). Jetzt wird aus `backup/` jede Datei
+  mitgenommen, die **kein** Archiv ist; ein wiederhergestellter Stand kann sofort weiter sichern.
+- **Noted** **Archivinhalt ist sicherheitsrelevant:** Enthalten sind `.env` (API-Keys), `data/`
+  (`authorai.db` samt `-wal`/`-shm`), `covers/`, `release/`, `.git/` und `.echo/`. Die Doku sagt
+  deshalb ausdrücklich: vor der Sicherung den Dev-Server stoppen (WAL) und das Archiv vertraulich
+  behandeln. `backup/backup.py` bleibt versioniert; die Archive sind über `*.rar`/`*.zip` in
+  `.gitignore` abgedeckt.
+
+### Doku: die Startseiten-Zusammenfassung driftete
+
+- **Fixed** **Root-`CHANGELOG.md` stand auf „Aktuell: 0.2.0", während die App auf 0.5.9 lief** —
+  sieben Releases Rückstand. Ursache: `bun run version:bump` schreibt sieben Stellen, diese Datei
+  ist keine davon (sie ist eine **gepflegte** Kurzfassung, keine generierte). Sie ist jetzt auf
+  0.5.9 nachgezogen: jeder Release einmal, neueste zuerst; 0.4.0, 0.5.0 und 0.5.5 als Absatz.
+- **Changed** **Root-`CHANGELOG.md` nutzt Versions-Überschriften (`## [x.y.z] — <Datum>`)** — und
+  damit greift die **erste** Quelle im Sicherungs-Skript wieder, die vorher nie matchte:
+  `backup/backup.py` liest die Version für seinen Dateinamen jetzt wirklich aus dem Changelog
+  (`0.5.9` → `WORKSPACE_v059_backup_….zip`), der `package.json`-Fallback bleibt. Ein Hinweisblock
+  im Dokument erklärt die Pflicht, damit sie nicht wieder still zurückfällt.
+- **Added** **Wächter im Versionsskript**: `scripts/version.ts` bricht jetzt **vor** dem Schreiben
+  ab, wenn die Zielversion im Root-`CHANGELOG.md` fehlt. Das Skript kann die Datei nicht selbst
+  erzeugen (Bulletpoints erfindet es nicht) — aber sie kann auch nicht mehr still zurückfallen.
+- **Changed** **`docs/architecture.md`**: Die View-Bausteine, die nur im Code existierten, sind
+  jetzt gelistet (`BookCard`, `BookLibrary`, `CharacterCard`, `IdeaList`, `StatGrid`,
+  `ActivityFeed`, `ContinueHero`, `GoalPanel`).
+- **Noted** **Komplettdoku-Abgleich (Ergebnis):** Alle 34 Routen aus `src/index.ts` stehen in
+  [`api.md`](api.md), alle Module aus `src/lib` und `src/server` in
+  [`architecture.md`](architecture.md), und die zuletzt hinzugekommenen Typen/Felder
+  (`storyboardImported`, `canonScannedChapters`, `CanonFact.quote`, `sceneMeta`, `beatCharacters`)
+  in [`data-model.md`](data-model.md). Die Versionen sind danach über `README.md`,
+  `docs/README.md`, `SECURITY.md`, beide Installer und `package.json` deckungsgleich.
 
 ---
 

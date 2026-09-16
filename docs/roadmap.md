@@ -97,6 +97,9 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   auch wenn das Browser-Limit jetzt keine Rolle mehr spielt
 - **Datenbank-Backup und -Kompaktierung**: `VACUUM`/WAL-Checkpoint aus den Einstellungen,
   Sicherung der `.db`-Datei im laufenden Betrieb
+- **Sicherung im laufenden Betrieb**: Das Workspace-Archiv (`backup/backup.py`) nimmt die
+  SQLite-Datei samt `-wal`/`-shm` mit — sauberer wäre ein `VACUUM INTO`-Snapshot aus dem
+  laufenden Server, damit die Sicherung ohne Serverstopp konsistent ist
 - **Mehrere Datenbank-Profile (Dateien)**: Projekte als eigene `.db` öffnen/wechseln
 - **Storyboard-Teillauf fortsetzen**: Bricht der Entwurf in Phase 2 ab (Modell-Aussetzer, Timeout),
   beginnt er heute komplett von vorn — sinnvoll wäre, den Rest der Batches nachzuholen

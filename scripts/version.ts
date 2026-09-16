@@ -11,6 +11,11 @@
  * Wird eine vergessen, driften README, SECURITY, Installer und App auseinander. Das Skript
  * schreibt alle Stellen, prüft danach nach und bricht ab, wenn ein Muster nicht mehr passt.
  *
+ * Achte Stelle, aber **nicht** schreibbar: das Root-`CHANGELOG.md` ist eine gepflegte
+ * Zusammenfassung (Bulletpoints je Release). Das Skript erfindet keine Inhalte — es **prüft**
+ * nur, dass die Zielversion dort schon steht, und bricht sonst ab (sonst driftet die Datei
+ * still: bei 0.5.9 stand dort noch „Aktuell: 0.2.0").
+ *
  * Bewusst NICHT angefasst: `META_VERSION` (data/author.ts) und `BACKUP_VERSION`
  * (lib/backup.ts) — das sind **Datenformat-Versionen**, keine App-Versionen.
  *
@@ -191,7 +196,8 @@ if (flags.has("--help") || positional.length === 0) {
 
   Stellen: package.json · packages/promptgen/package.json · installer/authorai.iss ·
            installer/authorai.nsi (2×) · README.md · docs/README.md · SECURITY.md ·
-           docs/changelog.md`);
+           docs/changelog.md
+  Geprüft (nicht geschrieben): CHANGELOG.md — muss die Zielversion bereits tragen`);
   // Explizite Hilfe ist kein Fehler, ein Aufruf ohne Argumente schon.
   process.exit(flags.has("--help") ? 0 : 1);
 }
@@ -250,6 +256,26 @@ for (const [file, entries] of byFile) {
   }
 }
 
+// Wurzel-CHANGELOG.md: gepflegte Kurzfassung je Release — das Skript kann sie nicht schreiben.
+// Es verlangt, dass sie die Zielversion **schon** trägt, und bricht sonst ab, **bevor** etwas
+// geschrieben wird. Damit ist die Drift ausgeschlossen (0.5.9 stand dort noch als 0.2.0).
+if (!read("CHANGELOG.md").includes(`[${target}]`)) {
+  problems.push(
+    `CHANGELOG.md: Zielversion ${target} fehlt — oben einen Abschnitt ` +
+      `„## [${target}] — ${today()}" anlegen und den bisherigen Eintrag dort stehen lassen ` +
+      `(Bulletpoints aus docs/changelog.md; Details: docs/release.md)`,
+  );
+}
+
+// Abbruch **vor** dem Changelog-Block: sonst meldet die Ausgabe ein „✓ docs/changelog.md",
+// obwohl wegen der Probleme nichts geschrieben wird.
+if (problems.length > 0) {
+  console.error(`\n✗ Abgebrochen, nichts geschrieben:`);
+  for (const problem of problems) console.error(`   ${problem}`);
+  console.error(`   Bitte die betroffene Datei prüfen (Muster in scripts/version.ts anpassen).`);
+  process.exit(1);
+}
+
 // Changelog zuletzt (eigene Logik).
 const changelog = updateChangelog(read("docs/changelog.md"), target);
 if (changelog.changed) {
@@ -259,13 +285,6 @@ if (changelog.changed) {
   console.log(
     `  · docs/changelog.md — unverändert (unter [Unreleased] steht noch nichts zu veröffentlichen)`,
   );
-}
-
-if (problems.length > 0) {
-  console.error(`\n✗ Abgebrochen, nichts geschrieben:`);
-  for (const problem of problems) console.error(`   ${problem}`);
-  console.error(`   Bitte die betroffene Datei prüfen (Muster in scripts/version.ts anpassen).`);
-  process.exit(1);
 }
 
 if (dryRun) {

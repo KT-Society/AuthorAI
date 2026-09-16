@@ -53,6 +53,14 @@ Das Skript (`scripts/version.ts`) hält **sieben Positionen** (acht Dateien) kon
    Platzhalter (enthält `[Unreleased]` nur den Platzhalter, bleibt das Changelog unberührt —
    es entsteht kein leerer Release)
 
+**Achte Stelle — geprüft, nicht geschrieben:** das Root-[`CHANGELOG.md`](../CHANGELOG.md) ist die
+**Kurzfassung je Release** für die Repository-Startseite (die Details stehen in
+[`changelog.md`](changelog.md)). Das Skript erfindet keine Inhalte, verlangt aber, dass die
+Zielversion dort **schon** steht — sonst bricht der Bump ab, **bevor** er etwas schreibt. Vorgehen:
+oben einen neuen Abschnitt `## [x.y.z] — <Datum>` anlegen (Bulletpoints aus `docs/changelog.md`
+ziehen), die älteren Abschnitte bleiben stehen. Das Überschriften-Format ist kein Schmuck — auch
+`backup/backup.py` liest die Version daraus (siehe [`development.md`](development.md)).
+
 Passt ein Muster nicht mehr (Define umbenannt, Zeile entfernt), **bricht das Skript ab, ohne
 etwas zu schreiben** — so kann keine Stelle stillschweigend driften.
 
@@ -173,10 +181,13 @@ Grundsatz: **`release/` enthält alles, was der Kunde braucht** — inklusive Li
 
 ## Checkliste vor der Veröffentlichung
 
+- [ ] **Workspace-Sicherung** als Rückfall angelegt: `python backup/backup.py`
+      (Archiv nach `backup/` — vor dem Bump, siehe [`development.md`](development.md))
 - [ ] Versionsnummer gleich in `package.json`, `packages/promptgen/package.json`,
       `installer/authorai.iss`, `installer/authorai.nsi` (inkl. `VIProductVersion`),
       `README.md`, `docs/README.md`, `SECURITY.md` und `docs/changelog.md`
       (`bun run version:bump` erledigt alle acht und prüft nach)
+- [ ] Root-`CHANGELOG.md` trägt die Zielversion (das Skript bricht sonst ab — Schritt 1)
 - [ ] `bun run check` grün
 - [ ] `bun run build:binary` ohne Warnungen
 - [ ] Probe-Lauf: Binary in einem **leeren Ordner** starten, `.env` daneben, App öffnet sich

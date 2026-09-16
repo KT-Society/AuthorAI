@@ -36,6 +36,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .cache
 *.tsbuildinfo
 .playwright-mcp
+__pycache__/
 
 # IntelliJ based IDEs
 .idea
