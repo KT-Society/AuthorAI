@@ -8,6 +8,23 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Kanon-Scan: keine stille Obergrenze mehr
+
+- **Fixed** **„Über 600 Fakten gefunden — am Ende nur 44, und nur die ersten Kapitel"**: Im
+  Sammel-Loop stand eine **Gesamtgrenze von 24 Fakten + 20 Beziehungen** (= 44 — genau die
+  gemeldete Zahl). Sie stammte aus dem alten Ein-Aufruf-Design („extrahiere aus dem Storyboard")
+  und warf bei einem Buch-Scan **alles ab Kapitel 4 stillschweigend weg**, obwohl der Scan die
+  restlichen Kapitel eifrig weiterlas. Jetzt gilt: begrenzt wird **je Kapitel** (8 Fakten /
+  6 Beziehungen — steht auch so im Prompt), das Gesamtergebnis nur noch durch eine Notbremse
+  (800/500). Ein Roman hat legitim hunderte Fakten.
+- **Changed** **Die Kapitel-Grenze gilt über alle Teile eines Kapitels**: Ein langes Kapitel wird in
+  Teile zerlegt — die Grenze greift trotzdem einmal pro Kapitel, nicht pro Teil (vorher hätte ein
+  5.000-Wörter-Kapitel bis zu 24 Fakten beigesteuert).
+- **Added** **Der Dialog erklärt den Unterschied**: „612 Roh-Vorschläge sind eingetroffen · 187 haben
+  die Belegprüfung bestanden" — inklusive Begründung (kein Zitat, Zitat nicht im Text, oder
+  Wiederholung). Die Live-Liste zeigt **ungeprüfte** Vorschläge, die Liste nach dem Lauf die
+  **belegten**: dass sie kleiner ist, ist gewollt und keine verlorene Arbeit mehr.
+
 ### Kanon-Scan: robust und fortsetzbar
 
 - **Fixed** **„Nach 6 Minuten: Kontinuitäts-JSON ungültig — und alles weg"**: Ein einziges Kapitel

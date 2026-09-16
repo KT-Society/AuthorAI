@@ -56,11 +56,24 @@ export interface ContinuityExtractInput {
   language: string;
 }
 
-const MAX_FACTS = 24;
-const MAX_RELATIONS = 20;
-/** Je Kapitel: klein halten — lieber wenige belegte Fakten als viele Behauptungen. */
+/**
+ * Grenzen — bewusst getrennt, denn sie haben **verschiedene Bedeutungen**:
+ *
+ * - `MAX_FACTS_PER_CHAPTER` / `MAX_RELATIONS_PER_CHAPTER`: Das Modell soll je Kapitel nur wenige,
+ *   belegte Einträge liefern (steht auch im Prompt). Verhindert, dass ein geschwätziges Kapitel
+ *   alles dominiert.
+ * - `MAX_FACTS_PER_CALL` / `MAX_RELATIONS_PER_CALL`: reines Sicherheitsnetz je Modellaufruf.
+ * - `MAX_FACTS_TOTAL` / `MAX_RELATIONS_TOTAL`: Notbremse für den **ganzen** Scan. Vorher stand hier
+ *   24/20 — eine Grenze aus dem alten Ein-Aufruf-Design („extrahiere aus dem Storyboard"), die bei
+ *   einem Buch-Scan die Funde **ab Kapitel 4 stillschweigend wegwarf**. Ein Roman hat legitim
+ *   hunderte Fakten.
+ */
 const MAX_FACTS_PER_CHAPTER = 8;
 const MAX_RELATIONS_PER_CHAPTER = 6;
+const MAX_FACTS_PER_CALL = 24;
+const MAX_RELATIONS_PER_CALL = 20;
+const MAX_FACTS_TOTAL = 800;
+const MAX_RELATIONS_TOTAL = 500;
 /** Wortbudget eines Kapitel-Teils (wie bei den Szenen: die Antwort ist klein). */
 const CONTINUITY_CHUNK_WORDS = 2500;
 
@@ -281,7 +294,7 @@ export function normalizeContinuity(
   const knownStatements = [...(input.knownStatements ?? [])];
   const facts: ExtractedFact[] = [];
   for (const entry of Array.isArray(obj.facts) ? obj.facts : []) {
-    if (facts.length >= MAX_FACTS) break;
+    if (facts.length >= MAX_FACTS_PER_CALL) break;
     const item = asRecord(entry);
     const rawEntity = str(item.entity);
     const statement = str(item.statement);
@@ -320,7 +333,7 @@ export function normalizeContinuity(
   const seenRelations = new Set((input.knownRelations ?? []).map((entry) => nameKey(entry)));
   const relations: ExtractedRelation[] = [];
   for (const entry of Array.isArray(obj.relations) ? obj.relations : []) {
-    if (relations.length >= MAX_RELATIONS) break;
+    if (relations.length >= MAX_RELATIONS_PER_CALL) break;
     const item = asRecord(entry);
     const fromName = matchName(str(item.from), characters);
     const toName = matchName(str(item.to), characters);
@@ -438,6 +451,12 @@ export async function extractContinuityStream(
     const label = `Kapitel ${absolute + 1}: ${chapter.title.trim() || "ohne Titel"}`;
     const beforeFacts = allFacts.length;
     const beforeRelations = allRelations.length;
+    /**
+     * Was **dieses** Kapitel beiträgt. Die Kapitel-Grenze gilt über alle Teile zusammen (ein langes
+     * Kapitel wird in mehrere Teile zerlegt — sonst würde die Grenze je Teil greifen).
+     */
+    const chapterFacts: ExtractedFact[] = [];
+    const chapterRelations: ExtractedRelation[] = [];
 
     try {
       const parts = splitIntoChunks(chapter.text, CONTINUITY_CHUNK_WORDS);
@@ -481,15 +500,21 @@ export async function extractContinuityStream(
         // Gegen **genau den Text** prüfen, den das Modell gesehen hat.
         const normalized = normalizeContinuity(payload, input, { text: part, label });
 
+        /**
+         * Kontext sofort ergänzen (verhindert Wiederholungen in den folgenden Teilen/Kapiteln),
+         * aber **je Kapitel** begrenzen, was übernommen wird. Vorher stand hier eine Gesamtgrenze
+         * (24/20) — die warf beim Buch-Scan alles ab Kapitel 4 stillschweigend weg.
+         */
         for (const fact of normalized.facts) {
-          if (allFacts.length >= MAX_FACTS) break;
-          allFacts.push(fact);
-          context.knownStatements.push(fact.statement);
+          if (!context.knownStatements.some((known) => statementsMatch(known, fact.statement))) {
+            context.knownStatements.push(fact.statement);
+          }
+          if (chapterFacts.length < MAX_FACTS_PER_CHAPTER) chapterFacts.push(fact);
         }
         for (const relation of normalized.relations) {
-          if (allRelations.length >= MAX_RELATIONS) break;
-          allRelations.push(relation);
-          context.knownRelations.push(`${relation.fromName}→${relation.toName}:${relation.kind}`);
+          const key = `${relation.fromName}→${relation.toName}:${relation.kind}`;
+          if (!context.knownRelations.includes(key)) context.knownRelations.push(key);
+          if (chapterRelations.length < MAX_RELATIONS_PER_CHAPTER) chapterRelations.push(relation);
         }
       }
     } catch (err) {
@@ -498,6 +523,16 @@ export async function extractContinuityStream(
       const skipped = `Kapitel ${absolute + 1} (${chapter.title.trim() || "ohne Titel"}): ${message}`;
       warnings.push(`${skipped} — übersprungen, der Rest wurde weiter gelesen.`);
       handlers.onWarning?.(skipped);
+    }
+
+    // Kapitel-Beiträge in das Gesamtergebnis übernehmen (Notbremse statt 24er-Grenze).
+    for (const fact of chapterFacts) {
+      if (allFacts.length >= MAX_FACTS_TOTAL) break;
+      allFacts.push(fact);
+    }
+    for (const relation of chapterRelations) {
+      if (allRelations.length >= MAX_RELATIONS_TOTAL) break;
+      allRelations.push(relation);
     }
 
     handlers.onChapterDone?.({
@@ -971,6 +1006,7 @@ export async function repairCanonChapters(
     Array.from({ length: Math.min(limit, Math.max(1, pending.length)) }, () => worker()),
   );
 }
+
 
 
 

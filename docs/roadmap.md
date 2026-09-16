@@ -27,6 +27,9 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   fassen, wenn die Überschriften-Heuristik daneben liegt
 
 ### Kanon & Kontinuität (Anschlüsse an den Fakten-Check)
+- **Kanon-Block nach Relevanz filtern**: Seit der Scan ganze Bücher erfassen kann, wächst der
+  Kanon-Block in jedem Prompt mit (Fakten aller Kapitel) — sinnvoll wäre, je Aufruf nur die Fakten
+  der beteiligten Figuren und Schauplätze mitzugeben
 - **Kanon-Scan als Job**: Der Kapitel-für-Kapitel-Scan läuft im Dialog; als Job im Job-Center
   könnte er laufen, während man woanders arbeitet (Fortschritt und Abbruch inklusive)
 - **Belege im Kanon sichtbar machen**: Der wörtliche Beleg (`CanonFact.quote`) wird im

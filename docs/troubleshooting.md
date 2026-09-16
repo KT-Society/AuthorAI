@@ -287,6 +287,20 @@ in der Kontinuität neu aufbauen.
 
 ## Kanon & Kontinuität
 
+### Es kommen nur Fakten der ersten Kapitel an
+
+Behoben — das war eine **stille Gesamtgrenze** (24 Fakten + 20 Beziehungen) aus dem alten
+Ein-Aufruf-Design; alles ab Kapitel 4 wurde verworfen. Jetzt wird nur noch **je Kapitel** begrenzt
+(8 Fakten / 6 Beziehungen, so steht es auch im Prompt); das Gesamtergebnis hat nur eine Notbremse
+bei 800 Fakten bzw. 500 Beziehungen.
+
+### Warum sind es nach dem Scan weniger Vorschläge als live?
+
+Live siehst du die **rohen** Vorschläge, nach dem Lauf die **belegten**. Verworfen werden:
+Vorschläge ohne wörtliches Zitat, Zitate, die nicht im Kapiteltext stehen, Wiederholungen und
+Dubletten. Der Dialog nennt beide Zahlen. Wer mehr will, muss den Beleg liefern — das ist der
+Preis dafür, dass der Kanon nachprüfbar ist.
+
 ### Der Scan lief Minuten und brach dann ab — alles weg
 
 Behoben. Ein einzelnes Kapitel mit unbrauchbarer Modellantwort warf früher den **gesamten** Lauf

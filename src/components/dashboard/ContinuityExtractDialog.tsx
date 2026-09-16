@@ -20,6 +20,7 @@ export function ContinuityExtractDialog({
   running = false,
   progressLabel,
   warnings = [],
+  liveCount = 0,
   bookTitle,
   onClose,
   onAccept,
@@ -33,6 +34,8 @@ export function ContinuityExtractDialog({
   progressLabel?: string | null;
   /** Übersprungene Kapitel (unbrauchbare Modellantwort) — der Rest des Laufs ist erhalten. */
   warnings?: string[];
+  /** Roh-Vorschläge, die während des Scans eintrafen (vor Belegprüfung/Entdopplung). */
+  liveCount?: number;
   bookTitle: string;
   onClose: () => void;
   onAccept: (facts: ExtractedFact[], relations: ExtractedRelation[]) => void;
@@ -111,6 +114,15 @@ export function ContinuityExtractDialog({
             ? `${progressLabel ?? "Die Vorschläge treffen live ein"} — am Ende wird jeder Beleg gegen den Text geprüft.`
             : "Nur übernehmen, was wirklich im Material steht. Alles ist vorausgewählt — Abwählen, was nicht ins Kanon gehört."}
         </p>
+
+        {/* Warum die Liste nach dem Scan kleiner ist als live: Belegprüfung und Entdopplung. */}
+        {!running && liveCount > facts.length + relations.length ? (
+          <p className="mt-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-muted-foreground">
+            {liveCount} Roh-Vorschläge sind eingetroffen · {facts.length + relations.length} haben die
+            Belegprüfung bestanden. Verworfen wurden Vorschläge ohne wörtliches Zitat aus dem Kapitel
+            (oder mit Zitat, das dort nicht steht) sowie Wiederholungen.
+          </p>
+        ) : null}
 
         {warnings.length > 0 ? (
           <ul className="mt-3 space-y-1 rounded-xl border border-brand-amber/30 bg-brand-amber/10 px-3 py-2 text-[11px] text-brand-amber">
@@ -278,5 +290,6 @@ export function ContinuityExtractDialog({
     </div>
   );
 }
+
 
 

@@ -121,6 +121,8 @@ export function ContinuityView({
   const [extractWarnings, setExtractWarnings] = useState<string[]>([]);
   /** Bis hierhin ist der Scan durch — wird beim Übernehmen als Stand gemerkt. */
   const [extractProgress, setExtractProgress] = useState(0);
+  /** Wie viele Roh-Vorschläge live eintrafen (vor der Belegprüfung). */
+  const [extractLiveCount, setExtractLiveCount] = useState(0);
   const [extractError, setExtractError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<{
     facts: ExtractedFact[];
@@ -282,6 +284,9 @@ export function ContinuityView({
 
     /** Bis hierher ist der Scan durch (absolut) — Grundlage für „hier weitermachen". */
     let completed = startIndex;
+    /** Live gezählte Roh-Vorschläge (vor Belegprüfung und Entdopplung). */
+    let liveCount = 0;
+    setExtractLiveCount(0);
 
     try {
       const scoped = bookCharacters(book.id);
@@ -328,13 +333,16 @@ export function ContinuityView({
             completed = index;
           },
           onWarning: (message) => setExtractWarnings((prev) => [...prev, message]),
-          onItem: (type, item) =>
+          onItem: (type, item) => {
+            liveCount += 1;
+            setExtractLiveCount(liveCount);
             setCandidates((prev) => {
               const base = prev ?? { facts: [], relations: [] };
               return type === "fact"
                 ? { ...base, facts: [...base.facts, item as ExtractedFact] }
                 : { ...base, relations: [...base.relations, item as ExtractedRelation] };
-            }),
+            });
+          },
         },
       );
 
@@ -872,6 +880,7 @@ export function ContinuityView({
         running={extracting}
         progressLabel={extractLabel}
         warnings={extractWarnings}
+        liveCount={extractLiveCount}
         bookTitle={books.find((book) => book.id === extractBookId)?.title ?? ""}
         onClose={() => setCandidates(null)}
         onAccept={acceptExtraction}
@@ -879,6 +888,8 @@ export function ContinuityView({
     </div>
   );
 }
+
+
 
 
 
