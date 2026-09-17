@@ -2172,10 +2172,6 @@ export interface WorldScanResult {
   scannedManuscript: boolean;
 }
 
-/** Neue Einträge je Kapitel (so steht es auch im Auftrag). */
-const MAX_WORLD_PER_CHAPTER = 10;
-/** Notbremse über das ganze Buch. */
-const MAX_WORLD_TOTAL = 300;
 /** Wortbudget eines Kapitel-Teils. */
 const WORLD_CHUNK_WORDS = 2500;
 
@@ -2210,7 +2206,7 @@ export async function extractWorldStream(
     const category = worldCategoryOf(parsed.category);
     if (!category) return;
     const name = str(parsed.name);
-    if (!name || state.count >= MAX_WORLD_PER_CHAPTER) return;
+    if (!name) return;
     const key = `${category}|${normalizeWorldTitle(name)}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -2277,7 +2273,6 @@ Extract only the worldbuilding that is missing so far, as JSONL (one object per 
     const state = { count: 0 };
 
     for (const [partIndex, part] of parts.entries()) {
-      if (entryCount() >= MAX_WORLD_TOTAL) break;
       const acceptPart = (parsed: Record<string, unknown>) => accept(parsed, part, state);
       const consumer = createJsonlConsumer(acceptPart);
       const before = state.count;
@@ -2323,13 +2318,6 @@ Extract only the worldbuilding that is missing so far, as JSONL (one object per 
     }
 
     handlers.onChapterDone?.({ index, total: chapters.length, title, found: state.count });
-
-    if (entryCount() >= MAX_WORLD_TOTAL) {
-      warnings.push(
-        `Notbremse: nach ${entryCount()} Einträgen abgebrochen — die restlichen Kapitel wurden nicht mehr gelesen.`,
-      );
-      break;
-    }
   }
 
   if (unverified > 0) {
