@@ -1512,7 +1512,20 @@ export function BookDetailView({
     mode: DeriveMode,
   ) => {
     const overwrite = mode === "overwrite";
-    const existing = book.storyboard;
+    // Ein Buch kann ohne Storyboard sein (frischer Import): Dann entsteht es hier zum ersten Mal —
+    // und alle Felder darunter sind „leer", statt dass ein Zugriff ins Leere läuft.
+    const existing = book.storyboard ?? {
+      title: book.title,
+      subtitle: "",
+      genre: "",
+      logline: "",
+      synopsis: "",
+      themes: [],
+      tone: "",
+      pov: "",
+      characters: [],
+      chapters: [],
+    };
     const pick = (derived: string, current: string) =>
       overwrite ? derived || current : current || derived;
 

@@ -37,7 +37,12 @@ import {
   normalizeIsbn,
   presetFromLayers,
 } from "@/data/cover";
-import type { CoverLayoutId, CoverTextLayer, SavedCoverPreset } from "@/data/cover";
+import type {
+  CoverLayoutId,
+  CoverTextLayer,
+  CoverTextRole,
+  SavedCoverPreset,
+} from "@/data/cover";
 import { saveCoverImage } from "@/services/cover";
 
 type CtxWithSpacing = CanvasRenderingContext2D & { letterSpacing?: string };
@@ -200,8 +205,10 @@ export function CoverEditorDialog({
   const selected = layers.find((layer) => layer.id === selectedId) ?? null;
 
   const addLayer = (kind: "title" | "author" | "plain" | "isbn") => {
+    // Die Oberfläche hat vier Knöpfe, das Datenmodell vier Rollen — „plain" heißt dort `free`.
+    const role: CoverTextRole = kind === "plain" ? "free" : kind;
     const layer = makeCoverLayer(
-      kind,
+      role,
       kind === "plain" ? "Text" : kind === "author" ? "Autor" : kind === "isbn" ? "9783161484100" : "Titel",
     );
     setLayers((prev) => [...prev, layer]);

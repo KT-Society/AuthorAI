@@ -52,8 +52,9 @@ export function isNoOpNote(note: string): boolean {
   const lower = note.toLowerCase();
   if (!CHANGE_MARKERS.some((marker) => lower.includes(marker))) return false;
 
-  const before = comparable(spans[0]);
-  const after = comparable(spans[1]);
+  // `noUncheckedIndexedAccess`: Die beiden Zitate werden ausdrücklich gelesen (fehlend = leer).
+  const before = comparable(spans[0] ?? "");
+  const after = comparable(spans[1] ?? "");
   return before.length > 0 && before === after;
 }
 

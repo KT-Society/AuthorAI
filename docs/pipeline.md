@@ -423,6 +423,13 @@ die erst in der zweiten Kapitelhälfte auftraten, und Orte, die es nur im Fließ
 grundsätzlich unauffindbar. Ein einzelnes kaputtes Kapitel wird übersprungen (Warnung), der Lauf
 geht weiter.
 
+**Es gibt keine Obergrenze.** Weder je Kapitel noch über das Buch: Der Lauf liest **alle** Kapitel
+bis zum Ende. Drei Anläufe haben in diesem Projekt gezeigt, wohin stille Grenzen führen (44 Fakten
+beim Kanon, ein Ausschnitt bei den Figuren, eine 300er-Notbremse im Weltenbau) — seitdem gilt: Was
+dasteht, wird gelesen. Die einzige natürliche Grenze ist das Token-Budget der **einzelnen** Antwort;
+läuft es voll, wird das gemeldet und ein erneuter Scan macht dort weiter, weil die Funde dann unter
+„ALREADY TRACKED" stehen.
+
 **Belegprüfung statt Erfindung:** Jeder **Figuren**-Name wird gegen den gelesenen Text geprüft
 (normalisiert, ohne Anreden — „Prinzessin Lysara" findet „Lysara"); steht er dort nicht, wurde er
 erfunden und fällt weg (gezählt und im Dialog gemeldet). Beim **Weltenbau** wird ebenfalls geprüft,

@@ -508,9 +508,9 @@ export function Dashboard({
     setCharacters((prev) => prev.filter((character) => !toOf.has(character.id)));
 
     // Verweise mitziehen: Manuskript (Kapitel-Figuren und Szenen-Figuren) und Storyboard-Liste.
-    const dedupeNames = (list: Book["storyboard"]["characters"]) => {
+    const dedupeNames = (list: NonNullable<Book["storyboard"]>["characters"]) => {
       const names: string[] = [];
-      const result: Book["storyboard"]["characters"] = [];
+      const result: NonNullable<Book["storyboard"]>["characters"] = [];
       for (const entry of list) {
         if (names.some((name) => characterNamesMatch(name, entry.name))) continue;
         names.push(entry.name);
@@ -528,10 +528,15 @@ export function Dashboard({
             scene.map((id) => toOf.get(id) ?? id),
           ),
         })),
-        storyboard: {
-          ...book.storyboard,
-          characters: dedupeNames(book.storyboard.characters),
-        },
+        // Nur wenn es ein Storyboard gibt: Ohne eines gibt es darin nichts aufzuräumen.
+        ...(book.storyboard
+          ? {
+              storyboard: {
+                ...book.storyboard,
+                characters: dedupeNames(book.storyboard.characters),
+              },
+            }
+          : {}),
       })),
     );
 

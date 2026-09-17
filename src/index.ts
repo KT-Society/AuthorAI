@@ -330,7 +330,10 @@ function errorResponse(err: unknown): Response {
 /** Öffnet die App im Standard-Browser (Standalone-Feel; abschaltbar via AUTHORAI_OPEN=0). */
 function openInBrowser(url: string): void {
   try {
-    const options = { stdio: ["ignore", "ignore", "ignore"] as const };
+    // Bun erwartet eine **veränderliche** Tupel-Form; `as const` machte sie readonly und passte nicht.
+    const options: { stdio: ["ignore", "ignore", "ignore"] } = {
+      stdio: ["ignore", "ignore", "ignore"],
+    };
     if (process.platform === "win32") {
       Bun.spawn(["cmd", "/c", "start", "", url], options);
     } else if (process.platform === "darwin") {

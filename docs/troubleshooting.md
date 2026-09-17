@@ -323,6 +323,13 @@ auftritt. Was trotzdem fehlen kann:
   Die Zahl steht im Dialog unter „Hinweise".
 - **Das Kapitel wurde übersprungen**: Bei einem Modellfehler steht das als Warnung im Dialog — den
   Scan einfach erneut starten, bereits gefundene Namen werden dann nicht doppelt vorgeschlagen.
+- **Die Antwort lief ins Token-Limit**: Dann fehlen die Namen, die danach gekommen wären — der
+  Hinweis steht im Dialog. Die bereits gefundenen **übernehmen** und erneut scannen: Sie stehen
+  dann als „bereits bekannt" fest, und der nächste Lauf holt die restlichen.
+
+**Es gibt keine Obergrenze.** Der Scan liest alle Kapitel bis zum Ende; weder die Zahl der Funde
+noch ein Budget schneidet den Lauf ab. Wer eine sehr große Liste bekommt, wählt im Dialog ab, was
+nicht gebraucht wird.
 
 Wichtig: Der Scan schlägt nur **vor**. Was fehlt, lässt sich im Dialog auch von Hand anlegen.
 

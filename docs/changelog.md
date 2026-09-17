@@ -8,6 +8,35 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Typprüfung aufgeräumt (45 Befunde → 0) und ein echter Cover-Fehler behoben
+
+- **Fixed** **Der Cover-Editor im Assistenten verlor die Text-Ebene.** Der Aufruf übergab weder
+  Zielseite noch Speicher-Rückruf: Gestaltete Layer wurden beim Anlegen des Buchs **nicht**
+  übernommen, und beim Wiedereinstieg waren sie weg. Jetzt hält der Assistent die Layer
+  (`coverLayers`), schreibt sie ins neue Buch und lädt sie beim Fortsetzen wieder.
+  Zusätzlich: „plain" (freier Text) war im Editor nicht auf die Rolle `free` abgebildet.
+- **Fixed** **45 Typfehler im Projekt behoben** (bekannt aus der IDE, bisher ohne Prüfung im
+  Check). Keine Meldung wurde unterdrückt — jeder Befund wurde an der Ursache behoben:
+  - `server/story.ts` (12): `finishReason` kann `null` sein (`?? undefined`), der Zwischentyp einer
+    Pass-Antwort verlangte fälschlich schon `changed` (jetzt `Omit<PassResult, "changed">` — das
+    Feld entsteht weiterhin am Ende aus dem Textvergleich), und `chunks[index]` wurde unter
+    `noUncheckedIndexedAccess` ungeprüft gelesen (jetzt abgesichert, Semantik unverändert).
+  - `BookDetailView`, `Dashboard` (15): `book.storyboard` ist **optional** — Zugriffe darauf waren
+    ungeschützt (jetzt mit Ersatz-Storyboard bzw. bedingtem Update).
+  - `BookWizard`, `services/story.ts`, `services/continuity.ts` (6): Job-Reporter ist `{add, flush}`
+    (nicht aufrufbar), `scenes` verlor durch die Flussanalyse seinen Typ, `startChapter` fehlte im
+    Request-Typ (der Server liest es seit 0.5.9) und der `Storyboard`-Import fehlte.
+  - `index.ts`, `lib/zip.ts`, `lib/passNotes.ts`, `lib/bookManuscript.ts` (10): readonly-Tupel bei
+    `Bun.spawn`, `BlobPart`-Typen, ungeprüfte Zitat-Indizes, `boolean | undefined` als Prädikat.
+- **Changed** **`tsconfig.json` prüft `packages/` nicht mehr mit.** `promptgen` ist ein eigenes
+  Paket mit eigener `tsconfig` und eigenem React (18 + MUI statt 19): Im Root-Lauf entstand daraus
+  der Scheinfehler „ThemeProvider cannot be used as a JSX component". Das Paket prüft sich selbst —
+  nachgewiesen mit `tsc -p packages/promptgen/tsconfig.json` (**0 Fehler**).
+- **Noted** **Typprüfung ist jetzt praktikabel:** `tsc --noEmit` läuft mit dem in
+  `packages/promptgen/node_modules` vorhandenen TypeScript in ~20 Sekunden über `src/` und
+  meldet 0. Damit ist die Roadmap-Position „Typprüfung als Skript" nur noch ein Eintrag in
+  `package.json` plus Check-Zeile.
+
 ### Figuren- und Weltenbau-Scan lesen Kapitel für Kapitel den vollen Text
 
 - **Fixed** **Die Figuren-Extraktion fand nicht alle Figuren.** Sie las einen **Ausschnitt**: pro
@@ -28,9 +57,14 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 - **Added** **Fortschritt und Warnungen im Dialog**: „Kapitel 3/12 wird gelesen…", `chapter`/
   `chapterDone`-Ereignisse und ein Hinweis-Block für übersprungene Kapitel. Ein einzelnes kaputtes
   Kapitel reißt den Lauf nicht mehr ab — was gefunden wurde, bleibt.
-- **Changed** **Pro Kapitel gibt es eine Obergrenze statt einer stillen Gesamt-Reißleine** (12 neue
-  Figuren bzw. 10 neue Welt-Einträge je Kapitel; über das Buch nur eine hohe Notbremse), und die
-  Grenze steht im Auftrag — dieselbe Lehre wie beim Kanon-Scan (0.5.9).
+- **Changed** **Keine Obergrenze mehr — in keiner Form.** Zwischenzeitlich stand hier eine
+  „Notbremse" über das ganze Buch (Gesamtzahl der Funde), die den Lauf ab Kapitel 31 abgeschnitten
+  hätte; sie ist wieder entfernt. Eine solche Grenze hat in diesem Projekt jetzt **dreimal**
+  Einträge verschluckt (Kanon-Scan 44 Fakten, erster Anlauf dieses Umbaus, Welt-Notbremse 300) —
+  deshalb gibt es sie nicht mehr: **Alle** Kapitel werden gelesen, bis das Buch durch ist. Die
+  natürliche Grenze ist das Token-Budget der einzelnen Antwort; läuft es voll, sagt der Lauf das
+  ehrlich („Antwort lief ins Token-Limit — was bis dahin kam, ist übernommen"), und ein erneuter
+  Scan macht dort weiter, weil die Funde dann unter „ALREADY TRACKED" stehen.
 - **Removed** **Zwei tote Sync-Routen** (`POST /api/characters/extract`, `POST /api/world/extract`):
   Sie hatten keinen Aufrufer mehr, und ein Kapitel-für-Kapitel-Lauf braucht Fortschritt und
   Abbruch. Beide Extraktionen laufen ausschließlich als Stream.

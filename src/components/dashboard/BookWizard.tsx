@@ -43,6 +43,7 @@ import type { ModelStage } from "@/lib/generationSettings";
 import type { Book } from "@/data/author";
 import type { Character } from "@/data/characters";
 import { COVER_PALETTE, FALLBACK_COVER } from "@/data/cover";
+import type { CoverTextLayer } from "@/data/cover";
 import { canonBlock } from "@/data/continuity";
 import type { CanonFact, CharacterRelation } from "@/data/continuity";
 import type { Series } from "@/data/series";
@@ -138,6 +139,8 @@ export function BookWizard({
   const [consistencyDone, setConsistencyDone] = useState<boolean[]>([]);
   const [styleDone, setStyleDone] = useState<boolean[]>([]);
   const [coverUrl, setCoverUrl] = useState<string | undefined>(undefined);
+  /** Text-Layer des Covers — sie gehören ins Buch, sonst sind sie nach dem Anlegen weg. */
+  const [coverLayers, setCoverLayers] = useState<CoverTextLayer[]>([]);
   const [coverEditorOpen, setCoverEditorOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [targetWords, setTargetWords] = useState(EXPAND_DEFAULT_WORDS);
@@ -187,6 +190,7 @@ export function BookWizard({
       setChapterCount(String(editing.chapters || story.chapters.length || 12));
       setTargetWords(editing.defaultTargetWords ?? EXPAND_DEFAULT_WORDS);
       setCoverUrl(editing.coverUrl);
+      setCoverLayers(editing.coverLayers ?? []);
       setSeriesId(seriesOfBook(series, editing.id)?.id ?? "");
       setStepIndex(resumeStep(manuscript));
     } else {
@@ -202,6 +206,7 @@ export function BookWizard({
       setConsistencyDone([]);
       setStyleDone([]);
       setCoverUrl(undefined);
+      setCoverLayers([]);
       setCanonChecks({});
       setTargetWords(EXPAND_DEFAULT_WORDS);
     }
@@ -556,10 +561,12 @@ export function BookWizard({
           {
             onDelta: (delta) => {
               setStreamText((prev) => `${prev ?? ""}${delta}`);
-              reporter(delta);
+              reporter.add(delta);
             },
           },
         );
+        // Endstand in den Job schreiben — sonst bliebe der letzte gemeldete Wortstand stehen.
+        reporter.flush();
         setDrafts((prev) => {
           const next = [...prev];
           next[index] = draft;
@@ -956,6 +963,8 @@ export function BookWizard({
       tags: storyboard.themes.slice(0, 3),
       synopsis: storyboard.synopsis || storyboard.logline,
       coverUrl: finalCover,
+      // Ohne die Layer wäre das im Editor gestaltete Cover nach dem Anlegen wieder nackt.
+      coverLayers: coverLayers.length > 0 ? coverLayers : undefined,
       storyboard,
       manuscript,
     }, editing ? undefined : seriesId || undefined);
@@ -1755,9 +1764,15 @@ export function BookWizard({
       <CoverEditorDialog
         open={coverEditorOpen}
         imageUrl={coverUrl}
+        // Der Assistent legt ein neues Buch an und gestaltet nur dessen Vorderseite —
+        // ein Wechsel zwischen Vorder- und Rückseite ist hier nicht vorgesehen.
+        target="front"
+        initialLayers={coverLayers}
         defaultTitle={storyboard?.title}
+        onTargetChange={() => {}}
         onClose={() => setCoverEditorOpen(false)}
         onSaved={(url) => setCoverUrl(url)}
+        onSaveLayers={setCoverLayers}
       />
 
       {checkOpen && storyboard ? (

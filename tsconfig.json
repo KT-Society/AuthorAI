@@ -33,5 +33,9 @@
     "noPropertyAccessFromIndexSignature": false
   },
 
-  "exclude": ["dist", "node_modules"]
+  // `packages/promptgen` ist ein eigenes Paket mit **eigener** tsconfig, eigenem React (18 + MUI
+  // statt 19) und eigenen Typen. Es hier mitzuprüfen erzeugt Scheinfehler (z. B. „ThemeProvider
+  // cannot be used as a JSX component", weil zwei React-Typwelten aufeinandertreffen) — geprüft
+  // wird es in seinem eigenen Paket, importierte Module löst dieses Projekt weiterhin auf.
+  "exclude": ["dist", "node_modules", "packages"]
 }

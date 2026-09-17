@@ -33,8 +33,15 @@ export function resumeStep(manuscript: ChapterContent[]): number {
   const hasText = (text: string) => text.trim().length > 0;
   const all = (fn: (chapter: ChapterContent) => boolean) => manuscript.every(fn);
   const some = (fn: (chapter: ChapterContent) => boolean) => manuscript.some(fn);
-  if (some((chapter) => hasText(chapter.expanded)) && all((chapter) => chapter.styleChecked)) return 6;
-  if (some((chapter) => hasText(chapter.expanded)) && all((chapter) => chapter.consistencyChecked)) return 5;
+  // `styleChecked`/`consistencyChecked` sind optional — `Boolean(...)` macht daraus ein echtes
+  // Ja/Nein für den Prädikatstyp (sonst wäre „undefined" weder wahr noch falsch).
+  if (some((chapter) => hasText(chapter.expanded)) && all((chapter) => Boolean(chapter.styleChecked)))
+    return 6;
+  if (
+    some((chapter) => hasText(chapter.expanded)) &&
+    all((chapter) => Boolean(chapter.consistencyChecked))
+  )
+    return 5;
   if (all((chapter) => hasText(chapter.expanded))) return 4;
   if (some((chapter) => hasText(chapter.expanded))) return 3;
   if (some((chapter) => hasText(chapter.draft))) return 2;

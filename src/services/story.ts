@@ -618,8 +618,11 @@ export async function streamDeriveScenes(
     }
   });
 
-  if (scenes === null) throw new Error("Der Server hat keine Szenen geliefert.");
-  return scenes.length > 0 ? scenes : [];
+  // Die Zuweisung passiert im Callback — die Flussanalyse sieht sie nicht und würde `scenes` auf
+  // `null` festnageln (und dahinter auf `never`). Deshalb hier ausdrücklich lesen.
+  const found = scenes as DerivedScene[] | null;
+  if (!found) throw new Error("Der Server hat keine Szenen geliefert.");
+  return found;
 }
 
 export interface WorldExtractRequest {

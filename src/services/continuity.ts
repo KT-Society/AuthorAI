@@ -5,6 +5,7 @@
  */
 
 import type { ExtractedContinuity, ExtractedFact, ExtractedRelation } from "@/data/continuity";
+import type { Storyboard } from "@/data/story";
 
 import { postJson } from "./http";
 import { streamEvents } from "./stream";
@@ -16,6 +17,12 @@ export interface ContinuityExtractRequest {
   worldNames?: string[];
   knownStatements?: string[];
   knownRelations?: string[];
+  /**
+   * Bei „weitermachen": die **absolute** Kapitelnummer (1-basiert), bei der der Lauf beginnt.
+   * Der Server nutzt sie für die Kapitel-Labels der Warnungen („Kapitel 27 übersprungen"), damit
+   * sie zur Buch-Nummerierung passen und nicht zur Position im übergebenen Ausschnitt.
+   */
+  startChapter?: number;
   model: string;
   language: string;
 }

@@ -96,5 +96,7 @@ export function createStoredZip(entries: ZipEntry[]): Blob {
   endView.setUint32(16, offset, true);
   endView.setUint16(20, 0, true);
 
-  return new Blob([...chunks, ...central, end], { type: "application/epub+zip" });
+  // TS' DOM-Typen verlangen für `BlobPart` ein `ArrayBufferView<ArrayBuffer>`; die hier gebauten
+  // Puffer sind generisch typisiert. Der Cast ist der übliche Weg — es wird nichts kopiert.
+  return new Blob([...chunks, ...central, end] as BlobPart[], { type: "application/epub+zip" });
 }

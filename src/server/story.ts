@@ -662,7 +662,7 @@ Continue now, entirely in ${input.language}.`,
     if (!appended) break;
     text = `${text}\n\n${appended}`;
     words = countWords(text);
-    lastFinish = finishReason;
+    lastFinish = finishReason ?? undefined;
 
     // Genug Wörter, aber mitten im Satz abgebrochen: unten wird vervollständigt.
     if (finishReason !== "length" && words >= target * 0.9) break;
@@ -821,7 +821,12 @@ FORESHADOWING: ${(chapter?.foreshadowing ?? []).join(" · ") || "- (none)"}
 NEXT CHAPTER: ${next ? `${next.title} — ${next.summary}` : "(final chapter — the story must be resolved here)"}${canon?.trim() ? `\n\n${canon.trim()}` : ""}`;
 }
 
-function parsePassOutput(content: string): PassResult {
+/**
+ * Liest die Modell-Antwort eines Passes: Prosa aus `<TEXT>`, Notizen aus `<NOTES>`.
+ * `changed` gehört **nicht** hierher — das ermittelt `runPass` am Ende durch Vergleich mit dem
+ * vorherigen Text (Zeile darunter in derselben Datei), deshalb ist der Rückgabetyp ohne dieses Feld.
+ */
+function parsePassOutput(content: string): Omit<PassResult, "changed"> {
   const lower = content.toLowerCase();
   const notesOpen = lower.indexOf("<notes>");
   const notesClose = lower.indexOf("</notes>");
@@ -943,10 +948,13 @@ async function runPass(
   const notes: string[] = [];
 
   for (let index = 0; index < chunks.length; index += 1) {
-    const chunk = chunks[index];
+    // `noUncheckedIndexedAccess` ist aktiv: Zugriffe werden abgesichert statt behauptet.
+    const chunk = chunks[index] ?? "";
     const isOnly = chunks.length === 1;
-    const before = index > 0 ? tailOfText(chunks[index - 1], 60) : "";
-    const after = index < chunks.length - 1 ? headOfText(chunks[index + 1], 60) : "";
+    const previous = index > 0 ? chunks[index - 1] : undefined;
+    const following = chunks[index + 1];
+    const before = previous ? tailOfText(previous, 60) : "";
+    const after = following ? headOfText(following, 60) : "";
     const chunkWords = countWords(chunk);
 
     // Bei mehreren Teilen: nur diesen Teil umschreiben, Nachbarn nur als Kontext.
@@ -963,7 +971,8 @@ Rewrite ONLY this part (~${chunkWords} words) — never the neighbouring parts, 
             : ""
         }\n\nPART ${index + 1} TEXT:\n${chunk}`;
 
-    let parsed: PassResult | null = null;
+    // `changed` kommt erst am Ende aus dem Textvergleich — hier zählt nur Prosa + Notizen.
+    let parsed: Omit<PassResult, "changed"> | null = null;
     let truncatedByLimit = false;
     let retryHint = "";
     handlers?.onPartStart?.(index + 1, chunks.length);
@@ -2116,8 +2125,9 @@ Cover locations, factions, magic/technology systems, important artifacts/objects
 
 Rules:
 - Use the EXACT names the ${label} already uses. Never rename or embellish them.
-- Only include concepts the ${label} actually supports. 2-4 per category is normal —
-  do NOT invent filler to reach a minimum, and skip a category honestly if it is empty.
+- Only include concepts the ${label} actually supports. List **everything** it names — there is
+  **no upper limit**: a place mentioned once is still a place. Do NOT invent filler to reach a
+  minimum, and skip a category honestly (with no entries) if the ${label} has none.
 - NEVER list the same concept twice — not within a category, not across categories
   (a faction is not also "lore", a place is not also an "artifact").
 - NEVER return a concept that is already tracked (see ALREADY TRACKED below) —
@@ -2198,8 +2208,6 @@ export async function extractWorldStream(
   const seen = new Set(known.map((entry) => `${entry.category}|${normalizeWorldTitle(entry.title)}`));
   const rejected = new Set<string>();
   let unverified = 0;
-
-  const entryCount = () => worldEntryCount(normalizeWorld(collected));
 
   /** Nimmt eine Modellzeile auf — Prüfung, Dublette und Zählung an **einer** Stelle. */
   const accept = (parsed: Record<string, unknown>, text: string, state: { count: number }) => {
@@ -2292,7 +2300,7 @@ Extract only the worldbuilding that is missing so far, as JSONL (one object per 
               },
               [...known, ...worldTitles(collected)],
             ),
-            maxTokens: 2500,
+            maxTokens: 4000,
             temperature: 0.4,
           },
           consumer.push,
@@ -2385,7 +2393,7 @@ function worldEntryCount(world: StoryWorld): number {
 }
 
 /** Extraktionsauftrag + Regeln der Figuren — gilt für **ein Kapitel** je Aufruf. */
-function characterExtractBrief(language: string, maxPerChapter: number): string {
+function characterExtractBrief(language: string): string {
   return `You are a continuity editor building a story bible from a finished manuscript.
 ${languageLock(language)}
 
@@ -2401,14 +2409,15 @@ Rules:
 - role: short and concrete — the figure's function in THIS story
   (e.g. "Protagonist", "Antagonist", "Verbündeter", "Auftraggeber", "Nebenfigur").
 - description: 1-2 sentences strictly grounded in this chapter (function, relation to others, traits).
-- At most ${maxPerChapter} NEW figures for this chapter — most important first. Figures listed
-  under ALREADY TRACKED are NOT new: skip them even when they act in this chapter.
+- List EVERY named figure of this chapter, most important first — there is **no** upper limit, and
+  a figure that acts or is named only once still counts. Do not pad with unnamed groups.
+- Figures listed under ALREADY TRACKED are NOT new: skip them even when they act in this chapter.
 - Skip the narrator, unnamed groups ("die Wachen" without a name) and mere mentions of places.
 - Every string value MUST be in ${language}.`;
 }
 
-function characterExtractStreamSystem(language: string, maxPerChapter: number): string {
-  return `${characterExtractBrief(language, maxPerChapter)}
+function characterExtractStreamSystem(language: string): string {
+  return `${characterExtractBrief(language)}
 
 ${jsonlFormatBlock(language, `{"name":"…","role":"Protagonist","description":"…"}`)}`;
 }
@@ -2449,11 +2458,16 @@ export interface CharacterScanResult {
   warnings: string[];
 }
 
-/** Neue Figuren je Kapitel (so steht es auch im Auftrag). */
-const MAX_CHARACTERS_PER_CHAPTER = 12;
-/** Notbremse über das ganze Buch — keine stille Reißleine wie beim alten Ein-Aufruf-Design. */
-const MAX_CHARACTERS_TOTAL = 400;
-/** Wortbudget eines Kapitel-Teils. Größer als bei den Pässen: die Antwort ist klein. */
+/**
+ * Wortbudget eines Kapitel-Teils. Größer als bei den Pässen: die Antwort ist klein.
+ *
+ * **Es gibt bewusst keine Obergrenze über das Buch** — keine Reißleine, die den Lauf abschneidet.
+ * Eine solche Grenze hat schon beim Kanon-Scan und beim ersten Anlauf dieses Umbaus Figuren
+ * verschluckt: Was dasteht, wird gelesen, bis alle Kapitel durch sind. Die natürliche Grenze ist
+ * das Token-Budget der einzelnen Antwort; läuft sie voll, sagt der Lauf das ehrlich
+ * (`finish_reason: "length"`), und ein erneuter Scan macht weiter — die Funde stehen dann in
+ * „ALREADY TRACKED".
+ */
 const CHARACTER_CHUNK_WORDS = 2500;
 
 /**
@@ -2495,12 +2509,10 @@ export async function extractCharactersStream(
     let chapterFound = 0;
 
     for (const [partIndex, part] of parts.entries()) {
-      if (found.length >= MAX_CHARACTERS_TOTAL) break;
-
       /** Nimmt eine Modellzeile auf — Prüfung, Dublette und Zählung an **einer** Stelle. */
       const accept = (parsed: Record<string, unknown>) => {
         const name = str(parsed.name);
-        if (!name || chapterFound >= MAX_CHARACTERS_PER_CHAPTER) return;
+        if (!name) return;
         const key = name.toLowerCase();
         if (seen.has(key)) return; // bereits angenommen (auch aus einem früheren Kapitel)
         if (!nameAppearsInText(name, part)) {
@@ -2533,7 +2545,7 @@ export async function extractCharactersStream(
         const { content, finishReason } = await chatCompletionStream(
           {
             model: input.model,
-            system: characterExtractStreamSystem(input.language, MAX_CHARACTERS_PER_CHAPTER),
+            system: characterExtractStreamSystem(input.language),
             user: characterExtractUser(
               input,
               {
@@ -2544,7 +2556,7 @@ export async function extractCharactersStream(
               },
               [...input.knownCharacters, ...found.map((entry) => entry.name)],
             ),
-            maxTokens: 2000,
+            maxTokens: 4000,
             temperature: 0.3,
           },
           consumer.push,
@@ -2574,14 +2586,6 @@ export async function extractCharactersStream(
       }
 
       void acceptedInCall;
-    }
-
-    if (found.length >= MAX_CHARACTERS_TOTAL) {
-      warnings.push(
-        `Notbremse: nach ${found.length} Figuren abgebrochen — die restlichen Kapitel wurden nicht mehr gelesen.`,
-      );
-      handlers.onChapterDone?.({ index, total: chapters.length, title, found: chapterFound });
-      break;
     }
 
     handlers.onChapterDone?.({ index, total: chapters.length, title, found: chapterFound });
