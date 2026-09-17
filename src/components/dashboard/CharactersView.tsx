@@ -75,6 +75,10 @@ export function CharactersView({
   const [extractError, setExtractError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<StoryCharacter[] | null>(null);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
+  /** Fortschritt des Kapitel-für-Kapitel-Laufs (null = kein Lauf). */
+  const [extractStatus, setExtractStatus] = useState<string | null>(null);
+  /** Übersprungene Kapitel und verworfene Namen — sichtbar, nicht still. */
+  const [extractWarnings, setExtractWarnings] = useState<string[]>([]);
 
   const runExtract = async () => {
     const book = books.find((item) => item.id === extractBookId);
@@ -99,6 +103,8 @@ export function CharactersView({
     }
     setExtractError(null);
     setExtractBusy(true);
+    setExtractWarnings([]);
+    setExtractStatus(null);
     // Dialog sofort öffnen — die Figuren treffen live ein.
     setCandidates([]);
     const live: StoryCharacter[] = [];
@@ -107,7 +113,7 @@ export function CharactersView({
         ...characters.map((character) => character.name),
         ...(book.storyboard?.characters ?? []).map((entry) => entry.name),
       ];
-      const found = await streamCharactersExtract(
+      const { characters: found, warnings } = await streamCharactersExtract(
         {
           bookTitle: book.title,
           genre: book.storyboard?.genre,
@@ -124,8 +130,13 @@ export function CharactersView({
             live.push(character);
             setCandidates([...live]);
           },
+          // Der Server liest Kapitel für Kapitel — der Fortschritt gehört sichtbar in den Dialog.
+          onChapter: (info) => setExtractStatus(`${info.title} wird gelesen (${info.index + 1}/${info.total})…`),
+          onChapterDone: () => setExtractStatus(null),
+          onWarning: (message) => setExtractWarnings((prev) => [...prev, message]),
         },
       );
+      setExtractWarnings(warnings);
       // Abschluss: validierte Liste. Live gefundene Figuren bleiben erhalten, sofern der Server
       // sie auch bestätigt (gleiche Namen) — so geht die Auswahl des Nutzers nicht verloren.
       const confirmedNames = new Set(found.map((character) => character.name.toLowerCase()));
@@ -142,6 +153,7 @@ export function CharactersView({
       setCandidates(live.length > 0 ? [...live] : null);
     } finally {
       setExtractBusy(false);
+      setExtractStatus(null);
     }
   };
 
@@ -437,6 +449,8 @@ export function CharactersView({
         candidates={candidates ?? []}
         running={extractBusy}
         bookTitle={books.find((book) => book.id === extractBookId)?.title ?? ""}
+        status={extractStatus}
+        warnings={extractWarnings}
         onClose={() => setCandidates(null)}
         onAccept={acceptCandidates}
       />

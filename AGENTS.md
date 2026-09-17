@@ -121,8 +121,8 @@ src/
 | Kohärenz | `POST /api/chapter/consistency` · Stream: `POST /api/chapter/consistency/stream` |
 | Stil | `POST /api/chapter/style` · Stream: `POST /api/chapter/style/stream` |
 | Timeline-Prüfung | `POST /api/timeline/check` · Stream: `POST /api/timeline/check/stream` · Quick Fix: `POST /api/timeline/repair` · Stream: `POST /api/timeline/repair/stream` |
-| Weltenbau-Extraktion | `POST /api/world/extract` · Stream: `POST /api/world/extract/stream` |
-| Figuren-Extraktion (Manuskript) | `POST /api/characters/extract` · Stream: `POST /api/characters/extract/stream` |
+| Weltenbau-Extraktion | `POST /api/world/extract/stream` (kapitelweise über das Manuskript; ohne `chapters` aus dem Storyboard) |
+| Figuren-Extraktion (Manuskript) | `POST /api/characters/extract/stream` (kapitelweise, Namen gegen den Text geprüft) |
 | Kontinuität: Extraktion | `POST /api/continuity/extract/stream` (Kapitel für Kapitel, belegt, fortsetzbar) |
 | Kontinuität: Fakten-Check | `POST /api/continuity/check` · Queue/Stream: `POST /api/continuity/check/stream` |
 | Kontinuität: Quick Fix | `POST /api/continuity/repair` · Queue/Stream: `POST /api/continuity/repair/stream` |

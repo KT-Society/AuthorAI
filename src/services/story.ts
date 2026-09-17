@@ -628,33 +628,68 @@ export interface WorldExtractRequest {
   language: string;
   /** Bereits getrackte Einträge — verhindert Dubletten bei wiederholten Scans. */
   knownEntries?: { title: string; category: string }[];
-}
-
-export async function extractWorld(input: WorldExtractRequest): Promise<StoryWorld> {
-  const data = await postJson<{ world?: StoryWorld }>("/api/world/extract", input);
-  if (!data.world) throw new Error("Leere Weltenbau-Antwort vom Server.");
-  return data.world;
+  /**
+   * Das Manuskript (Kapitel für Kapitel). Ist es dabei, liest die Extraktion **den Text** —
+   * sonst nur das Storyboard.
+   */
+  chapters?: { title: string; text: string }[];
 }
 
 /** Kategorie-Schlüssel des Weltenbaus, wie der Stream sie meldet. */
 export type WorldStreamCategory = keyof StoryWorld;
 
 export interface WorldStreamHandlers {
-  /** Ein Vorschlag, sobald das Modell ihn geschrieben hat (live, vor Dedupe/Validierung). */
+  /** Ein Vorschlag, sobald das Modell ihn geschrieben hat (live, bereits gegen den Text geprüft). */
   onEntry?: (category: WorldStreamCategory, entry: WorldItem) => void;
+  /** Ein Kapitel wird gelesen (nur wenn ein Manuskript mitgeschickt wurde). */
+  onChapter?: (info: { index: number; total: number; title: string }) => void;
+  /** Ein Kapitel ist durch. */
+  onChapterDone?: (info: { index: number; total: number; title: string; found: number }) => void;
+  /** Ein Kapitel wurde übersprungen — der Lauf geht weiter. */
+  onWarning?: (message: string) => void;
+}
+
+export interface WorldScanResult {
+  world: StoryWorld;
+  /** Übersprungene Kapitel und Namen, die nicht im Text standen. */
+  warnings: string[];
+  /** `true` = über das Manuskript gelesen, `false` = nur das Storyboard (kein Manuskript da). */
+  scannedManuscript: boolean;
 }
 
 /**
- * Gestreamte Weltenbau-Extraktion: Die Vorschläge wachsen live in den Review-Dialog. Verbindlich
- * ist das Welt-Objekt aus dem Abschluss (normalisiert und ohne Dubletten).
+ * Gestreamte Weltenbau-Extraktion: Die Vorschläge wachsen live in den Review-Dialog, der Server
+ * liest **Kapitel für Kapitel** den vollen Text (wenn ein Manuskript mitgeschickt wird).
+ * Verbindlich ist das Welt-Objekt aus dem Abschluss (normalisiert und ohne Dubletten).
  */
 export async function streamWorldExtract(
   input: WorldExtractRequest,
   handlers: WorldStreamHandlers = {},
-): Promise<StoryWorld> {
-  let world: StoryWorld | null = null;
+): Promise<WorldScanResult> {
+  let result: WorldScanResult | null = null;
 
   await streamEvents("/api/world/extract/stream", input, (event) => {
+    if (event.type === "chapter") {
+      handlers.onChapter?.({
+        index: Number(event.index ?? 0),
+        total: Number(event.total ?? 0),
+        title: typeof event.title === "string" ? event.title : "",
+      });
+      return;
+    }
+    if (event.type === "chapterDone") {
+      handlers.onChapterDone?.({
+        index: Number(event.index ?? 0),
+        total: Number(event.total ?? 0),
+        title: typeof event.title === "string" ? event.title : "",
+        found: Number(event.found ?? 0),
+      });
+      return;
+    }
+    if (event.type === "warning" && typeof event.message === "string") {
+      handlers.onWarning?.(event.message);
+      return;
+    }
     if (event.type === "entry") {
       const category = event.category as WorldStreamCategory;
       const name = typeof event.name === "string" ? event.name.trim() : "";
@@ -666,12 +701,16 @@ export async function streamWorldExtract(
       return;
     }
     if (event.type === "done" && event.world) {
-      world = event.world as StoryWorld;
+      result = {
+        world: event.world as StoryWorld,
+        warnings: Array.isArray(event.warnings) ? event.warnings.map(String) : [],
+        scannedManuscript: event.scannedManuscript === true,
+      };
     }
   });
 
-  if (!world) throw new Error("Der Server hat keinen Weltenbau geliefert.");
-  return world;
+  if (!result) throw new Error("Der Server hat keinen Weltenbau geliefert.");
+  return result;
 }
 
 export interface CharacterExtractRequest {
@@ -684,32 +723,58 @@ export interface CharacterExtractRequest {
 }
 
 /** Leitet benannte Figuren aus dem Manuskript ab (inkl. Storyboard-unbekannter Figuren). */
-export async function extractCharacters(
-  input: CharacterExtractRequest,
-): Promise<StoryCharacter[]> {
-  const data = await postJson<{ characters?: StoryCharacter[] }>(
-    "/api/characters/extract",
-    input,
-  );
-  return Array.isArray(data.characters) ? data.characters : [];
-}
 
 export interface CharacterStreamHandlers {
-  /** Eine Figur, sobald das Modell sie geschrieben hat (live, vor Dedupe/Validierung). */
+  /** Eine Figur, sobald das Modell sie geschrieben hat (live, bereits gegen den Text geprüft). */
   onCharacter?: (character: StoryCharacter) => void;
+  /** Ein Kapitel wird gelesen. */
+  onChapter?: (info: { index: number; total: number; title: string }) => void;
+  /** Ein Kapitel ist durch. */
+  onChapterDone?: (info: { index: number; total: number; title: string; found: number }) => void;
+  /** Ein Kapitel wurde übersprungen — der Lauf geht weiter. */
+  onWarning?: (message: string) => void;
+}
+
+export interface CharacterScanResult {
+  characters: StoryCharacter[];
+  /** Übersprungene Kapitel und verworfene (nicht im Text belegte) Namen. */
+  warnings: string[];
 }
 
 /**
- * Gestreamte Figuren-Extraktion: Die gefundenen Figuren treffen einzeln ein. Verbindlich ist die
- * Liste aus dem Abschluss (normalisiert, ohne bereits getrackte Namen).
+ * Gestreamte Figuren-Extraktion: Der Server liest **Kapitel für Kapitel** den vollen Text, die
+ * gefundenen Figuren treffen einzeln ein und der Fortschritt wird gemeldet. Verbindlich ist die
+ * Liste aus dem Abschluss (geprüft gegen den Text, ohne bereits getrackte Namen).
  */
 export async function streamCharactersExtract(
   input: CharacterExtractRequest,
   handlers: CharacterStreamHandlers = {},
-): Promise<StoryCharacter[]> {
+): Promise<CharacterScanResult> {
   let characters: StoryCharacter[] | null = null;
+  let warnings: string[] = [];
 
   await streamEvents("/api/characters/extract/stream", input, (event) => {
+    if (event.type === "chapter") {
+      handlers.onChapter?.({
+        index: Number(event.index ?? 0),
+        total: Number(event.total ?? 0),
+        title: typeof event.title === "string" ? event.title : "",
+      });
+      return;
+    }
+    if (event.type === "chapterDone") {
+      handlers.onChapterDone?.({
+        index: Number(event.index ?? 0),
+        total: Number(event.total ?? 0),
+        title: typeof event.title === "string" ? event.title : "",
+        found: Number(event.found ?? 0),
+      });
+      return;
+    }
+    if (event.type === "warning" && typeof event.message === "string") {
+      handlers.onWarning?.(event.message);
+      return;
+    }
     if (event.type === "character" && event.character) {
       const raw = event.character as Record<string, unknown>;
       const name = typeof raw.name === "string" ? raw.name.trim() : "";
@@ -723,9 +788,10 @@ export async function streamCharactersExtract(
     }
     if (event.type === "done") {
       characters = Array.isArray(event.characters) ? (event.characters as StoryCharacter[]) : [];
+      warnings = Array.isArray(event.warnings) ? event.warnings.map(String) : [];
     }
   });
 
   if (!characters) throw new Error("Der Server hat keine Figuren geliefert.");
-  return characters;
+  return { characters, warnings };
 }

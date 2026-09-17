@@ -47,9 +47,7 @@ import {
   deriveStoryboardStream,
   draftChapter,
   expandChapter,
-  extractCharacters,
   extractCharactersStream,
-  extractWorld,
   extractWorldStream,
   generateStoryboard,
   refineStyle,
@@ -765,12 +763,23 @@ const server = serve({
           const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
           const language = optionalLanguage(body.language);
           const knownEntries = asKnownWorldEntries(body.knownEntries);
-          const input = { storyboard, model, language, knownEntries };
+          // Mit Manuskript liest der Scan Kapitel für Kapitel den vollen Text (statt nur das
+          // Storyboard); ohne Manuskript bleibt der Storyboard-Weg.
+          const chapters = asManuscriptChapters(body.chapters);
+          const input = { storyboard, model, language, knownEntries, chapters };
           return sseResponse(async (emit) => {
-            const world = await extractWorldStream(input, {
+            const result = await extractWorldStream(input, {
               onEntry: (entry) => emit({ type: "entry", ...entry }),
+              onChapter: (info) => emit({ type: "chapter", ...info }),
+              onChapterDone: (info) => emit({ type: "chapterDone", ...info }),
+              onWarning: (message) => emit({ type: "warning", message }),
             });
-            emit({ type: "done", world });
+            emit({
+              type: "done",
+              world: result.world,
+              warnings: result.warnings,
+              scannedManuscript: result.scannedManuscript,
+            });
           });
         } catch (err) {
           return errorResponse(err);
@@ -794,10 +803,15 @@ const server = serve({
             : [];
           const input = { bookTitle, genre, chapters, knownCharacters, model, language };
           return sseResponse(async (emit) => {
-            const characters = await extractCharactersStream(input, {
+            // Kapitel für Kapitel über den vollen Text: Fortschritt und Warnungen gehen mit,
+            // der Review-Dialog sieht jede gefundene Figur sofort.
+            const result = await extractCharactersStream(input, {
               onCharacter: (character) => emit({ type: "character", character }),
+              onChapter: (info) => emit({ type: "chapter", ...info }),
+              onChapterDone: (info) => emit({ type: "chapterDone", ...info }),
+              onWarning: (message) => emit({ type: "warning", message }),
             });
-            emit({ type: "done", characters });
+            emit({ type: "done", characters: result.characters, warnings: result.warnings });
           });
         } catch (err) {
           return errorResponse(err);
@@ -910,52 +924,6 @@ const chapters = asManuscriptChapters(body.chapters);
             );
             emit({ type: "done", scenes });
           });
-        } catch (err) {
-          return errorResponse(err);
-        }
-      },
-    },
-
-    // Worldbuilding extraction from an existing storyboard.
-    "/api/world/extract": {
-      async POST(req) {
-        try {
-          const body = await readJson(req);
-          const storyboard = asStoryboard(body.storyboard);
-          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
-          const language = optionalLanguage(body.language);
-          const knownEntries = asKnownWorldEntries(body.knownEntries);
-          const world = await extractWorld({ storyboard, model, language, knownEntries });
-          return Response.json({ world });
-        } catch (err) {
-          return errorResponse(err);
-        }
-      },
-    },
-
-    // Character extraction from the finished manuscript (finds figures the storyboard never knew).
-    "/api/characters/extract": {
-      async POST(req) {
-        try {
-          const body = await readJson(req);
-          const model = requiredString(body.model, "Bitte eine Model-ID angeben.");
-          const language = optionalLanguage(body.language);
-          const bookTitle = typeof body.bookTitle === "string" ? body.bookTitle.trim() : "";
-          const genre =
-            typeof body.genre === "string" && body.genre.trim() ? body.genre.trim() : undefined;
-          const chapters = asManuscriptChapters(body.chapters);
-          const knownCharacters = Array.isArray(body.knownCharacters)
-            ? body.knownCharacters.filter((name): name is string => typeof name === "string")
-            : [];
-          const characters = await extractCharacters({
-            bookTitle,
-            genre,
-            chapters,
-            knownCharacters,
-            model,
-            language,
-          });
-          return Response.json({ characters });
         } catch (err) {
           return errorResponse(err);
         }

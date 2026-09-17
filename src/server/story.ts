@@ -41,6 +41,8 @@ import {
 import { extractProse, looksTruncated } from "../lib/prose";
 import { filterNoOpNotes } from "../lib/passNotes";
 import { normalizeWorldTitle } from "../lib/worldMatch";
+import { normalizeCharacterName } from "../lib/characterMatch";
+import { normalizeName } from "../lib/nameMatch";
 import { consumeJsonlText, createJsonlConsumer, jsonlFormatBlock } from "./jsonl";
 
 export interface StoryboardInput {
@@ -2071,6 +2073,11 @@ export interface WorldExtractInput {
   language: string;
   /** Bereits getrackte Einträge — werden nicht erneut vorgeschlagen. */
   knownEntries?: { title: string; category: string }[];
+  /**
+   * Das Manuskript (Kapitel für Kapitel). Ist es vorhanden, liest die Extraktion **den Text** —
+   * die Storyboard-Kurzfassungen verraten nur, was im Plan steht, nicht was im Buch vorkommt.
+   */
+  chapters?: { title: string; text: string }[];
 }
 
 function storyboardOutline(storyboard: Storyboard): string {
@@ -2095,17 +2102,21 @@ CHAPTERS:
 ${chapters}`;
 }
 
-/** Extraktionsauftrag + Regeln des Weltenbaus — von JSON- und JSONL-Variante **geteilt**. */
-function worldBrief(language: string): string {
+/**
+ * Extraktionsauftrag + Regeln des Weltenbaus — gilt je **Kapitel** (Manuskript) oder, wenn kein
+ * Manuskript vorliegt, für das **Storyboard**.
+ */
+function worldBrief(language: string, source: "chapter" | "storyboard"): string {
+  const label = source === "chapter" ? "chapter text" : "storyboard";
   return `You are a worldbuilding editor.
 ${languageLock(language)}
 
-TASK: from the storyboard below, extract the worldbuilding it actually contains.
+TASK: from the ${label} below, extract the worldbuilding it actually contains.
 Cover locations, factions, magic/technology systems, important artifacts/objects, and lore/history.
 
 Rules:
-- Use the EXACT names the storyboard already uses. Never rename or embellish them.
-- Only include concepts the storyboard actually supports. 2-4 per category is normal —
+- Use the EXACT names the ${label} already uses. Never rename or embellish them.
+- Only include concepts the ${label} actually supports. 2-4 per category is normal —
   do NOT invent filler to reach a minimum, and skip a category honestly if it is empty.
 - NEVER list the same concept twice — not within a category, not across categories
   (a faction is not also "lore", a place is not also an "artifact").
@@ -2115,21 +2126,8 @@ Rules:
 - Everything in ${language}.`;
 }
 
-function worldSystem(language: string): string {
-  return `${worldBrief(language)}
-
-Respond ONLY with a single valid JSON object:
-{
-  "locations": [{ "name": string, "description": string }],
-  "factions": [{ "name": string, "description": string }],
-  "magic": [{ "name": string, "description": string }],
-  "artifacts": [{ "name": string, "description": string }],
-  "lore": [{ "name": string, "description": string }]
-}`;
-}
-
-function worldStreamSystem(language: string): string {
-  return `${worldBrief(language)}
+function worldStreamSystem(language: string, source: "chapter" | "storyboard" = "storyboard"): string {
+  return `${worldBrief(language, source)}
 
 Respond ONLY with one JSON object per line (JSONL), one per concept:
 {"category":"Ort","name":"…","description":"…"}
@@ -2156,63 +2154,235 @@ function worldCategoryOf(value: unknown): keyof StoryWorld | null {
 }
 
 export interface WorldStreamHandlers {
-  /** Ein fertiger Vorschlag (live, noch nicht dedupliziert/validiert). */
+  /** Ein fertiger Vorschlag (live, bereits gegen den Text geprüft bzw. aus dem Storyboard). */
   onEntry?: (entry: { category: keyof StoryWorld; name: string; description: string }) => void;
+  /** Ein Kapitel wird gelesen (nur im Manuskript-Modus). */
+  onChapter?: (info: { index: number; total: number; title: string }) => void;
+  /** Ein Kapitel ist durch (nur im Manuskript-Modus). */
+  onChapterDone?: (info: { index: number; total: number; title: string; found: number }) => void;
+  /** Ein Kapitel wurde übersprungen — der Lauf geht weiter. */
+  onWarning?: (message: string) => void;
 }
 
+export interface WorldScanResult {
+  world: StoryWorld;
+  /** Übersprungene Kapitel und Namen, die nicht im Text standen. */
+  warnings: string[];
+  /** `true` = über das Manuskript gelesen, `false` = nur das Storyboard (kein Manuskript da). */
+  scannedManuscript: boolean;
+}
+
+/** Neue Einträge je Kapitel (so steht es auch im Auftrag). */
+const MAX_WORLD_PER_CHAPTER = 10;
+/** Notbremse über das ganze Buch. */
+const MAX_WORLD_TOTAL = 300;
+/** Wortbudget eines Kapitel-Teils. */
+const WORLD_CHUNK_WORDS = 2500;
+
 /**
- * Gestreamte Weltenbau-Extraktion: **eine JSON-Zeile pro Konzept**, damit der Review-Dialog
- * öffnet und die Vorschläge live hineinwachsen. Das Ergebnis am Ende ist identisch zum
- * Nicht-Streaming-Weg (gleiche Normalisierung + Dublettenfilter).
+ * Gestreamte Weltenbau-Extraktion.
+ *
+ * **Mit Manuskript:** Kapitel für Kapitel über den **vollen Text** (lange Kapitel absatzsicher
+ * geteilt), die schon gefundenen Einträge gehen als „ALREADY TRACKED" in den nächsten Aufruf, und
+ * ein einzelnes kaputtes Kapitel reißt den Lauf nicht ab. Vorher las die Extraktion nur das
+ * **Storyboard** — also Kapitel-Kurzfassungen; alles, was nur im Fließtext vorkam (ein Ort, der
+ * einmal genannt wird), konnte so nie gefunden werden.
+ *
+ * **Ohne Manuskript:** wie bisher aus dem Storyboard, damit ein Buch ohne Prosa weiterhin eine
+ * Welt bekommt. Der Rückgabewert sagt, welcher Weg genommen wurde (`scannedManuscript`).
  */
 export async function extractWorldStream(
   input: WorldExtractInput,
   handlers: WorldStreamHandlers = {},
-): Promise<StoryWorld> {
+): Promise<WorldScanResult> {
   const known = worldKnownList(input);
-  const knownBlock = known.map((entry) => `- [${entry.category}] ${entry.title}`).join("\n");
   const collected: StoryWorld = { locations: [], factions: [], magic: [], artifacts: [], lore: [] };
+  const warnings: string[] = [];
+  /** Kategorie + normalisierter Name — verhindert Dubletten über Kapitel hinweg. */
+  const seen = new Set(known.map((entry) => `${entry.category}|${normalizeWorldTitle(entry.title)}`));
+  const rejected = new Set<string>();
+  let unverified = 0;
 
-  const collect = (parsed: Record<string, unknown>, live: boolean) => {
+  const entryCount = () => worldEntryCount(normalizeWorld(collected));
+
+  /** Nimmt eine Modellzeile auf — Prüfung, Dublette und Zählung an **einer** Stelle. */
+  const accept = (parsed: Record<string, unknown>, text: string, state: { count: number }) => {
     const category = worldCategoryOf(parsed.category);
     if (!category) return;
     const name = str(parsed.name);
-    if (!name) return;
+    if (!name || state.count >= MAX_WORLD_PER_CHAPTER) return;
+    const key = `${category}|${normalizeWorldTitle(name)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (text && !nameAppearsInText(name, text)) {
+      // Weltnamen werden im Text oft umschrieben („Blutmagie" vs. „blutige Magie"). Deshalb wird
+      // **nicht** verworfen wie bei Figuren — unbelegte Vorschläge werden gezählt und gemeldet,
+      // entschieden wird im Review-Dialog.
+      if (!rejected.has(key)) {
+        rejected.add(key);
+        unverified += 1;
+      }
+    }
     const description = str(parsed.description);
     (collected[category] as WorldItem[]).push({ name, description });
-    if (live) handlers.onEntry?.({ category, name, description });
+    state.count += 1;
+    handlers.onEntry?.({ category, name, description });
   };
 
-  const consumer = createJsonlConsumer((parsed) => collect(parsed, true));
+  const chapters = (input.chapters ?? []).filter((chapter) => chapter.text.trim().length > 0);
 
-  const { content } = await chatCompletionStream(
-    {
-      model: input.model,
-      system: worldStreamSystem(input.language),
-      user: `${storyboardOutline(input.storyboard)}
+  if (chapters.length === 0) {
+    // Kein Manuskript: aus dem Storyboard ableiten (unverändert zum bisherigen Weg).
+    const knownBlock = known.map((entry) => `- [${entry.category}] ${entry.title}`).join("\n");
+    const consumer = createJsonlConsumer((parsed) => accept(parsed, "", { count: 0 }));
+    const { content } = await chatCompletionStream(
+      {
+        model: input.model,
+        system: worldStreamSystem(input.language, "storyboard"),
+        user: `${storyboardOutline(input.storyboard)}
 
 ALREADY TRACKED (do not return these — not as duplicates, not rephrased):
 ${knownBlock || "- (none)"}
 
 Extract only the worldbuilding that is missing so far, as JSONL (one object per line), entirely in ${input.language}.`,
-      maxTokens: 3500,
-      temperature: 0.5,
-    },
-    consumer.push,
-  );
-  consumer.flush();
+        maxTokens: 3500,
+        temperature: 0.5,
+      },
+      consumer.push,
+    );
+    consumer.flush();
 
-  // Kam nichts live an (Provider ohne echte Textstücke)? Dann den fertigen Text nachverarbeiten.
-  let world = normalizeWorld(collected);
-  if (worldEntryCount(world) === 0) {
-    consumeJsonlText(content, (parsed) => collect(parsed, false));
-    world = normalizeWorld(collected);
+    // Kam nichts live an (Provider ohne echte Textstücke)? Dann den fertigen Text nachverarbeiten.
+    let world = normalizeWorld(collected);
+    if (worldEntryCount(world) === 0) {
+      consumeJsonlText(content, (parsed) => accept(parsed, "", { count: 0 }));
+      world = normalizeWorld(collected);
+    }
+    // Immer noch nichts? Dann hat das Modell ein normales JSON-Dokument geliefert.
+    if (worldEntryCount(world) === 0) {
+      return {
+        world: dedupeWorldResponse(normalizeWorld(parseJson(content, "Weltenbau")), known),
+        warnings,
+        scannedManuscript: false,
+      };
+    }
+    return { world: dedupeWorldResponse(world, known), warnings, scannedManuscript: false };
   }
-  // Immer noch nichts? Dann hat das Modell ein normales JSON-Dokument geliefert.
-  if (worldEntryCount(world) === 0) {
-    return dedupeWorldResponse(normalizeWorld(parseJson(content, "Weltenbau")), known);
+
+  for (const [index, chapter] of chapters.entries()) {
+    const title = chapter.title.trim() || `Kapitel ${index + 1}`;
+    handlers.onChapter?.({ index, total: chapters.length, title });
+    const parts = splitIntoChunks(chapter.text, WORLD_CHUNK_WORDS);
+    /** Zähler je Kapitel — gilt über **alle** Teile (die Grenze steht so auch im Auftrag). */
+    const state = { count: 0 };
+
+    for (const [partIndex, part] of parts.entries()) {
+      if (entryCount() >= MAX_WORLD_TOTAL) break;
+      const acceptPart = (parsed: Record<string, unknown>) => accept(parsed, part, state);
+      const consumer = createJsonlConsumer(acceptPart);
+      const before = state.count;
+
+      try {
+        const { content, finishReason } = await chatCompletionStream(
+          {
+            model: input.model,
+            system: worldStreamSystem(input.language, "chapter"),
+            user: worldChapterUser(
+              input,
+              {
+                label: title,
+                part: partIndex + 1,
+                parts: parts.length,
+                text: part,
+              },
+              [...known, ...worldTitles(collected)],
+            ),
+            maxTokens: 2500,
+            temperature: 0.4,
+          },
+          consumer.push,
+        );
+        consumer.flush();
+
+        if (finishReason === "length") {
+          warnings.push(
+            `Kapitel ${index + 1}${parts.length > 1 ? ` · Teil ${partIndex + 1}` : ""}: Die Antwort lief ins Token-Limit — was bis dahin kam, ist übernommen.`,
+          );
+          continue;
+        }
+        if (state.count === before && content.trim()) {
+          consumeJsonlText(content, acceptPart);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
+        const label = `Kapitel ${index + 1}${parts.length > 1 ? ` · Teil ${partIndex + 1}` : ""}`;
+        warnings.push(`${label} übersprungen: ${message}`);
+        handlers.onWarning?.(`${label} übersprungen: ${message}`);
+        continue;
+      }
+    }
+
+    handlers.onChapterDone?.({ index, total: chapters.length, title, found: state.count });
+
+    if (entryCount() >= MAX_WORLD_TOTAL) {
+      warnings.push(
+        `Notbremse: nach ${entryCount()} Einträgen abgebrochen — die restlichen Kapitel wurden nicht mehr gelesen.`,
+      );
+      break;
+    }
   }
-  return dedupeWorldResponse(world, known);
+
+  if (unverified > 0) {
+    warnings.push(
+      unverified === 1
+        ? "1 Name stand nicht im gelesenen Text — bitte im Vorschlag prüfen."
+        : `${unverified} Namen standen nicht im gelesenen Text — bitte im Vorschlag prüfen.`,
+    );
+  }
+
+  return { world: dedupeWorldResponse(normalizeWorld(collected), known), warnings, scannedManuscript: true };
+}
+
+/** Alle Namen der bisher gesammelten Einträge (für „ALREADY TRACKED" im nächsten Aufruf). */
+function worldTitles(world: StoryWorld): { title: string; category: string }[] {
+  const pairs: [keyof StoryWorld, string][] = [
+    ["locations", "Ort"],
+    ["factions", "Fraktion"],
+    ["magic", "Magie"],
+    ["artifacts", "Artefakt"],
+    ["lore", "Lore"],
+  ];
+  const result: { title: string; category: string }[] = [];
+  for (const [key, category] of pairs) {
+    for (const item of world[key] ?? []) result.push({ title: item.name, category });
+  }
+  return result;
+}
+
+/** Auftrag für **ein** Kapitel (oder einen Teil davon) — mit allen bereits bekannten Namen. */
+function worldChapterUser(
+  input: WorldExtractInput,
+  chapter: { label: string; part: number; parts: number; text: string },
+  tracked: { title: string; category: string }[],
+): string {
+  const knownBlock = tracked.map((entry) => `- [${entry.category}] ${entry.title}`).join("\n");
+  const partNote =
+    chapter.parts > 1
+      ? ` (part ${chapter.part} of ${chapter.parts} — the text below is only a part of this chapter)`
+      : "";
+
+  return `BOOK TITLE: ${input.storyboard.title || "(untitled)"}
+GENRE: ${input.storyboard.genre || "(unknown)"}
+
+ALREADY TRACKED (do not return these — not as duplicates, not rephrased):
+${knownBlock || "- (none)"}
+
+CHAPTER: ${chapter.label}${partNote}
+
+CHAPTER TEXT:
+${chapter.text}
+
+Extract only the worldbuilding of this chapter as JSONL (one object per line), entirely in ${input.language}.`;
 }
 
 /** Anzahl der Einträge über alle Welt-Kategorien. */
@@ -2226,109 +2396,218 @@ function worldEntryCount(world: StoryWorld): number {
   );
 }
 
-/** Extraktionsauftrag + Regeln der Figuren — von JSON- und JSONL-Variante **geteilt**. */
-function characterExtractBrief(language: string): string {
+/** Extraktionsauftrag + Regeln der Figuren — gilt für **ein Kapitel** je Aufruf. */
+function characterExtractBrief(language: string, maxPerChapter: number): string {
   return `You are a continuity editor building a story bible from a finished manuscript.
 ${languageLock(language)}
 
-TASK: find every NAMED figure that actually appears in the manuscript excerpts below.
+TASK: find every NAMED figure that appears in **THIS chapter** (the text below is one chapter).
 A "figure" is any named character, creature, deity, AI or personified being — major or minor —
 that the text refers to by name (speaking, acting, being described, or being remembered).
 
 Rules:
-- ONLY figures supported by the text. Never invent names, roles or facts.
-- name: exactly as written in the manuscript.
+- ONLY figures supported by this text. Never invent names, roles or facts.
+- The name MUST appear **verbatim** in the text below: the server checks every name against it
+  and discards names it cannot find. A name that only exists in your head is a lost entry.
+- name: exactly as written in the text.
 - role: short and concrete — the figure's function in THIS story
   (e.g. "Protagonist", "Antagonist", "Verbündeter", "Auftraggeber", "Nebenfigur").
-- description: 1-2 sentences strictly grounded in the excerpts (function, relation to others, traits).
+- description: 1-2 sentences strictly grounded in this chapter (function, relation to others, traits).
+- At most ${maxPerChapter} NEW figures for this chapter — most important first. Figures listed
+  under ALREADY TRACKED are NOT new: skip them even when they act in this chapter.
 - Skip the narrator, unnamed groups ("die Wachen" without a name) and mere mentions of places.
-- Skip every name listed under ALREADY TRACKED.
-- Order by importance, most important first.
 - Every string value MUST be in ${language}.`;
 }
 
-function characterExtractSystem(language: string): string {
-  return `${characterExtractBrief(language)}
-
-Respond ONLY with a single valid JSON object:
-{ "characters": [{ "name": string, "role": string, "description": string }] }`;
-}
-
-function characterExtractStreamSystem(language: string): string {
-  return `${characterExtractBrief(language)}
+function characterExtractStreamSystem(language: string, maxPerChapter: number): string {
+  return `${characterExtractBrief(language, maxPerChapter)}
 
 ${jsonlFormatBlock(language, `{"name":"…","role":"Protagonist","description":"…"}`)}`;
 }
 
-export interface CharacterStreamHandlers {
-  /** Eine fertige Figur (live, noch nicht dedupliziert/validiert). */
-  onCharacter?: (character: StoryCharacter) => void;
+/**
+ * Belegprüfung für Figuren-Namen: Der Name muss im **gesehenen Text** vorkommen.
+ *
+ * Dieselbe Härte wie beim Kanon (`quoteMatchesText`): Ein Name, der nirgends im Kapitel steht,
+ * wurde erfunden und gehört nicht in die Figurenliste. Verglichen wird normalisiert
+ * (Kleinschreibung, ohne Akzente und Satzzeichen) und ohne Anreden — „Prinzessin Lysara" findet
+ * also „Lysara". Reicht der volle Name nicht, genügt der **Kernname** (letztes Wort ≥ 3 Zeichen),
+ * weil Namen im Text auch verkürzt vorkommen.
+ */
+function nameAppearsInText(name: string, text: string): boolean {
+  const haystack = new Set(normalizeName(text, new Set()).split(" ").filter(Boolean));
+  const cleaned = normalizeCharacterName(name);
+  if (!cleaned) return false;
+  if (haystack.has(cleaned)) return true;
+  const tokens = cleaned.split(" ").filter((token) => token.length >= 3);
+  const core = tokens[tokens.length - 1];
+  return Boolean(core && haystack.has(core));
 }
 
+export interface CharacterStreamHandlers {
+  /** Eine fertige Figur (live, bereits gegen den Text geprüft). */
+  onCharacter?: (character: StoryCharacter) => void;
+  /** Ein Kapitel wird gelesen. */
+  onChapter?: (info: { index: number; total: number; title: string }) => void;
+  /** Ein Kapitel ist durch. */
+  onChapterDone?: (info: { index: number; total: number; title: string; found: number }) => void;
+  /** Ein Kapitel wurde übersprungen — der Lauf geht weiter. */
+  onWarning?: (message: string) => void;
+}
+
+export interface CharacterScanResult {
+  characters: StoryCharacter[];
+  /** Übersprungene Kapitel und verworfene (nicht im Text belegte) Namen. */
+  warnings: string[];
+}
+
+/** Neue Figuren je Kapitel (so steht es auch im Auftrag). */
+const MAX_CHARACTERS_PER_CHAPTER = 12;
+/** Notbremse über das ganze Buch — keine stille Reißleine wie beim alten Ein-Aufruf-Design. */
+const MAX_CHARACTERS_TOTAL = 400;
+/** Wortbudget eines Kapitel-Teils. Größer als bei den Pässen: die Antwort ist klein. */
+const CHARACTER_CHUNK_WORDS = 2500;
+
 /**
- * Gestreamte Figuren-Extraktion: **eine JSON-Zeile pro Figur**, damit der Review-Dialog die
- * gefundenen Figuren live zeigt. Das Ergebnis entspricht der Nicht-Streaming-Variante
- * (gleiche Normalisierung inkl. Filter gegen bereits getrackte Namen).
+ * Gestreamte Figuren-Extraktion — **Kapitel für Kapitel über den vollen Text**.
+ *
+ * Vorher las ein einziger Aufruf einen **Ausschnitt** (je Kapitel nur der Anfang, zusammen
+ * budgetiert): Figuren, die erst später im Kapitel auftraten, konnte das Modell nie sehen. Jetzt
+ * wird jedes Kapitel ganz gelesen (lange Kapitel absatzsicher geteilt), und die schon gefundenen
+ * Namen gehen als „ALREADY TRACKED" in den nächsten Aufruf — so wächst der Fund mit dem Text,
+ * ohne dass etwas doppelt wird. Jeder Name wird gegen den gesehenen Text geprüft (Erfindungen
+ * fallen weg und werden gezählt), und ein einzelnes kaputtes Kapitel reißt den Lauf nicht ab.
  */
 export async function extractCharactersStream(
   input: CharacterExtractInput,
   handlers: CharacterStreamHandlers = {},
-): Promise<StoryCharacter[]> {
-  const digest = manuscriptDigest(input.chapters);
-  if (!digest.trim()) {
+): Promise<CharacterScanResult> {
+  const chapters = input.chapters.filter((chapter) => chapter.text.trim().length > 0);
+  if (chapters.length === 0) {
     throw new ApiError(
       "Kein Manuskript-Text vorhanden, aus dem Figuren abgeleitet werden könnten.",
       400,
     );
   }
 
-  const rawCharacters: unknown[] = [];
-  const collect = (parsed: Record<string, unknown>, live: boolean) => {
-    const name = str(parsed.name);
-    if (!name) return;
-    rawCharacters.push(parsed);
-    if (live) {
-      handlers.onCharacter?.({
-        name,
-        role: str(parsed.role, "Figur"),
-        description: str(parsed.description),
-      });
-    }
-  };
-
-  const consumer = createJsonlConsumer((parsed) => collect(parsed, true));
-
-  const { content, finishReason } = await chatCompletionStream(
-    {
-      model: input.model,
-      system: characterExtractStreamSystem(input.language),
-      user: `${characterExtractUser(input, digest)}
-
-Extract the named figures now as JSONL (one object per line), entirely in ${input.language}.`,
-      maxTokens: 4000,
-      temperature: 0.4,
-    },
-    consumer.push,
+  const found: StoryCharacter[] = [];
+  const warnings: string[] = [];
+  /** Bereits **angenommene** Namen (klein geschrieben) — verhindert Dubletten über Kapitel hinweg. */
+  const seen = new Set(
+    input.knownCharacters.map((name) => name.trim().toLowerCase()).filter(Boolean),
   );
-  consumer.flush();
+  /** Schon einmal verworfene Namen — nur zum Zählen, **nicht** zum Blockieren. */
+  const rejected = new Set<string>();
+  let unverified = 0;
 
-  if (finishReason === "length") {
-    throw new ApiError(
-      "Die Figuren-Extraktion wurde vom Token-Limit abgeschnitten. Bitte ein Modell mit größerem Kontext wählen oder erneut versuchen.",
-      502,
+  for (const [index, chapter] of chapters.entries()) {
+    const title = chapter.title.trim() || `Kapitel ${index + 1}`;
+    handlers.onChapter?.({ index, total: chapters.length, title });
+    const parts = splitIntoChunks(chapter.text, CHARACTER_CHUNK_WORDS);
+    let chapterFound = 0;
+
+    for (const [partIndex, part] of parts.entries()) {
+      if (found.length >= MAX_CHARACTERS_TOTAL) break;
+
+      /** Nimmt eine Modellzeile auf — Prüfung, Dublette und Zählung an **einer** Stelle. */
+      const accept = (parsed: Record<string, unknown>) => {
+        const name = str(parsed.name);
+        if (!name || chapterFound >= MAX_CHARACTERS_PER_CHAPTER) return;
+        const key = name.toLowerCase();
+        if (seen.has(key)) return; // bereits angenommen (auch aus einem früheren Kapitel)
+        if (!nameAppearsInText(name, part)) {
+          // Steht der Name nicht in **diesem** Text, ist er hier erfunden. Er wird aber **nicht**
+          // global blockiert: Ein Kapitel wird in Teile zerlegt, und derselbe Name kann im
+          // nächsten Teil legitim vorkommen (genau der Fall „Figur tritt erst am Ende auf").
+          // Gezählt wird jede Erfindung nur einmal.
+          if (!rejected.has(key)) {
+            rejected.add(key);
+            unverified += 1;
+          }
+          return;
+        }
+        seen.add(key);
+        const character: StoryCharacter = {
+          name,
+          role: str(parsed.role, "Figur"),
+          description: str(parsed.description),
+        };
+        found.push(character);
+        chapterFound += 1;
+        handlers.onCharacter?.(character);
+      };
+
+      const consumer = createJsonlConsumer((parsed) => accept(parsed));
+      let acceptedInCall = 0;
+      const before = found.length;
+
+      try {
+        const { content, finishReason } = await chatCompletionStream(
+          {
+            model: input.model,
+            system: characterExtractStreamSystem(input.language, MAX_CHARACTERS_PER_CHAPTER),
+            user: characterExtractUser(
+              input,
+              {
+                label: title,
+                part: partIndex + 1,
+                parts: parts.length,
+                text: part,
+              },
+              [...input.knownCharacters, ...found.map((entry) => entry.name)],
+            ),
+            maxTokens: 2000,
+            temperature: 0.3,
+          },
+          consumer.push,
+        );
+        consumer.flush();
+
+        if (finishReason === "length") {
+          warnings.push(
+            `Kapitel ${index + 1}${parts.length > 1 ? ` · Teil ${partIndex + 1}` : ""}: Die Antwort lief ins Token-Limit — was bis dahin kam, ist übernommen.`,
+          );
+          continue;
+        }
+
+        // Kam nichts live an (Provider ohne echte Textstücke)? Dann den fertigen Text nachverarbeiten.
+        if (found.length === before && content.trim()) {
+          consumeJsonlText(content, (parsed) => {
+            accept(parsed);
+            acceptedInCall += 1;
+          });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
+        const label = `Kapitel ${index + 1}${parts.length > 1 ? ` · Teil ${partIndex + 1}` : ""}`;
+        warnings.push(`${label} übersprungen: ${message}`);
+        handlers.onWarning?.(`${label} übersprungen: ${message}`);
+        continue;
+      }
+
+      void acceptedInCall;
+    }
+
+    if (found.length >= MAX_CHARACTERS_TOTAL) {
+      warnings.push(
+        `Notbremse: nach ${found.length} Figuren abgebrochen — die restlichen Kapitel wurden nicht mehr gelesen.`,
+      );
+      handlers.onChapterDone?.({ index, total: chapters.length, title, found: chapterFound });
+      break;
+    }
+
+    handlers.onChapterDone?.({ index, total: chapters.length, title, found: chapterFound });
+  }
+
+  if (unverified > 0) {
+    warnings.push(
+      unverified === 1
+        ? "1 Name stand nicht im gelesenen Text und wurde verworfen (Erfindung des Modells)."
+        : `${unverified} Namen standen nicht im gelesenen Text und wurden verworfen (Erfindungen des Modells).`,
     );
   }
 
-  // Kam nichts live an (Provider ohne echte Textstücke)? Dann den fertigen Text nachverarbeiten.
-  if (rawCharacters.length === 0) {
-    consumeJsonlText(content, (parsed) => collect(parsed, false));
-  }
-
-  const parsed =
-    rawCharacters.length > 0
-      ? { characters: rawCharacters }
-      : parseJson(content, "Figuren-Extraktion");
-  return normalizeExtractedCharacters(parsed, input.knownCharacters);
+  return { characters: found, warnings };
 }
 
 /** Alle bereits bekannten Einträge (Liste + Storyboard-Welt), dedupliziert. */
@@ -2380,29 +2659,11 @@ function dedupeWorldResponse(
   };
 }
 
-export async function extractWorld(input: WorldExtractInput): Promise<StoryWorld> {
-  const known = worldKnownList(input);
-  const knownBlock = known
-    .map((entry) => `- [${entry.category}] ${entry.title}`)
-    .join("\n");
-
-  const content = await chatCompletion({
-    model: input.model,
-    system: worldSystem(input.language),
-    user: `${storyboardOutline(input.storyboard)}
-
-ALREADY TRACKED (do not return these — not as duplicates, not rephrased):
-${knownBlock || "- (none)"}
-
-Extract only the worldbuilding that is missing so far, as JSON, entirely in ${input.language}.`,
-    json: true,
-    maxTokens: 3500,
-    temperature: 0.5,
-    cache: true,
-  });
-
-  return dedupeWorldResponse(normalizeWorld(parseJson(content, "Weltenbau")), known);
-}
+/**
+ * Hinweis: Die **nicht**-streamende Weltenbau-Extraktion (`POST /api/world/extract`) wurde
+ * entfernt — sie hatte keinen Aufrufer mehr (die Ansicht nutzt die Stream-Variante), und die
+ * Regeln des Repos verbieten Sync-Routen ohne echten Aufrufer.
+ */
 
 export interface CharacterExtractInput {
   bookTitle: string;
@@ -2485,15 +2746,24 @@ export function normalizeExtractedCharacters(
   return result;
 }
 
+/**
+ * Auftrag für **ein** Kapitel (oder einen Teil davon). Die bereits gefundenen Namen stehen als
+ * „ALREADY TRACKED" drin — so wächst der Fund mit dem Text, ohne dass Namen doppelt auftauchen.
+ */
 function characterExtractUser(
   input: CharacterExtractInput,
-  digest: string,
+  chapter: { label: string; part: number; parts: number; text: string },
+  tracked: string[],
 ): string {
-  const known = input.knownCharacters
+  const known = tracked
     .map((name) => name.trim())
     .filter(Boolean)
     .map((name) => `- ${name}`)
     .join("\n");
+  const partNote =
+    chapter.parts > 1
+      ? ` (part ${chapter.part} of ${chapter.parts} — the text below is only a part of this chapter)`
+      : "";
 
   return `BOOK TITLE: ${input.bookTitle || "(untitled)"}
 GENRE: ${input.genre || "(unknown)"}
@@ -2501,43 +2771,17 @@ GENRE: ${input.genre || "(unknown)"}
 ALREADY TRACKED (do not list these):
 ${known || "- (none)"}
 
-MANUSCRIPT EXCERPTS:
-${digest}
+CHAPTER: ${chapter.label}${partNote}
 
-Extract the named figures now as JSON, with roles and descriptions in ${input.language}.`;
+CHAPTER TEXT:
+${chapter.text}
+
+Extract the named figures of this chapter now as JSONL (one object per line), entirely in ${input.language}.`;
 }
 
-/** Leitet benannte Figuren aus dem Manuskript ab (findet auch Storyboard-unbekannte Figuren). */
-export async function extractCharacters(
-  input: CharacterExtractInput,
-): Promise<StoryCharacter[]> {
-  const digest = manuscriptDigest(input.chapters);
-  if (!digest.trim()) {
-    throw new ApiError(
-      "Kein Manuskript-Text vorhanden, aus dem Figuren abgeleitet werden könnten.",
-      400,
-    );
-  }
-
-  const { content, finishReason } = await chatCompletionDetailed({
-    model: input.model,
-    system: characterExtractSystem(input.language),
-    user: characterExtractUser(input, digest),
-    json: true,
-    maxTokens: 4000,
-    temperature: 0.4,
-    cache: true,
-  });
-
-  if (finishReason === "length") {
-    throw new ApiError(
-      "Die Figuren-Extraktion wurde vom Token-Limit abgeschnitten. Bitte ein Modell mit größerem Kontext wählen oder erneut versuchen.",
-      502,
-    );
-  }
-
-  return normalizeExtractedCharacters(
-    parseJson(content, "Figuren-Extraktion"),
-    input.knownCharacters,
-  );
-}
+/**
+ * Hinweis: Die **nicht**-streamende Figuren-Extraktion (`POST /api/characters/extract`) wurde
+ * entfernt — sie hatte keinen Aufrufer mehr (die Ansicht nutzt die Stream-Variante), und die
+ * Regeln des Repos verbieten Sync-Routen ohne echten Aufrufer. „Ein Kern, zwei Transporte" gilt
+ * hier nicht: Die Kapitel-Schleife ist ohne Fortschrittsmeldung nicht benutzbar.
+ */

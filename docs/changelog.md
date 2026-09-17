@@ -8,6 +8,33 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Figuren- und Weltenbau-Scan lesen Kapitel für Kapitel den vollen Text
+
+- **Fixed** **Die Figuren-Extraktion fand nicht alle Figuren.** Sie las einen **Ausschnitt**: pro
+  Kapitel nur den **Anfang**, zusammen auf ein Budget von ~60.000 Zeichen verteilt. Wer erst in der
+  zweiten Kapitelhälfte auftrat, konnte so nie gefunden werden — unabhängig davon, wie oft man den
+  Scan wiederholte. Jetzt wird **jedes Kapitel ganz** gelesen (lange Kapitel absatzsicher in Teile
+  von ~2.500 Wörtern), und die schon gefundenen Namen gehen als „ALREADY TRACKED" in den nächsten
+  Aufruf.
+- **Fixed** **Der Weltenbau fand nur, was im Storyboard stand.** Er las ausschließlich die
+  Kapitel-Kurzfassungen — ein Ort, der einmal im Fließtext genannt wird, war grundsätzlich
+  unauffindbar. Jetzt liest er dasselbe Kapitel-für-Kapitel wie die Figuren (mit `chapters`;
+  ohne Manuskript bleibt der Storyboard-Weg und sagt das auch: `scannedManuscript: false`).
+- **Added** **Belegprüfung für Figuren-Namen.** Jeder Name wird gegen den gelesenen Text gehalten
+  (normalisiert, ohne Anreden — „Prinzessin Lysara" findet „Lysara"). Steht er dort nicht, wurde er
+  erfunden und fällt weg; die Zahl steht als Hinweis im Dialog. Weltnamen werden ebenfalls geprüft,
+  aber **nicht** verworfen (Umschreibungen wie „blutige Magie" sind legitim) — sie werden gezählt
+  und als Hinweis gezeigt.
+- **Added** **Fortschritt und Warnungen im Dialog**: „Kapitel 3/12 wird gelesen…", `chapter`/
+  `chapterDone`-Ereignisse und ein Hinweis-Block für übersprungene Kapitel. Ein einzelnes kaputtes
+  Kapitel reißt den Lauf nicht mehr ab — was gefunden wurde, bleibt.
+- **Changed** **Pro Kapitel gibt es eine Obergrenze statt einer stillen Gesamt-Reißleine** (12 neue
+  Figuren bzw. 10 neue Welt-Einträge je Kapitel; über das Buch nur eine hohe Notbremse), und die
+  Grenze steht im Auftrag — dieselbe Lehre wie beim Kanon-Scan (0.5.9).
+- **Removed** **Zwei tote Sync-Routen** (`POST /api/characters/extract`, `POST /api/world/extract`):
+  Sie hatten keinen Aufrufer mehr, und ein Kapitel-für-Kapitel-Lauf braucht Fortschritt und
+  Abbruch. Beide Extraktionen laufen ausschließlich als Stream.
+
 ### Import legt Kapitel als Rohentwurf an
 
 - **Changed** **Importierte Kapitel gelten jetzt als Rohentwurf — unabhängig von ihrer Länge.**

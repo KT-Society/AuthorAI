@@ -405,20 +405,30 @@ werden in der jeweiligen Ansicht angestoßen und nutzen das **Storyboard-Modell*
 
 | Ableitung | Quelle | Route | Ergebnis |
 | --- | --- | --- | --- |
-| **Weltenbau** | Storyboard | `POST /api/world/extract` · Stream: `/api/world/extract/stream` | Orte, Fraktionen, Magie, Artefakte, Lore |
-| **Figuren** | **Manuskript** | `POST /api/characters/extract` · Stream: `/api/characters/extract/stream` | benannte Figuren (Name, Rolle, Beschreibung) |
+| **Weltenbau** | **Manuskript** (Kapitel für Kapitel) — ohne Manuskript das Storyboard | `POST /api/world/extract/stream` | Orte, Fraktionen, Magie, Artefakte, Lore |
+| **Figuren** | **Manuskript** (Kapitel für Kapitel) | `POST /api/characters/extract/stream` | benannte Figuren (Name, Rolle, Beschreibung) |
 
-**Live-Vorschläge:** Beide Routen haben eine JSONL-Stream-Variante. Der Review-Dialog öffnet
-sofort und füllt sich, während das Modell arbeitet („sammelt…"); jeder Vorschlag kommt einzeln,
-am Ende ersetzt die **validierte** Fassung die Live-Liste (gleiche Filterung und Dedupe wie im
-Nicht-Streaming-Weg). Übernehmen ist bis dahin gesperrt — geschrieben wird nie ein ungeprüfter
-Zwischenstand.
+**Live-Vorschläge:** Beide Routen sind JSONL-Streams (es gibt bewusst **keine** Sync-Variante — der
+Lauf über ein ganzes Buch braucht Fortschritt und Abbruch). Der Review-Dialog öffnet sofort und
+füllt sich, während das Modell arbeitet („sammelt…"); jeder Vorschlag kommt einzeln, am Ende
+ersetzt die **validierte** Fassung die Live-Liste. Übernehmen ist bis dahin gesperrt — geschrieben
+wird nie ein ungeprüfter Zwischenstand. Fortschritt („Kapitel 3/12 wird gelesen…") und Warnungen
+(übersprungene Kapitel, verworfene Namen) stehen im Dialog.
 
-**Warum Figuren aus dem Manuskript?** Die Storyboard-Figuren entstehen aus der *Idee* — Figuren,
-die erst beim Schreiben auftauchen (Nebenfiguren, Auftraggeber, Gegenspieler), kennt es nicht.
-Die Extraktion liest deshalb die Kapiteltexte: pro Kapitel der **Anfang** (dort werden Figuren
-eingeführt), Gesamtbudget ~60k Zeichen gleichmäßig verteilt — so werden auch spät auftauchende
-Figuren erfasst. Bereits getrackte Namen werden serverseitig herausgefiltert.
+**Kapitel für Kapitel über den vollen Text.** Beide Extraktionen lesen **jedes Kapitel ganz** (lange
+Kapitel absatzsicher in Teile von ~2.500 Wörtern), und die schon gefundenen Namen gehen als
+„ALREADY TRACKED" in den nächsten Aufruf. Vorher las die Figuren-Extraktion nur einen **Ausschnitt**
+(pro Kapitel der Anfang, zusammen ~60k Zeichen) und der Weltenbau nur das **Storyboard** — Figuren,
+die erst in der zweiten Kapitelhälfte auftraten, und Orte, die es nur im Fließtext gab, waren so
+grundsätzlich unauffindbar. Ein einzelnes kaputtes Kapitel wird übersprungen (Warnung), der Lauf
+geht weiter.
+
+**Belegprüfung statt Erfindung:** Jeder **Figuren**-Name wird gegen den gelesenen Text geprüft
+(normalisiert, ohne Anreden — „Prinzessin Lysara" findet „Lysara"); steht er dort nicht, wurde er
+erfunden und fällt weg (gezählt und im Dialog gemeldet). Beim **Weltenbau** wird ebenfalls geprüft,
+aber **nicht** verworfen: Weltnamen werden im Text oft umschrieben („Blutmagie" vs. „blutige
+Magie") — unbelegte Vorschläge werden gezählt und als Hinweis gezeigt, entschieden wird im Review.
+Bereits getrackte Namen und Einträge werden serverseitig herausgefiltert.
 
 Die Vorschläge landen in einem **Review-Dialog** (einzeln an-/abwählbar) und werden erst nach
 Bestätigung zu Charakteren (Tag „Manuskript", verknüpft mit dem Projekt).

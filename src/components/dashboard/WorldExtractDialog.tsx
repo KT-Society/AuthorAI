@@ -33,6 +33,8 @@ export function WorldExtractDialog({
   candidates,
   running = false,
   bookTitle,
+  status = null,
+  warnings = [],
   onClose,
   onAccept,
 }: {
@@ -41,6 +43,10 @@ export function WorldExtractDialog({
   /** Läuft die Ableitung noch? Dann wachsen die Vorschläge live hinein. */
   running?: boolean;
   bookTitle: string;
+  /** Fortschritt des Kapitel-für-Kapitel-Laufs (z. B. „Kapitel 3/12 wird gelesen…"). */
+  status?: string | null;
+  /** Übersprungene Kapitel und unbelegte Namen — sichtbar, damit nichts still passiert. */
+  warnings?: string[];
   onClose: () => void;
   onAccept: (accepted: WorldEntry[]) => void;
 }) {
@@ -152,11 +158,33 @@ export function WorldExtractDialog({
         </div>
 
         <div className="mt-3 flex-1 space-y-2 overflow-y-auto pr-1">
+          {status ? (
+            <p className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-[11px] text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" />
+              {status}
+            </p>
+          ) : null}
+
           {running && candidates.length === 0 ? (
             <p className="flex items-center gap-2 rounded-xl border border-brand-cyan/20 bg-brand-cyan/5 px-3.5 py-3 text-xs text-brand-cyan">
               <Loader2 className="size-3.5 animate-spin" />
               Sammelt Vorschläge…
             </p>
+          ) : null}
+
+          {warnings.length > 0 ? (
+            <div className="rounded-xl border border-brand-amber/30 bg-brand-amber/5 px-3.5 py-3">
+              <p className="text-[11px] font-semibold text-brand-amber">
+                {warnings.length === 1 ? "1 Hinweis" : `${warnings.length} Hinweise`}
+              </p>
+              <ul className="mt-1 space-y-1">
+                {warnings.map((warning, index) => (
+                  <li key={index} className="text-[11px] text-foreground/70">
+                    {warning}
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
           {candidates.map(({ entry, similarTo }) => {
             const isSelected = !rejected.has(entry.id);

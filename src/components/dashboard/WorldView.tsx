@@ -35,6 +35,7 @@ import { streamWorldExtract } from "@/services/story";
 import { Badge, EmptyState, Panel, ViewHeader } from "./primitives";
 import { WORLD_CATEGORY_TONE, WorldExtractDialog } from "./WorldExtractDialog";
 import type { WorldCandidate } from "./WorldExtractDialog";
+import { manuscriptOf } from "@/lib/bookManuscript";
 
 type SortKey = "default" | "name" | "category" | "updated";
 
@@ -75,6 +76,10 @@ export function WorldView({
     books.find((book) => book.storyboard)?.id ?? books[0]?.id ?? "",
   );
   const [candidates, setCandidates] = useState<WorldCandidate[] | null>(null);
+  /** Fortschritt des Kapitel-für-Kapitel-Laufs (null = kein Lauf). */
+  const [extractStatus, setExtractStatus] = useState<string | null>(null);
+  /** Übersprungene Kapitel und unbelegte Namen — sichtbar, nicht still. */
+  const [extractWarnings, setExtractWarnings] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [formCategory, setFormCategory] = useState<WorldCategory>("Ort");
@@ -116,6 +121,8 @@ export function WorldView({
     }
     setError(null);
     setBusy(true);
+    setExtractWarnings([]);
+    setExtractStatus(null);
     // Dialog sofort öffnen — die Vorschläge wachsen live hinein.
     setCandidates([]);
     const prepared: WorldCandidate[] = [];
@@ -124,12 +131,23 @@ export function WorldView({
         .filter((entry) => (entry.bookId ?? "") === book.id)
         .map((entry) => ({ title: entry.title, category: entry.category }));
 
-      const world = await streamWorldExtract(
+      // Das Manuskript mitgeben: Der Server liest dann Kapitel für Kapitel den vollen Text.
+      // Die Storyboard-Kurzfassungen verraten nur, was im Plan steht — nicht, was im Buch vorkommt.
+      const chapters = manuscriptOf(book)
+        .map((chapter, index) => ({
+          title:
+            chapter.title?.trim() || book.storyboard?.chapters[index]?.title || `Kapitel ${index + 1}`,
+          text: (chapter.expanded || chapter.draft || "").trim(),
+        }))
+        .filter((chapter) => chapter.text.length > 0);
+
+      const result = await streamWorldExtract(
         {
           storyboard: book.storyboard,
           model,
           language: readLanguage() ?? "German",
           knownEntries,
+          chapters,
         },
         {
           onEntry: (category, item) => {
@@ -145,8 +163,22 @@ export function WorldView({
             prepared.push(match ? { entry, similarTo: match.title } : { entry });
             setCandidates([...prepared]);
           },
+          // Kapitel für Kapitel: Fortschritt und Warnungen gehören in den Dialog.
+          onChapter: (info) =>
+            setExtractStatus(`${info.title} wird gelesen (${info.index + 1}/${info.total})…`),
+          onChapterDone: () => setExtractStatus(null),
+          onWarning: (message) => setExtractWarnings((prev) => [...prev, message]),
         },
       );
+      const world = result.world;
+      setExtractWarnings(result.warnings);
+      if (!result.scannedManuscript) {
+        // Ehrlich sagen, worüber gelesen wurde: ohne Manuskript bleibt es beim Storyboard.
+        setExtractWarnings((prev) => [
+          ...prev,
+          "Kein Manuskript vorhanden — die Vorschläge stammen nur aus dem Storyboard.",
+        ]);
+      }
 
       // Abschluss: Der Server hat dedupliziert. Die **live erzeugten** Einträge behalten (so
       // bleiben IDs und damit die Auswahl des Nutzers stabil) und nur die weglassen, die es im
@@ -173,6 +205,7 @@ export function WorldView({
       setCandidates(prepared.length > 0 ? [...prepared] : null);
     } finally {
       setBusy(false);
+      setExtractStatus(null);
     }
   };
 
@@ -495,6 +528,8 @@ export function WorldView({
         candidates={candidates ?? []}
         running={busy}
         bookTitle={books.find((book) => book.id === deriveBookId)?.title ?? ""}
+        status={extractStatus}
+        warnings={extractWarnings}
         onClose={() => setCandidates(null)}
         onAccept={acceptCandidates}
       />

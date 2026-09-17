@@ -311,6 +311,30 @@ in der Kontinuität neu aufbauen.
 
 ## Figuren & Dubletten
 
+### Es werden nicht alle Figuren gefunden
+
+Der Scan liest **Kapitel für Kapitel den vollen Text** (lange Kapitel in Teilen) — eine Figur, die
+irgendwo namentlich vorkommt, wird gefunden, auch wenn sie erst in der zweiten Kapitelhälfte
+auftritt. Was trotzdem fehlen kann:
+
+- **Kein Name im Text**: Figuren, die nur beschrieben werden („der Fremde"), sind keine benannten
+  Figuren — der Auftrag schließt sie aus, und die Belegprüfung würde sie verwerfen.
+- **Der Name steht nicht wörtlich im Kapitel**: Dann wurde er vom Modell erfunden und fällt weg.
+  Die Zahl steht im Dialog unter „Hinweise".
+- **Das Kapitel wurde übersprungen**: Bei einem Modellfehler steht das als Warnung im Dialog — den
+  Scan einfach erneut starten, bereits gefundene Namen werden dann nicht doppelt vorgeschlagen.
+
+Wichtig: Der Scan schlägt nur **vor**. Was fehlt, lässt sich im Dialog auch von Hand anlegen.
+
+### Im Weltenbau fehlen Orte oder Fraktionen
+
+Seit dem Umbau liest auch der Weltenbau das **Manuskript** Kapitel für Kapitel (nicht mehr nur die
+Kapitel-Kurzfassungen des Storyboards) — Einträge, die nur im Fließtext vorkommen, werden damit
+gefunden. Steht im Dialog „nur aus dem Storyboard", wurde kein Manuskript-Text mitgeschickt: erst
+Kapitel schreiben (oder importieren), dann ableiten. Namen, die nicht wörtlich im Text stehen,
+werden als Hinweis gezählt, aber **nicht** verworfen (Weltnamen werden oft umschrieben) — sie
+gehören im Review geprüft.
+
 ### Nach dem Zusammenführen fehlen Fakten
 
 Sollten sie nicht. Beim **Zusammenführen** bleiben Fakten und Beziehungen erhalten: Sie wandern auf

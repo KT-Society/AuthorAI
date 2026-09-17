@@ -86,11 +86,16 @@ Soul-Prompt.
 { "soul": { "head": "…", "core": "…", "bio": "…" } }
 ```
 
-### `POST /api/characters/extract`
+### `POST /api/characters/extract/stream`
 
 Leitet benannte Figuren aus dem **Manuskript** ab — inklusive Figuren, die erst beim Schreiben
-auftauchen und im Storyboard nie standen. Bereits getrackte Namen werden serverseitig gefiltert.
-Live-Variante: `POST /api/characters/extract/stream` (JSONL, siehe Abschnitt „Streaming für Prüfungen & Extraktionen").
+auftauchen und im Storyboard nie standen. Der Server liest **Kapitel für Kapitel den vollen Text**
+(lange Kapitel absatzsicher geteilt), schon gefundene Namen gehen als „ALREADY TRACKED" in den
+nächsten Aufruf, und **jeder Name wird gegen den gelesenen Text geprüft**: Wer dort nicht steht,
+wurde erfunden und fällt weg (gezählt und gemeldet, nicht still).
+
+Es gibt **keine** nicht-streamende Variante: Der Lauf über ein ganzes Buch braucht Fortschritt und
+Abbruch. (Die alte Sync-Route wurde entfernt — sie hatte keinen Aufrufer mehr.)
 
 **Request**
 
@@ -467,12 +472,19 @@ data: {"type":"finding","finding":{"chapter":2,"scene":1,"issue":"…","fix":"�
 data: {"type":"done","summary":"…","findings":[ … ]}
 ```
 
-| Route | Ereignisse | `done`-Feld |
+| Route | Ereignisse | `done`-Felder |
 | --- | --- | --- |
 | `POST /api/timeline/check/stream` | `finding` (je Befund) | `summary`, `findings` |
 | `POST /api/timeline/repair/stream` | `chapter` (`raw`: Kapitel-Vorschlag) | `fixes`, `notes` |
-| `POST /api/world/extract/stream` | `entry` (`category`, `name`, `description`) | `world` |
-| `POST /api/characters/extract/stream` | `character` (`{name, role, description}`) | `characters` |
+| `POST /api/world/extract/stream` | `entry` (`category`, `name`, `description`) · `chapter`/`chapterDone` (Fortschritt) · `warning` | `world`, `warnings`, `scannedManuscript` |
+| `POST /api/characters/extract/stream` | `character` (`{name, role, description}`) · `chapter`/`chapterDone` (Fortschritt) · `warning` | `characters`, `warnings` |
+
+Die beiden **Extraktionen** lesen mit übergebenem `chapters` **Kapitel für Kapitel** (Figuren immer,
+Weltenbau ebenfalls) und melden Fortschritt und Warnungen: `{"type":"chapter","index":2,"total":12,
+"title":"Kapitel 3"}` beim Start eines Kapitels, `{"type":"chapterDone",…,"found":4}` danach und
+`{"type":"warning","message":"…"}` für ein übersprungenes Kapitel (der Lauf geht weiter) oder für
+verworfene Namen. Der Weltenbau fällt ohne `chapters` auf das **Storyboard** zurück — dann ist
+`scannedManuscript: false`.
 
 Body und Validierung entsprechen exakt der jeweiligen Nicht-Streaming-Route. Die **Live-Objekte
 sind Rohdaten des Modells** und damit ungeprüft (z. B. kann eine genannte Szene außerhalb des
@@ -700,32 +712,35 @@ auch einen Komma-String schicken; beides wird normalisiert. Die Zuordnung Name �
 **Client** (`findMatchingCharacter`); ein Name ohne passende Figur legt keine Figur an, sondern wird
 gemeldet.
 
-### `POST /api/world/extract`
+### `POST /api/world/extract/stream`
 
-Leitet Orte, Fraktionen, Magie, Artefakte und Lore aus einem vorhandenen Storyboard ab.
-Bereits getrackte Einträge (optional in `knownEntries`) schickt der Server ins Modell und filtert
-sie zusätzlich aus der Antwort — so entstehen bei wiederholten Scans keine Dubletten.
-Live-Variante: `POST /api/world/extract/stream` (JSONL, Vorschlag für Vorschlag — siehe Abschnitt „Streaming für Prüfungen & Extraktionen").
+Leitet Orte, Fraktionen, Magie, Artefakte und Lore ab. Bereits getrackte Einträge (optional in
+`knownEntries`) schickt der Server ins Modell und filtert sie zusätzlich aus der Antwort — so
+entstehen bei wiederholten Scans keine Dubletten.
+
+**Mit `chapters` liest der Scan Kapitel für Kapitel den vollen Manuskript-Text** (lange Kapitel
+absatzsicher geteilt, schon gefundene Einträge als „ALREADY TRACKED", ein kaputtes Kapitel
+übersprungen statt Abbruch). Ohne `chapters` bleibt es beim **Storyboard** — dann sagt
+`scannedManuscript: false` im `done`-Ereignis, dass die Vorschläge nur aus dem Plan stammen.
+Vorher las die Extraktion immer nur das Storyboard: Ein Ort, der einmal im Fließtext genannt wird,
+war so nie zu finden.
+
+Es gibt **keine** nicht-streamende Variante (der Lauf über ein ganzes Buch braucht Fortschritt und
+Abbruch); die alte Sync-Route wurde entfernt — sie hatte keinen Aufrufer mehr.
 
 ```json
 {
   "storyboard": { … },
   "model": "<model-id>",
   "language": "German",
-  "knownEntries": [{ "title": "Kinder der Asche", "category": "Fraktion" }]
+  "knownEntries": [{ "title": "Kinder der Asche", "category": "Fraktion" }],
+  "chapters": [{ "title": "Kapitel 1", "text": "…" }]
 }
 ```
 
-**Response**
-
-```json
-{
-  "world": {
-    "locations": [{ "name": "…", "description": "…" }],
-    "factions": [], "magic": [], "artifacts": [], "lore": []
-  }
-}
-```
+`chapters` ist optional, aber empfohlen. Ereignisse und `done`-Felder stehen im Abschnitt
+„Streaming für Prüfungen & Extraktionen": `entry` je Vorschlag, `chapter`/`chapterDone` als
+Fortschritt, `warning` für Übersprungenes, `done` mit `world`, `warnings` und `scannedManuscript`.
 
 ---
 
