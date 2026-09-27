@@ -159,6 +159,13 @@ Erweitert die Rohfassung zu einem vollständigen Kapitel nach **Craft-Regeln**:
 - Ziel-Länge kommt aus den **Kapitel-Zielwörtern** (Default 3.000–5.000, im Detail einstellbar).
 - **Continuation-Loop:** Modelle (besonders „lite") stoppen gern zu früh. Der Server zählt
   Wörter und fordert bis zu 3× nahtlose Fortsetzungen an, bis ≥ 90 % des Ziels erreicht sind.
+  **Wiederholungs-Guard:** Jede Fortsetzung wird vor dem Anhängen gegen
+  [`lib/repetition.ts`](../src/lib/repetition.ts) geprüft — identische Block-Dopplungen im
+  Anhäng, Echo des Kontext-Ankers (die letzten 2.000 Zeichen, die das Modell sah) und
+  Satz-Loops (dasselbe Muster ≥ 3× hintereinander) werden entfernt. Bleibt nichts übrig,
+  bricht der Loop ab, statt sich zu wiederholen; ein Prüfhinweis meldet jeden Eingriff.
+  Dieselbe Prüfung sichert die **Naht zwischen Pass-Teilen** (Kohärenz/Stil): Beginnt ein
+  Teil mit einem Echo des Nachbarkontexts, fliegt es raus, bevor das Kapitel zusammengesetzt wird.
 - **Heading-Cleanup:** führende Markdown-Überschriften/`**Kapitel 1**`-Zeilen werden entfernt.
 - **Live-Vorschau (Streaming):** `POST /api/chapter/expand/stream` schickt Textstücke
   (`delta`), am Ende den fertigen Text (`done`). Gestreamt wird **jede** Modellantwort des

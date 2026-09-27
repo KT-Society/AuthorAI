@@ -39,6 +39,7 @@ import {
   cleanJsonBlock,
 } from "./llm";
 import { extractProse, looksTruncated } from "../lib/prose";
+import { trimRepeatedProse } from "../lib/repetition";
 import { filterNoOpNotes } from "../lib/passNotes";
 import { normalizeWorldTitle } from "../lib/worldMatch";
 import { normalizeCharacterName } from "../lib/characterMatch";
@@ -576,8 +577,12 @@ Finish the paragraph now, entirely in ${params.language}.`,
   if (!appended) return params.text;
   // Sicherung: eine Fortsetzung darf den Text nicht aufblähen.
   if (countWords(appended) > CONTINUATION_MAX_WORDS) return params.text;
+  // Sicherung: Fortsetzungen dürfen den Kontext nicht echoen oder loopen —
+  // genü das Modell statt zu fortzusetzen, fliegt der Echoteil vor dem Anhängen raus.
+  const guarded = trimRepeatedProse(appended, tail);
+  if (!guarded.text.trim()) return params.text;
 
-  const text = `${params.text}\n\n${appended}`;
+  const text = `${params.text}\n\n${guarded.text}`;
 
   // Auch die Fortsetzung kann erneut ins Limit laufen — dann genau ein weiterer Versuch.
   if (finishReason === "length") {
@@ -660,7 +665,12 @@ Continue now, entirely in ${input.language}.`,
 
     const appended = extractProse(stripLeadingHeadings(content.trim()));
     if (!appended) break;
-    text = `${text}\n\n${appended}`;
+    // Gegen den Wiederholungs-Bug: Das Modell sieht nur den Schwanz des Kapitels und
+    // dreht gern am Kontext entlang (Echo) oder loopt. Beides fliegt raus, bevor es
+    // ins Manuskript gelangt — wurde alles getrimmt, bricht der Loop ab statt zu wiederholen.
+    const guarded = trimRepeatedProse(appended, tail);
+    if (!guarded.text.trim()) break;
+    text = `${text}\n\n${guarded.text}`;
     words = countWords(text);
     lastFinish = finishReason ?? undefined;
 
@@ -1025,6 +1035,16 @@ Rewrite ONLY this part (~${chunkWords} words) — never the neighbouring parts, 
         `⚠️ Teil ${index + 1}/${chunks.length} unverändert übernommen — das Modell hat deutlich zu lang geantwortet (${kind === "consistency" ? "Kohärenz" : "Stil"} dort nicht angewendet).`,
       );
       continue;
+    }
+
+    // Gegen den Wiederholungs-Bug: Beginnt der Teil mit einem Echo des vorderen
+    // Nachbarkontexts („PRECEDING TEXT“ neu geschrieben) oder loopt, wird es
+    // entfernt — sonst landet die Dopplung genau an der Naht zweier Teile.
+    const seamGuard = trimRepeatedProse(parsed.text, before);
+    const seamText = seamGuard.text.trim();
+    if (seamText && seamText.length >= parsed.text.length * 0.4) {
+      parsed = { ...parsed, text: seamText };
+      if (seamGuard.note) notes.push(`Teil ${index + 1}: ${seamGuard.note.replace("⚠️ ", "")}`);
     }
 
     let nextText = parsed.text;

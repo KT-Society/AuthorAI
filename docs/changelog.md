@@ -8,6 +8,19 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Satz-Wiederholungen nach Ausbau/Kohärenz/Stil behoben
+
+- **Fixed** **Importierte Kapitel wiederholten sich nach der Pipeline ständiger.** Nach Ausbau,
+  Kohärenz und Stil-Pass standen in einem Kapitel dieselben Sätze mehrfach: Die Fortsetzungen
+  des Continuation-Loops sahen nur die letzten 2.000 Zeichen als Kontext und drehten gern am
+  Text entlang (Echo statt Fortsetzung), und bei gechunkten Pässen schrieben Modelle den
+  Nachbarkontext an der Naht neu — beides landete ungeprüft im Manuskript. Neu ist der
+  Wiederholungs-Guard `lib/repetition.ts`: Er erkennt identische Block-Dopplungen im Anhäng,
+  Echo-Blöcke gegen den Kontext-Anker (≥ 35 % 3-Gramm-Überlappung, ab zwei Blöcken) und
+  Satz-Loops (dasselbe Muster ≥ 3× hintereinander) — und entfernt sie, bevor Text angehängt
+  bzw. an Teile zurückgegeben wird. Der Loop bricht ab, wenn nach dem Trimmen nichts bleibt;
+  ein Hinweis in den Prüfnotizen meldet jeden Eingriff.
+
 ### Typprüfung aufgeräumt (45 Befunde → 0) und ein echter Cover-Fehler behoben
 
 - **Fixed** **Der Cover-Editor im Assistenten verlor die Text-Ebene.** Der Aufruf übergab weder
