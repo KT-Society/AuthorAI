@@ -207,9 +207,11 @@ Wurzel behoben. **Bestehende** Testfehler werden nicht eigenmächtig angefasst �
 
 ## Arbeitsweise in diesem Repo
 
-- **Der Operator führt aus:** `bun install`, Builds, Workspace-Sicherungen
-  (`python backup/backup.py`), Datenbank-/Cover-Backups, Git-Commits und Pushes.
-- **Der Agent schreibt:** Code, Fixes, Pläne, Implementierungen — und verifiziert statisch.
+- **Der Operator führt aus:** Builds, Releases, Workspace-Sicherungen
+  (`python backup/backup.py`), Datenbank-/Cover-Backups, Git-Commits und Pushes (GitHub nur auf
+  ausdrückliche Ansage — dann darf der Agent).
+- **Der Agent schreibt:** Code, Fixes, Pläne, Implementierungen, **Abhängigkeiten**
+  (`package.json`) und `bun install` — und verifiziert statisch.
 - Neue Pläne unter `.echo/plans/` beginnen mit `new_`; nach Abschluss auf `done_` umbenennen.
 - **Doku aktuell halten** — welche Datei bei welcher Änderung nachgezogen wird, steht in
   [Dokumentations-Update](#dokumentations-update).

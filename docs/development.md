@@ -50,7 +50,9 @@ Für Signierung, Installer und Auslieferung: [`release.md`](release.md)
 
 ## Arbeitsweise in diesem Repo
 
-- **Der Operator führt aus:** `bun install`, Builds, Git-Commits/Pushes, Backups.
+- **Der Operator führt aus:** Builds, Releases, Workspace-Sicherungen
+  (`python backup/backup.py`), Datenbank-/Cover-Backups, Git-Commits und Pushes (GitHub nur auf
+  ausdrückliche Ansage — dann darf der Agent).
   Der Agent **schreibt Code** und verifiziert statisch.
 - **Zero-Warning-Haltung:** Warnungen (Build, Typen, Lint) gelten als Mangel und werden
   an der Wurzel behoben — nicht ignoriert.
