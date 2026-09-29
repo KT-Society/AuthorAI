@@ -40,6 +40,7 @@ import {
 } from "./llm";
 import { extractProse, looksTruncated } from "../lib/prose";
 import { filterNoOpNotes } from "../lib/passNotes";
+import { cleanRepetitions, dedupeSeam, joinWithoutRepeats } from "../lib/repetition";
 import { normalizeWorldTitle } from "../lib/worldMatch";
 import { normalizeCharacterName } from "../lib/characterMatch";
 import { normalizeName } from "../lib/nameMatch";
@@ -577,7 +578,12 @@ Finish the paragraph now, entirely in ${params.language}.`,
   // Sicherung: eine Fortsetzung darf den Text nicht aufblähen.
   if (countWords(appended) > CONTINUATION_MAX_WORDS) return params.text;
 
-  const text = `${params.text}\n\n${appended}`;
+  // Fortsetzungen erzählen den Anschluss gern noch einmal. Erst wörtliche Doppelungen in der
+  // Fortsetzung selbst, dann die Überlappung an der Naht — bleibt nichts übrig, wird nichts
+  // angehängt (sonst stünde der letzte Satz zweimal da).
+  const seam = dedupeSeam(params.text, cleanRepetitions(appended).text);
+  if (!seam.text.trim()) return params.text;
+  const text = `${params.text}\n\n${seam.text}`;
 
   // Auch die Fortsetzung kann erneut ins Limit laufen — dann genau ein weiterer Versuch.
   if (finishReason === "length") {
@@ -660,7 +666,10 @@ Continue now, entirely in ${input.language}.`,
 
     const appended = extractProse(stripLeadingHeadings(content.trim()));
     if (!appended) break;
-    text = `${text}\n\n${appended}`;
+    // Anschluss-Doppelung an der Naht entfernen — dieselbe Regel wie in `completeProse`.
+    const seam = dedupeSeam(text, cleanRepetitions(appended).text);
+    if (!seam.text.trim()) break; // reine Wiederholung: das Kapitel ist damit fertig
+    text = `${text}\n\n${seam.text}`;
     words = countWords(text);
     lastFinish = finishReason ?? undefined;
 
@@ -946,6 +955,8 @@ async function runPass(
 
   const parts: string[] = [];
   const notes: string[] = [];
+  /** Wörtliche Satz-Doppelungen, die wir entfernt haben — sie gehören in den Bericht. */
+  let removedSentences = 0;
 
   for (let index = 0; index < chunks.length; index += 1) {
     // `noUncheckedIndexedAccess` ist aktiv: Zugriffe werden abgesichert statt behauptet.
@@ -1028,6 +1039,12 @@ Rewrite ONLY this part (~${chunkWords} words) — never the neighbouring parts, 
     }
 
     let nextText = parsed.text;
+    // Auch **innerhalb** eines Teils wiederholt das Modell Sätze: wörtliche Doppelungen fallen weg.
+    const cleanedPart = cleanRepetitions(nextText);
+    if (cleanedPart.removed > 0) {
+      nextText = cleanedPart.text;
+      removedSentences += cleanedPart.removed;
+    }
 
     // Nur bei hartem Token-Limit fortsetzen (siehe completeProse) — nie „auf Verdacht".
     if (truncatedByLimit) {
@@ -1066,7 +1083,18 @@ Rewrite ONLY this part (~${chunkWords} words) — never the neighbouring parts, 
     }
   }
 
-  const nextText = parts.join("\n\n").trim();
+  // Teile zusammensetzen und dabei die Überlappung an jeder Naht entfernen (das Modell wiederholt
+  // beim Anschluss gern den letzten Satz des Vorteils).
+  const joined = joinWithoutRepeats(parts);
+  removedSentences += joined.removed;
+  if (removedSentences > 0) {
+    notes.push(
+      removedSentences === 1
+        ? "⚠️ 1 wörtliche Satzdoppelung entfernt (das Modell hat eine Passage wiederholt)."
+        : `⚠️ ${removedSentences} wörtliche Satzdoppelungen entfernt (das Modell hat Passagen wiederholt).`,
+    );
+  }
+  const nextText = joined.text.trim();
 
   if (previousText.length > 200 && nextText.length < previousText.length * 0.4) {
     throw new ApiError(

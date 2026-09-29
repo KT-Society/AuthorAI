@@ -8,6 +8,30 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionieru
 
 ## [Unreleased]
 
+### Satz-Wiederholungen an den Nahtstellen behoben
+
+- **Fixed** **Doppelte Sätze an den Übergängen.** Wurde der Ausbau fortgesetzt (Antwort lief ins
+  Ausgabelimit oder erreichte die Ziel-Wörter nicht), stand der letzte Satz des Vorteils am Anfang
+  der Fortsetzung **noch einmal** — dasselbe beim Zusammenbau der Pass-Teile, wo die Teile mit
+  einer Leerzeile verbunden werden. Dasselbe Symptom konnte innerhalb einer Antwort auftreten
+  (unmittelbar aufeinanderfolgende Sätze).
+  Ursache: Fortsetzungen und Teile wurden stumpf aneinandergehängt, ohne den Anschluss gegen das
+  Ende des Vorteils zu prüfen.
+- **Added** **`src/lib/repetition.ts`** — ein konservativer Schutz, der an **jeder** Naht greift:
+  wörtliche Überlappung Satz für Satz (bis 3 Sätze, größter Treffer gewinnt), ersatzweise ein
+  Ansatz **mitten im Satz** ab 40 Zeichen, dazu direkt aufeinanderfolgende Satzwiederholungen
+  innerhalb eines Stücks. Verglichen wird normalisiert (Kleinschreibung, ohne Satzzeichen).
+  Bewusst **nicht** angetastet: Sätze unter drei Wörtern („Ja."), rhetorische Wiederholungen mit
+  anderem Wortlaut, kurze Zufallstreffer — entfernt wird nur, was zeichengleich doppelt ist.
+  Die Arbeit am Original: Der Text wird nicht neu zusammengesetzt, sondern es fallen nur die
+  doppelten Bereiche heraus (Absätze und Formatierung bleiben unverändert).
+- **Added** **Sichtbar statt still**: In den Pässen (Kohärenz/Stil) nennt der Bericht die Zahl der
+  entfernten Doppelungen; im Ausbau bleibt es still, weil eine wörtliche Doppelung keine
+  Information trägt.
+- **Fixed** **OpenRouter-Referer zeigte auf eine fremde Domain.** Der `HTTP-Referer` ging an
+  `https://habitatai.biz` — eine fremde App. Jetzt steht dort das Projekt
+  (`https://github.com/KT-Society/AuthorAI`).
+
 ### Typprüfung aufgeräumt (45 Befunde → 0) und ein echter Cover-Fehler behoben
 
 - **Fixed** **Der Cover-Editor im Assistenten verlor die Text-Ebene.** Der Aufruf übergab weder

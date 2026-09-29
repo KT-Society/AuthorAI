@@ -147,6 +147,16 @@ Kein Feinschliff — Ziel ist Vorwärtsbewegung.
 
 ## 4 · Ausbau (3.000–5.000 Wörter)
 
+**Keine Doppelungen an den Nähten.** Erreicht die Antwort nicht die Ziel-Wörter, hängt der Server
+Fortsetzungen an — und genau dort erzählte das Modell den Anschluss gern noch einmal (der letzte
+Satz stand zweimal da). `lib/repetition.ts` entfernt an jeder Naht die **wörtliche** Überlappung
+(Satz für Satz, ersatzweise mitten im Satz ab 40 Zeichen) und räumt in jedem Textstück
+unmittelbar aufeinanderfolgende Satzwiederholungen weg. Konservativ: Sätze unter drei Wörtern
+(„Ja."), rhetorische Wiederholungen mit anderem Wortlaut und kurze Zufallstreffer bleiben
+unangetastet — entfernt wird nur, was zeichengleich doppelt ist. In den Pässen steht die Zahl der
+entfernten Doppelungen im Bericht, im Ausbau ist sie still (eine wörtliche Doppelung trägt keine
+Information).
+
 Erweitert die Rohfassung zu einem vollständigen Kapitel nach **Craft-Regeln**:
 
 - **Pacing** (Goal → Conflict → Turn), variierender Satzrhythmus

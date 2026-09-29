@@ -182,6 +182,12 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   *Vorsicht:* Fachdaten laufen ausschließlich über `store.ts` + `/api/state` (harte Regel 3).
   `databaseFile()`, Store-Info und die Cover-Freigabe hängen alle an **einer** Datei — ein Wechsel
   ist ein Umbau an der Speicherschicht, nicht ein Dialog.
+- **Datenverzeichnis einstellbar („Speicherpfad")**: In den Einstellungen wählen, wo `data/` und
+  `covers/` liegen — für Nutzer, die alles in einem Cloud-Ordner oder auf einem anderen Laufwerk
+  halten wollen
+  *Vorsicht:* Kleinere Schwester der Position darüber: `store.ts` und die Cover-Auslieferung
+  (`/covers/:file`) rechnen mit **einem** `runtimeRoot`. Der Pfad muss beim Start feststehen (vor
+  dem ersten Öffnen der Datenbank), und ein Wechsel gehört dokumentiert wie eine Sicherung.
 - **Storyboard-Teillauf fortsetzen**: Bricht der Entwurf in Phase 2 ab (Modell-Aussetzer, Timeout),
   beginnt er heute komplett von vorn — sinnvoll wäre, den Rest der Batches nachzuholen
   *Vorsicht:* Teil-Batches müssen persistiert und über eine neue Route fortgesetzt werden —
@@ -191,13 +197,18 @@ Diese Liste ist ein Ideenpool, keine Zusage.
   sofort los — dazwischen wäre ein Blick/Umbenennen möglich, bevor Detailarbeit bezahlt wird
   *Vorsicht:* Heute ist das **ein** SSE-Aufruf; ein Zwischenstopp macht daraus zwei Requests
   (neue Route) → Transport-Entscheid nötig.
-- **Typprüfung als Skript**: `tsc --noEmit` (o. ä.) in den Check aufnehmen — `bun run check`
-  prüft nur Syntax, Imports und Links und übersieht Laufzeitfehler wie einen `[0]`-Zugriff auf
-  einen `Series | undefined`-Rückgabewert
-  *Vorsicht:* `tsconfig` ist **`strict` + `noUncheckedIndexedAccess`** — ein erster `tsc`-Lauf deckt
-  mit hoher Wahrscheinlichkeit Altlasten auf. Erst den Umfang messen, dann entscheiden: bestehende
-  Fehler werden nicht stillschweigend mitgeschleppt (Zero-Warning), aber auch nicht heimlich
-  gefixt. Der erste Schritt ist ein **Melde-Lauf**, kein Blockade-Gate für die CI.
+- **Typprüfung und Tests als Skript**: `tsc --noEmit` und eine Test-Suite für die Kernlogik
+  (`bun test src/`) in den Check beziehungsweise in die CI aufnehmen — `bun run check` prüft nur
+  Syntax, Imports und Links und übersieht Laufzeitfehler wie einen `[0]`-Zugriff auf einen
+  `Series | undefined`-Rückgabewert
+  *Stand:* Die Typprüfung ist **durchgeführt** (45 Befunde behoben, seither 0; TypeScript liegt im
+  Repo unter `packages/promptgen/node_modules`, Laufzeit ~20 s). Offen ist die Entscheidung, sie als
+  Schritt festzuschreiben. Für die Tests gilt: Das Repo hat **keine** Test-Suite — die reine Logik
+  (`lib/repetition.ts`, `lib/factMatch.ts`, `lib/diff.ts`, `lib/quoteMatch.ts`, `computeStreak`,
+  `lib/markdownImport.ts`) ist dafür der sinnvollste Anfang, nicht die UI.
+  *Vorsicht:* Ein Pflicht-Schritt in der CI ist nur so gut wie die Suite — flackernde oder
+  unvollständige Tests sind schlimmer als keine. Erst gründlich, dann verpflichtend. Tests, die
+  **keinen** Aufrufer haben (kein `test`-Skript in `package.json`), sind toter Code.
 - **Laufenden Stream wirklich abbrechen**: „Abbrechen" im Job-Center wirkt erst zwischen den
   Kapiteln; ein bereits laufender Aufruf läuft zu Ende (Abbruch am Server fehlt)
   *Vorsicht:* Das ist eine Kette über drei Schichten: der Job kennt nur ein flüchtiges Flag, der

@@ -23,8 +23,10 @@ function providerHeaders(endpoint: ChatEndpoint, stream: boolean): Record<string
     Authorization: `Bearer ${endpoint.apiKey}`,
     "Content-Type": "application/json",
   };
-  // Der Referer ist eine OpenRouter-Eigenheit; fremde Anbieter ignorieren ihn besser.
-  if (endpoint.label === "openrouter") headers["HTTP-Referer"] = "https://habitatai.biz";
+  // Der Referer ist eine OpenRouter-Eigenheit (App-Attribution); fremde Anbieter ignorieren ihn
+  // besser. Hier gehört der eigene Projekt-Link hin — keine fremde Domain.
+  if (endpoint.label === "openrouter")
+    headers["HTTP-Referer"] = "https://github.com/KT-Society/AuthorAI";
   if (stream) headers.Accept = "text/event-stream";
   return headers;
 }
